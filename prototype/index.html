@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SK Kommandozentrale – Prototyp</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: '#f8fafc',
+          surface: '#ffffff',
+          ink: '#0f172a',
+          sub: '#64748b',
+          line: '#e2e8f0',
+          sidebar: '#0f172a',
+          'sidebar-soft': '#1e293b',
+          brand: '#0f172a',
+          ok: '#10b981',
+          warn: '#f59e0b',
+          err: '#e11d48',
+          info: '#0ea5e9',
+        },
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      },
+    },
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  /* hide all sections by default, JS shows the active one */
+  [data-screen]:not(.active) { display: none !important; }
+  [data-subview]:not(.active) { display: none !important; }
+  /* simple modal/overlay */
+  .modal-overlay { background: rgba(15, 23, 42, 0.55); }
+  /* status pill base */
+  .pill { display: inline-flex; align-items: center; gap: .25rem; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  /* table cell with right border */
+  .cell-divider { border-right: 1px solid #f1f5f9; }
+  /* shimmer/pulse for "loading" cells */
+  @keyframes shimmer { 0% { opacity: .35 } 50% { opacity: 1 } 100% { opacity: .35 } }
+  .shimmer { animation: shimmer 1.6s ease-in-out infinite; }
+  /* calendar status colors */
+  .cal-empty   { background: #ffffff; }
+  .cal-draft   { background: #fef3c7; }
+  .cal-sched   { background: #dbeafe; }
+  .cal-pub     { background: #d1fae5; }
+  .cal-fail    { background: #fee2e2; }
+  /* kanban column scroll */
+  .kanban-col { min-height: 60vh; }
+</style>
+</head>
+<body class="bg-bg text-ink">
+
+<!-- ========== LOGIN SCREEN ========== -->
+<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center p-6"
+     style="background: radial-gradient(circle at 30% 20%, #f1f5f9 0%, #e2e8f0 100%);">
+  <div class="w-full max-w-md">
+    <div class="mb-8 flex flex-col items-center gap-3 text-center">
+      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-white shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+      </div>
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">SK Kommandozentrale</h1>
+        <p class="text-sm text-sub">Dozent und Coach – Ihre eigene Vertriebs- und Marketingplattform</p>
+      </div>
+    </div>
+    <div class="rounded-xl border border-line bg-surface shadow-sm">
+      <div class="p-6 pb-0">
+        <h2 class="text-lg font-semibold">Anmelden</h2>
+        <p class="text-sm text-sub mt-1">Loggen Sie sich mit Ihrer geschäftlichen E-Mail ein.</p>
+      </div>
+      <div class="p-6">
+        <form id="login-form" class="space-y-4" onsubmit="event.preventDefault(); enterApp();">
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium">E-Mail</label>
+            <input type="email" value="sascha@sk-dozentundcoach.de" class="w-full rounded-md border border-line px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" />
+          </div>
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium">Passwort</label>
+              <a class="text-xs text-sub hover:text-ink" href="#">Vergessen?</a>
+            </div>
+            <input type="password" value="demo-passwort-1234" class="w-full rounded-md border border-line px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" />
+          </div>
+          <button type="submit" class="w-full h-9 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink transition">Anmelden</button>
+        </form>
+        <p class="mt-6 text-center text-xs text-sub">Demo-Modus – jeder Klick führt direkt zum Dashboard.</p>
+      </div>
+    </div>
+    <p class="mt-6 text-center text-xs text-sub">© 2026 SK – Dozent und Coach</p>
+  </div>
+</div>
+
+<!-- ========== APP SHELL ========== -->
+<div id="app-shell" class="hidden h-screen overflow-hidden flex">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="w-64 shrink-0 flex flex-col bg-sidebar text-slate-100 border-r border-sidebar-soft">
+    <button class="flex items-center gap-3 px-4 py-4 hover:bg-sidebar-soft transition text-left" onclick="alert('Hier könnte man zwischen Organisationen wechseln.')">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-brand shadow">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-semibold leading-tight truncate">SK – Dozent &amp; Coach</div>
+        <div class="text-[11px] text-slate-400">Pro-Plan · 4 Mitglieder</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+    </button>
+
+    <div class="h-px bg-sidebar-soft"></div>
+
+    <nav class="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="dashboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        <span class="flex-1 text-left">Dashboard</span>
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="vertrieb">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span class="flex-1 text-left">Vertrieb</span>
+        <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">3</span>
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="sichtbarkeit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span class="flex-1 text-left">Sichtbarkeit</span>
+        <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">12</span>
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="crm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="flex-1 text-left">CRM</span>
+        <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">41</span>
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="einstellungen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="flex-1 text-left">Einstellungen</span>
+      </button>
+    </nav>
+
+    <div class="h-px bg-sidebar-soft"></div>
+
+    <button class="flex items-center gap-3 px-4 py-3 hover:bg-sidebar-soft transition text-left" onclick="alert('Profil-Menü')">
+      <div class="h-9 w-9 rounded-full bg-white/10 text-white flex items-center justify-center text-xs font-semibold">SK</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium truncate">Sascha Kunze</div>
+        <div class="text-[11px] text-slate-400 truncate">sascha@sk-dozentundcoach.de</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+    </button>
+  </aside>
+
+  <!-- ===== Main column ===== -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="h-16 px-6 border-b border-line bg-surface/80 backdrop-blur flex items-center gap-4 sticky top-0 z-20">
+      <div>
+        <h1 id="page-title" class="text-base font-semibold leading-none tracking-tight">Dashboard</h1>
+        <p id="page-desc" class="text-xs text-sub mt-1">Übersicht über alle Vertriebs-, Sichtbarkeits- und CRM-Aktivitäten.</p>
+      </div>
+      <div class="flex-1 hidden md:flex justify-center">
+        <div class="relative w-full max-w-sm">
+          <svg class="absolute left-2.5 top-2.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="w-full h-9 pl-9 pr-12 rounded-md border border-line text-sm focus:outline-none focus:ring-2 focus:ring-brand/15 focus:border-brand" placeholder="Suchen oder Kommando ausführen…" />
+          <span class="absolute right-2 top-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded border border-line text-sub">⌘K</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button class="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-line text-sub" title="Hilfe">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+        <button class="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-line text-sub relative" title="Benachrichtigungen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-err"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable content area -->
+    <div class="flex-1 overflow-y-auto">
+
+      <!-- ===== DASHBOARD ===== -->
+      <section data-screen="dashboard" class="active p-6">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Aktive Kampagnen</div>
+            <div class="mt-2 text-2xl font-semibold">3</div>
+            <div class="mt-2 text-xs text-ok inline-flex items-center gap-1">▲ +1 ggü. Vormonat</div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Leads diesen Monat</div>
+            <div class="mt-2 text-2xl font-semibold">248</div>
+            <div class="mt-2 text-xs text-ok inline-flex items-center gap-1">▲ +84 ggü. Vormonat</div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Antwortrate</div>
+            <div class="mt-2 text-2xl font-semibold">14,3 %</div>
+            <div class="mt-2 text-xs text-ok inline-flex items-center gap-1">▲ +2,1 pp</div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Termine gebucht</div>
+            <div class="mt-2 text-2xl font-semibold">7</div>
+            <div class="mt-2 text-xs text-sub">davon 4 diese Woche</div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Geplante Posts</div>
+            <div class="mt-2 text-2xl font-semibold">12</div>
+            <div class="mt-2 text-xs text-sub">über 4 Plattformen</div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-xs font-medium text-sub">Offene Kontakte</div>
+            <div class="mt-2 text-2xl font-semibold">41</div>
+            <div class="mt-2 text-xs text-warn inline-flex items-center gap-1">▼ 9 brauchen Follow-up</div>
+          </div>
+        </div>
+
+        <div class="mt-6 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-line bg-surface">
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between">
+              <div>
+                <div class="font-semibold text-sm">Letzte Lead-Aktivität</div>
+                <div class="text-xs text-sub">Eingegangene Antworten und Buchungen</div>
+              </div>
+              <button class="text-xs text-sub hover:text-ink" onclick="navigateTo('vertrieb')">Alle ansehen →</button>
+            </div>
+            <div class="divide-y divide-line">
+              <div class="px-5 py-3 flex items-center gap-3">
+                <span class="pill" style="background:#d1fae5;color:#047857">Termin gebucht</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Dr. Markus Brandt – Brandt &amp; Partner StB</div>
+                  <div class="text-xs text-sub">heute, 09:42 · aus Kampagne „Steuerberater Sachsen-Anhalt“</div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <span class="pill" style="background:#dbeafe;color:#1d4ed8">Antwort positiv</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Anika Hoffmann – Hoffmann Bau GmbH</div>
+                  <div class="text-xs text-sub">heute, 08:15 · „Sehr gerne, klingt spannend …“</div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <span class="pill" style="background:#fef3c7;color:#92400e">Neuer Lead</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Steuerkanzlei Wagner &amp; Söhne</div>
+                  <div class="text-xs text-sub">gestern · GF-Email gefunden, Personalisierung läuft</div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <span class="pill" style="background:#dbeafe;color:#1d4ed8">Antwort</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Jens Pohlmann – Pohlmann Coaching</div>
+                  <div class="text-xs text-sub">gestern · „Gerne ein kurzes Telefonat nächste Woche.“</div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <span class="pill" style="background:#fee2e2;color:#b91c1c">Bounce</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">info@kanzlei-vogel.de</div>
+                  <div class="text-xs text-sub">gestern · Postfach voll, automatisch erneut planen</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-line bg-surface">
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between">
+              <div>
+                <div class="font-semibold text-sm">Anstehende Posts</div>
+                <div class="text-xs text-sub">Nächste 7 Tage über alle Plattformen</div>
+              </div>
+              <button class="text-xs text-sub hover:text-ink" onclick="navigateTo('sichtbarkeit')">Kalender →</button>
+            </div>
+            <div class="divide-y divide-line">
+              <div class="px-5 py-3 flex items-center gap-3">
+                <div class="text-xs font-semibold text-sub w-12 shrink-0">Mi 06.</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">„3 Mythen über Coaching, die Sie Geld kosten“</div>
+                  <div class="text-xs text-sub mt-0.5 flex items-center gap-2">
+                    <span class="pill" style="background:#dbeafe;color:#1d4ed8">geplant</span>
+                    <span>LinkedIn · 09:00</span>
+                  </div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <div class="text-xs font-semibold text-sub w-12 shrink-0">Do 07.</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Hinter den Kulissen: Coaching-Setup im Studio</div>
+                  <div class="text-xs text-sub mt-0.5 flex items-center gap-2">
+                    <span class="pill" style="background:#fef3c7;color:#92400e">Entwurf</span>
+                    <span>Instagram · 18:00</span>
+                  </div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <div class="text-xs font-semibold text-sub w-12 shrink-0">Fr 08.</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Frage der Woche: „Wie misst Du Erfolg?“</div>
+                  <div class="text-xs text-sub mt-0.5 flex items-center gap-2">
+                    <span class="pill" style="background:#dbeafe;color:#1d4ed8">geplant</span>
+                    <span>LinkedIn, Facebook · 11:00</span>
+                  </div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <div class="text-xs font-semibold text-sub w-12 shrink-0">Mo 11.</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Kunden-Case: Lehrer-Team Realschule Halle</div>
+                  <div class="text-xs text-sub mt-0.5 flex items-center gap-2">
+                    <span class="pill" style="background:#fef3c7;color:#92400e">Entwurf</span>
+                    <span>LinkedIn, Instagram · 09:00</span>
+                  </div>
+                </div>
+              </div>
+              <div class="px-5 py-3 flex items-center gap-3">
+                <div class="text-xs font-semibold text-sub w-12 shrink-0">Di 12.</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">Webinar-Ankündigung: Mai-Edition</div>
+                  <div class="text-xs text-sub mt-0.5 flex items-center gap-2">
+                    <span class="pill" style="background:#dbeafe;color:#1d4ed8">geplant</span>
+                    <span>LinkedIn, Facebook, X · 10:00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== VERTRIEB ===== -->
+      <section data-screen="vertrieb" class="p-6">
+
+        <!-- Subview: Liste -->
+        <div data-subview="vertrieb-list" class="active">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold">Kampagnen</h2>
+              <p class="text-sm text-sub">Lead-Recherche, Anreicherung und Cold-Outreach – pro Kampagne in einer Tabelle.</p>
+            </div>
+            <button class="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink transition" onclick="openWizard()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Neue Kampagne
+            </button>
+          </div>
+
+          <div class="rounded-xl border border-line bg-surface overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-xs uppercase tracking-wider text-sub border-b border-line bg-slate-50/60">
+                    <th class="px-4 py-2.5 font-medium">Name</th>
+                    <th class="px-4 py-2.5 font-medium">Status</th>
+                    <th class="px-4 py-2.5 font-medium text-right">Leads</th>
+                    <th class="px-4 py-2.5 font-medium text-right">Emails ✓</th>
+                    <th class="px-4 py-2.5 font-medium text-right">Antworten</th>
+                    <th class="px-4 py-2.5 font-medium text-right">Termine</th>
+                    <th class="px-4 py-2.5 font-medium">Erstellt</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-line">
+                  <tr class="hover:bg-slate-50 cursor-pointer" onclick="openCampaign('cmp_001')">
+                    <td class="px-4 py-3">
+                      <div class="font-medium">Steuerberater Sachsen-Anhalt – Q2</div>
+                      <div class="text-xs text-sub">Steuerberater · Magdeburg, Halle, Dessau</div>
+                    </td>
+                    <td class="px-4 py-3"><span class="pill" style="background:#dbeafe;color:#1d4ed8">läuft</span></td>
+                    <td class="px-4 py-3 text-right tabular-nums">138 / 150</td>
+                    <td class="px-4 py-3 text-right tabular-nums">96</td>
+                    <td class="px-4 py-3 text-right tabular-nums">14</td>
+                    <td class="px-4 py-3 text-right tabular-nums">4</td>
+                    <td class="px-4 py-3 text-sub">22.04.2026</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 cursor-pointer" onclick="openCampaign('cmp_002')">
+                    <td class="px-4 py-3">
+                      <div class="font-medium">Mittelständische Bauunternehmen</div>
+                      <div class="text-xs text-sub">Bauunternehmen · Magdeburg, Braunschweig, Wolfsburg</div>
+                    </td>
+                    <td class="px-4 py-3"><span class="pill" style="background:#dbeafe;color:#1d4ed8">läuft</span></td>
+                    <td class="px-4 py-3 text-right tabular-nums">67 / 200</td>
+                    <td class="px-4 py-3 text-right tabular-nums">41</td>
+                    <td class="px-4 py-3 text-right tabular-nums">0</td>
+                    <td class="px-4 py-3 text-right tabular-nums">0</td>
+                    <td class="px-4 py-3 text-sub">29.04.2026</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 cursor-pointer" onclick="openCampaign('cmp_003')">
+                    <td class="px-4 py-3">
+                      <div class="font-medium">Coaching-Akademien DACH</div>
+                      <div class="text-xs text-sub">Coaching-Anbieter · Berlin, Hamburg, München, Wien, Zürich</div>
+                    </td>
+                    <td class="px-4 py-3"><span class="pill" style="background:#d1fae5;color:#047857">abgeschlossen</span></td>
+                    <td class="px-4 py-3 text-right tabular-nums">80 / 80</td>
+                    <td class="px-4 py-3 text-right tabular-nums">62</td>
+                    <td class="px-4 py-3 text-right tabular-nums">11</td>
+                    <td class="px-4 py-3 text-right tabular-nums">3</td>
+                    <td class="px-4 py-3 text-sub">05.03.2026</td>
+                  </tr>
+                  <tr class="hover:bg-slate-50 cursor-pointer" onclick="openCampaign('cmp_004')">
+                    <td class="px-4 py-3">
+                      <div class="font-medium">Kanzleien für Wirtschaftsrecht</div>
+                      <div class="text-xs text-sub">Anwaltskanzleien · Frankfurt am Main, Düsseldorf</div>
+                    </td>
+                    <td class="px-4 py-3"><span class="pill" style="background:#fef3c7;color:#92400e">Entwurf</span></td>
+                    <td class="px-4 py-3 text-right tabular-nums">— / 120</td>
+                    <td class="px-4 py-3 text-right tabular-nums">—</td>
+                    <td class="px-4 py-3 text-right tabular-nums">—</td>
+                    <td class="px-4 py-3 text-right tabular-nums">—</td>
+                    <td class="px-4 py-3 text-sub">04.05.2026</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subview: Campaign-Detail (Live-Lead-Tabelle) -->
+        <div data-subview="vertrieb-detail">
+          <button class="text-sm text-sub hover:text-ink inline-flex items-center gap-1 mb-4" onclick="showSubview('vertrieb', 'vertrieb-list')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Zurück zu Kampagnen
+          </button>
+
+          <div class="flex items-center justify-between mb-1">
+            <div>
+              <h2 id="campaign-title" class="text-lg font-semibold">Steuerberater Sachsen-Anhalt – Q2</h2>
+              <p id="campaign-meta" class="text-sm text-sub">Steuerberater · Magdeburg, Halle, Dessau · Ziel: 150 Leads</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-slate-50">Pausieren</button>
+              <button class="h-9 px-3 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink">Versand starten</button>
+            </div>
+          </div>
+
+          <!-- Pipeline progress strip -->
+          <div class="mt-3 grid grid-cols-4 gap-3">
+            <div class="rounded-lg border border-line bg-surface p-3">
+              <div class="text-[11px] text-sub uppercase tracking-wider">1. Scrape</div>
+              <div class="mt-1 text-lg font-semibold">138</div>
+              <div class="mt-2 h-1.5 w-full bg-line rounded-full overflow-hidden"><div class="h-full bg-ok" style="width:100%"></div></div>
+            </div>
+            <div class="rounded-lg border border-line bg-surface p-3">
+              <div class="text-[11px] text-sub uppercase tracking-wider">2. GF ermittelt</div>
+              <div class="mt-1 text-lg font-semibold">122 <span class="text-xs text-sub font-normal">/ 138</span></div>
+              <div class="mt-2 h-1.5 w-full bg-line rounded-full overflow-hidden"><div class="h-full bg-ok" style="width:88%"></div></div>
+            </div>
+            <div class="rounded-lg border border-line bg-surface p-3">
+              <div class="text-[11px] text-sub uppercase tracking-wider">3. Email verifiziert</div>
+              <div class="mt-1 text-lg font-semibold">96 <span class="text-xs text-sub font-normal">/ 122</span></div>
+              <div class="mt-2 h-1.5 w-full bg-line rounded-full overflow-hidden"><div class="h-full bg-info" style="width:69%"></div></div>
+            </div>
+            <div class="rounded-lg border border-line bg-surface p-3">
+              <div class="text-[11px] text-sub uppercase tracking-wider">4. Personalisiert</div>
+              <div class="mt-1 text-lg font-semibold">73 <span class="text-xs text-sub font-normal">/ 96</span></div>
+              <div class="mt-2 h-1.5 w-full bg-line rounded-full overflow-hidden"><div class="h-full bg-warn" style="width:53%"></div></div>
+            </div>
+          </div>
+
+          <!-- Live lead table -->
+          <div class="mt-6 rounded-xl border border-line bg-surface overflow-hidden">
+            <div class="px-4 py-3 border-b border-line flex items-center justify-between">
+              <div class="flex items-center gap-2 text-xs text-sub">
+                <span class="h-2 w-2 rounded-full bg-info animate-pulse"></span>
+                <span class="font-medium text-info">Pipeline läuft live</span>
+                <span class="text-sub">· Spalten füllen sich automatisch, sobald die jeweilige Stage durchläuft</span>
+              </div>
+              <button class="text-xs text-sub hover:text-ink" onclick="restartPipelineDemo()">Demo neu starten</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="text-left text-[10px] uppercase tracking-wider text-sub border-b border-line bg-slate-50/60">
+                    <th class="px-3 py-2 font-medium">Firma</th>
+                    <th class="px-3 py-2 font-medium">Webseite</th>
+                    <th class="px-3 py-2 font-medium">GF Vorname</th>
+                    <th class="px-3 py-2 font-medium">GF Nachname</th>
+                    <th class="px-3 py-2 font-medium">Firmen-Email</th>
+                    <th class="px-3 py-2 font-medium">Personal-Email</th>
+                    <th class="px-3 py-2 font-medium">Reacher</th>
+                    <th class="px-3 py-2 font-medium">Signal</th>
+                    <th class="px-3 py-2 font-medium">Cold-Mail</th>
+                    <th class="px-3 py-2 font-medium">Follow-up 1</th>
+                    <th class="px-3 py-2 font-medium">Follow-up 2</th>
+                  </tr>
+                </thead>
+                <tbody id="lead-tbody" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SICHTBARKEIT ===== -->
+      <section data-screen="sichtbarkeit" class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Content-Kalender</h2>
+            <p class="text-sm text-sub">Mai 2026 · Klick auf einen Tag öffnet die geplanten Beiträge.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="inline-flex rounded-md border border-line p-0.5">
+              <button class="px-3 h-8 text-sm rounded bg-slate-900 text-white">Monat</button>
+              <button class="px-3 h-8 text-sm text-sub hover:text-ink">Woche</button>
+            </div>
+            <button class="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink transition">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+              Content auto-planen
+            </button>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="mb-4 flex flex-wrap items-center gap-4 text-xs text-sub">
+          <div class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded cal-empty border border-line"></span>leer</div>
+          <div class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded cal-draft border border-amber-200"></span>Entwurf</div>
+          <div class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded cal-sched border border-blue-200"></span>geplant</div>
+          <div class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded cal-pub border border-emerald-200"></span>veröffentlicht</div>
+          <div class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded cal-fail border border-rose-200"></span>Fehler</div>
+        </div>
+
+        <div class="rounded-xl border border-line bg-surface overflow-hidden">
+          <!-- Weekday header -->
+          <div class="grid grid-cols-7 text-[11px] uppercase tracking-wider text-sub border-b border-line bg-slate-50">
+            <div class="px-3 py-2">Mo</div><div class="px-3 py-2">Di</div><div class="px-3 py-2">Mi</div>
+            <div class="px-3 py-2">Do</div><div class="px-3 py-2">Fr</div><div class="px-3 py-2">Sa</div><div class="px-3 py-2">So</div>
+          </div>
+          <div id="calendar-grid" class="grid grid-cols-7 border-l border-line"></div>
+        </div>
+      </section>
+
+      <!-- ===== CRM ===== -->
+      <section data-screen="crm" class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Kontakte</h2>
+            <p class="text-sm text-sub">Alle Kontakte aus den Vertriebs-Kampagnen, mit kompletter Historie.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="inline-flex rounded-md border border-line p-0.5">
+              <button id="crm-view-table" class="px-3 h-8 text-sm rounded bg-slate-900 text-white" onclick="setCrmView('table')">Tabelle</button>
+              <button id="crm-view-pipe" class="px-3 h-8 text-sm text-sub hover:text-ink" onclick="setCrmView('pipe')">Pipeline</button>
+            </div>
+            <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-slate-50">Filter</button>
+            <button class="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink transition">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Kontakt anlegen
+            </button>
+          </div>
+        </div>
+
+        <!-- Status filter pills -->
+        <div class="flex flex-wrap items-center gap-1 mb-4">
+          <button class="pill bg-slate-900 text-white">Alle (41)</button>
+          <button class="pill bg-slate-100 text-sub">Lead (24)</button>
+          <button class="pill bg-slate-100 text-sub">Qualified (8)</button>
+          <button class="pill bg-slate-100 text-sub">In Conversation (6)</button>
+          <button class="pill bg-slate-100 text-sub">Termin gebucht (2)</button>
+          <button class="pill bg-slate-100 text-sub">Closed Won (1)</button>
+        </div>
+
+        <!-- Table view -->
+        <div data-crm-view="table" class="active rounded-xl border border-line bg-surface overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs uppercase tracking-wider text-sub border-b border-line bg-slate-50/60">
+                  <th class="px-4 py-2.5 font-medium">Name</th>
+                  <th class="px-4 py-2.5 font-medium">Firma</th>
+                  <th class="px-4 py-2.5 font-medium">E-Mail</th>
+                  <th class="px-4 py-2.5 font-medium">Status</th>
+                  <th class="px-4 py-2.5 font-medium">Tags</th>
+                  <th class="px-4 py-2.5 font-medium">Letzter Kontakt</th>
+                </tr>
+              </thead>
+              <tbody id="contacts-tbody" class="divide-y divide-line"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pipeline view -->
+        <div data-crm-view="pipe" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <!-- Will be filled by JS -->
+        </div>
+      </section>
+
+      <!-- ===== EINSTELLUNGEN ===== -->
+      <section data-screen="einstellungen" class="p-6">
+        <div class="mb-4">
+          <h2 class="text-lg font-semibold">Einstellungen</h2>
+          <p class="text-sm text-sub">Organisation, Team, externe Integrationen.</p>
+        </div>
+        <div class="inline-flex rounded-md border border-line p-0.5 mb-4">
+          <button class="settings-tab px-3 h-8 text-sm rounded bg-slate-900 text-white" data-tab="org" onclick="setSettingsTab('org')">Organisation</button>
+          <button class="settings-tab px-3 h-8 text-sm text-sub hover:text-ink" data-tab="team" onclick="setSettingsTab('team')">Team</button>
+          <button class="settings-tab px-3 h-8 text-sm text-sub hover:text-ink" data-tab="integrations" onclick="setSettingsTab('integrations')">Integrationen</button>
+        </div>
+        <div data-settings-tab="org" class="active rounded-xl border border-line bg-surface p-6">
+          <h3 class="font-semibold mb-4">Organisations-Stammdaten</h3>
+          <div class="grid md:grid-cols-2 gap-4 max-w-2xl">
+            <div>
+              <label class="text-sm font-medium">Name</label>
+              <input value="SK – Dozent und Coach" class="mt-1.5 w-full h-9 px-3 rounded-md border border-line text-sm" />
+            </div>
+            <div>
+              <label class="text-sm font-medium">Standard-Domain (Outreach)</label>
+              <input value="sk-dozentundcoach.de" class="mt-1.5 w-full h-9 px-3 rounded-md border border-line text-sm" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-sm font-medium">Logo</label>
+              <div class="mt-1.5 flex items-center gap-3">
+                <div class="h-12 w-12 rounded-lg bg-brand text-white flex items-center justify-center font-semibold">SK</div>
+                <button class="text-sm h-9 px-3 rounded-md border border-line">Logo ändern</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div data-settings-tab="team" class="rounded-xl border border-line bg-surface p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold">Team-Mitglieder</h3>
+            <button class="h-9 px-3 rounded-md bg-brand text-white text-sm">Mitglied einladen</button>
+          </div>
+          <div class="divide-y divide-line">
+            <div class="py-3 flex items-center gap-3">
+              <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold">SK</div>
+              <div class="flex-1">
+                <div class="text-sm font-medium">Sascha Kunze</div>
+                <div class="text-xs text-sub">sascha@sk-dozentundcoach.de</div>
+              </div>
+              <span class="pill bg-slate-100 text-sub">Owner</span>
+            </div>
+            <div class="py-3 flex items-center gap-3">
+              <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold">JM</div>
+              <div class="flex-1">
+                <div class="text-sm font-medium">Julia Mertens</div>
+                <div class="text-xs text-sub">julia@sk-dozentundcoach.de</div>
+              </div>
+              <span class="pill bg-slate-100 text-sub">Admin</span>
+            </div>
+            <div class="py-3 flex items-center gap-3">
+              <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold">TR</div>
+              <div class="flex-1">
+                <div class="text-sm font-medium">Tobias Reuter</div>
+                <div class="text-xs text-sub">tobias@sk-dozentundcoach.de</div>
+              </div>
+              <span class="pill bg-slate-100 text-sub">Mitglied</span>
+            </div>
+            <div class="py-3 flex items-center gap-3">
+              <div class="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold">AK</div>
+              <div class="flex-1">
+                <div class="text-sm font-medium">Annika König</div>
+                <div class="text-xs text-sub">annika@sk-dozentundcoach.de</div>
+              </div>
+              <span class="pill bg-slate-100 text-sub">Mitglied</span>
+            </div>
+          </div>
+        </div>
+        <div data-settings-tab="integrations" class="rounded-xl border border-line bg-surface p-6">
+          <h3 class="font-semibold mb-4">Externe Integrationen</h3>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between border border-line rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">in</div>
+                <div>
+                  <div class="font-medium text-sm">LinkedIn</div>
+                  <div class="text-xs text-sub">Posts, Engagement, OAuth-Verbindung</div>
+                </div>
+              </div>
+              <button class="h-9 px-3 rounded-md bg-ok text-white text-sm">Verbunden</button>
+            </div>
+            <div class="flex items-center justify-between border border-line rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center font-bold">ig</div>
+                <div>
+                  <div class="font-medium text-sm">Instagram</div>
+                  <div class="text-xs text-sub">Bildposts, Reels, Stories</div>
+                </div>
+              </div>
+              <button class="h-9 px-3 rounded-md bg-ok text-white text-sm">Verbunden</button>
+            </div>
+            <div class="flex items-center justify-between border border-line rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">𝕏</div>
+                <div>
+                  <div class="font-medium text-sm">X (Twitter)</div>
+                  <div class="text-xs text-sub">Kurz-Posts, Threads</div>
+                </div>
+              </div>
+              <button class="h-9 px-3 rounded-md border border-line text-sm">Verbinden</button>
+            </div>
+            <div class="flex items-center justify-between border border-line rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold">@</div>
+                <div>
+                  <div class="font-medium text-sm">Gmail</div>
+                  <div class="text-xs text-sub">Eingehende E-Mails ins CRM</div>
+                </div>
+              </div>
+              <button class="h-9 px-3 rounded-md bg-ok text-white text-sm">Verbunden</button>
+            </div>
+            <div class="flex items-center justify-between border border-line rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-bold">In</div>
+                <div>
+                  <div class="font-medium text-sm">Instantly.ai</div>
+                  <div class="text-xs text-sub">Cold-Email-Versand &amp; Warmup</div>
+                </div>
+              </div>
+              <button class="h-9 px-3 rounded-md bg-ok text-white text-sm">Verbunden</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ========== Wizard Modal (Neue Kampagne) ========== -->
+<div id="wizard" class="fixed inset-0 z-40 hidden modal-overlay items-center justify-center p-6">
+  <div class="bg-surface w-full max-w-xl rounded-xl shadow-2xl">
+    <div class="px-6 py-4 border-b border-line flex items-center justify-between">
+      <div>
+        <h3 class="font-semibold">Neue Kampagne</h3>
+        <p class="text-xs text-sub" id="wizard-step-label">Schritt 1 von 3 · Zielgruppe</p>
+      </div>
+      <button onclick="closeWizard()" class="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-line">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="p-6">
+      <!-- Step 1 -->
+      <div data-wizard-step="1" class="space-y-4">
+        <div>
+          <label class="text-sm font-medium">Nische</label>
+          <input class="mt-1.5 w-full h-9 px-3 rounded-md border border-line text-sm" placeholder="z. B. Steuerberater" value="Steuerberater" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Orte</label>
+          <input class="mt-1.5 w-full h-9 px-3 rounded-md border border-line text-sm" placeholder="Mehrere durch Komma trennen" value="Magdeburg, Halle, Dessau" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Anzahl Leads</label>
+          <div class="mt-2 flex items-center gap-3">
+            <input type="range" min="10" max="500" value="150" class="flex-1" id="wizard-leadcount" oninput="document.getElementById('wizard-leadcount-val').textContent=this.value" />
+            <div class="text-sm font-medium tabular-nums w-12 text-right" id="wizard-leadcount-val">150</div>
+          </div>
+        </div>
+      </div>
+      <!-- Step 2 -->
+      <div data-wizard-step="2" class="hidden space-y-4">
+        <div>
+          <label class="text-sm font-medium">Was bieten Sie an?</label>
+          <textarea class="mt-1.5 w-full px-3 py-2 rounded-md border border-line text-sm h-24" placeholder="Kurzbeschreibung Ihres Angebots…">Coaching für Steuerberater, die ihre Mandanten besser binden und mehr Premium-Mandate gewinnen wollen.</textarea>
+        </div>
+        <div>
+          <label class="text-sm font-medium">Welches Signal soll erkannt werden?</label>
+          <textarea class="mt-1.5 w-full px-3 py-2 rounded-md border border-line text-sm h-20" placeholder="z. B. veraltete Webseite, fehlende Online-Buchung, kein Karriere-Bereich…">Veraltete Webseite ohne Online-Mandantenportal, oder leere Karriere-Seite.</textarea>
+        </div>
+      </div>
+      <!-- Step 3 -->
+      <div data-wizard-step="3" class="hidden space-y-4">
+        <div>
+          <label class="text-sm font-medium">Mail-Tonalität</label>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <label class="border border-line rounded-lg p-3 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand has-[:checked]:bg-slate-50">
+              <input type="radio" name="tone" class="hidden" />
+              <div class="font-medium text-sm">Locker</div>
+              <div class="text-xs text-sub">Du-Form, leichter Smalltalk</div>
+            </label>
+            <label class="border border-line rounded-lg p-3 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand has-[:checked]:bg-slate-50">
+              <input type="radio" name="tone" class="hidden" checked />
+              <div class="font-medium text-sm">Professionell</div>
+              <div class="text-xs text-sub">Sie-Form, sachlich</div>
+            </label>
+            <label class="border border-line rounded-lg p-3 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand has-[:checked]:bg-slate-50">
+              <input type="radio" name="tone" class="hidden" />
+              <div class="font-medium text-sm">Direkt</div>
+              <div class="text-xs text-sub">Knapp, ergebnisorientiert</div>
+            </label>
+            <label class="border border-line rounded-lg p-3 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand has-[:checked]:bg-slate-50">
+              <input type="radio" name="tone" class="hidden" />
+              <div class="font-medium text-sm">Custom</div>
+              <div class="text-xs text-sub">Eigene Tonalität definieren</div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 py-3 border-t border-line bg-slate-50 flex items-center justify-between rounded-b-xl">
+      <button id="wizard-prev" class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface" onclick="wizardStep(-1)" disabled>Zurück</button>
+      <div class="flex gap-2">
+        <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface" onclick="closeWizard()">Abbrechen</button>
+        <button id="wizard-next" class="h-9 px-4 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink" onclick="wizardStep(1)">Weiter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== Cold-Mail Modal ========== -->
+<div id="mail-modal" class="fixed inset-0 z-40 hidden modal-overlay items-center justify-center p-6">
+  <div class="bg-surface w-full max-w-2xl rounded-xl shadow-2xl">
+    <div class="px-6 py-4 border-b border-line flex items-center justify-between">
+      <div>
+        <h3 class="font-semibold" id="mail-title">Cold-Mail · Brandt &amp; Partner StB</h3>
+        <p class="text-xs text-sub">Von Claude personalisiert · Signal: <span id="mail-signal" class="font-medium text-ink"></span></p>
+      </div>
+      <button onclick="closeMailModal()" class="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-line">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="flex items-center gap-2 border-b border-line pb-3">
+        <button class="text-sm font-medium border-b-2 border-brand pb-1">Erstkontakt</button>
+        <button class="text-sm text-sub hover:text-ink pb-1">Follow-up 1</button>
+        <button class="text-sm text-sub hover:text-ink pb-1">Follow-up 2</button>
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-wider text-sub">Betreff</label>
+        <div class="mt-1 text-sm font-medium" id="mail-subject"></div>
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-wider text-sub">Inhalt</label>
+        <pre class="mt-1 text-sm whitespace-pre-wrap font-sans border border-line rounded-md p-4 bg-slate-50" id="mail-body"></pre>
+      </div>
+    </div>
+    <div class="px-6 py-3 border-t border-line bg-slate-50 flex items-center justify-end gap-2 rounded-b-xl">
+      <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface" onclick="closeMailModal()">Schließen</button>
+      <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface">Bearbeiten</button>
+      <button class="h-9 px-4 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink">Genehmigen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== Calendar Day Modal ========== -->
+<div id="day-modal" class="fixed inset-0 z-40 hidden modal-overlay items-center justify-center p-6">
+  <div class="bg-surface w-full max-w-2xl rounded-xl shadow-2xl">
+    <div class="px-6 py-4 border-b border-line flex items-center justify-between">
+      <div>
+        <h3 class="font-semibold" id="day-modal-title">Mittwoch, 6. Mai 2026</h3>
+        <p class="text-xs text-sub">Geplante Beiträge nach Plattform.</p>
+      </div>
+      <button onclick="closeDayModal()" class="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-line">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="px-6 pt-4">
+      <div class="inline-flex rounded-md bg-slate-100 p-0.5" id="day-modal-tabs">
+        <button class="px-3 h-8 text-sm rounded bg-surface shadow-sm" data-platform="linkedin" onclick="setDayPlatform('linkedin')">LinkedIn</button>
+        <button class="px-3 h-8 text-sm text-sub" data-platform="instagram" onclick="setDayPlatform('instagram')">Instagram</button>
+        <button class="px-3 h-8 text-sm text-sub" data-platform="x" onclick="setDayPlatform('x')">X</button>
+        <button class="px-3 h-8 text-sm text-sub" data-platform="facebook" onclick="setDayPlatform('facebook')">Facebook</button>
+      </div>
+    </div>
+    <div class="p-6">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="rounded-lg border border-line overflow-hidden">
+          <div class="aspect-video bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-sub text-xs">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div class="p-3 text-xs text-sub">Bildvorschau · KI-generiert mit Flux</div>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-wider text-sub">Beitrags-Text</div>
+          <div class="mt-2 text-sm leading-relaxed bg-slate-50 border border-line rounded-md p-4" id="day-modal-text">
+            3 Mythen über Coaching, die Sie Geld kosten.<br><br>
+            Mythos 1: „Coaching ist nur für Krisen." Falsch. Die besten Sportler haben einen Coach – nicht weil sie versagen, sondern weil sie gewinnen wollen.<br><br>
+            Mythos 2: „Coaches geben Ratschläge." Auch falsch. Coaches stellen Fragen, die Sie selbst nicht stellen würden.<br><br>
+            Mythos 3: „Das ist zu teuer." Rechnen Sie nach: Was kosten Sie nicht-getroffene Entscheidungen? <br><br>
+            #Coaching #Mindset #Führung
+          </div>
+          <div class="mt-3 flex items-center justify-between text-xs text-sub">
+            <span>Veröffentlichung: <strong class="text-ink">06.05.2026 · 09:00 Uhr</strong></span>
+            <span class="pill" style="background:#dbeafe;color:#1d4ed8">geplant</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 py-3 border-t border-line bg-slate-50 flex items-center justify-between rounded-b-xl">
+      <div class="flex items-center gap-3 text-xs text-sub">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked class="rounded border-line"> Auf LinkedIn posten
+        </label>
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked class="rounded border-line"> Auf Instagram posten
+        </label>
+      </div>
+      <div class="flex gap-2">
+        <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface" onclick="closeDayModal()">Verwerfen</button>
+        <button class="h-9 px-3 rounded-md border border-line text-sm hover:bg-surface">Als Entwurf speichern</button>
+        <button class="h-9 px-4 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink">Approve &amp; Plan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== Contact Detail Sheet (right side) ========== -->
+<div id="contact-sheet" class="fixed inset-0 z-40 hidden">
+  <div class="absolute inset-0 modal-overlay" onclick="closeContactSheet()"></div>
+  <div class="absolute right-0 top-0 bottom-0 w-full max-w-md bg-surface shadow-2xl flex flex-col">
+    <div class="px-6 py-4 border-b border-line flex items-start justify-between">
+      <div>
+        <div class="text-xs text-sub" id="sheet-company"></div>
+        <h3 class="font-semibold mt-0.5" id="sheet-name"></h3>
+        <div class="mt-1 flex items-center gap-2">
+          <span class="pill" id="sheet-status"></span>
+          <span class="text-xs text-sub" id="sheet-email"></span>
+        </div>
+      </div>
+      <button onclick="closeContactSheet()" class="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-line">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="px-6 py-3 border-b border-line">
+      <div class="inline-flex rounded-md bg-slate-100 p-0.5">
+        <button class="px-3 h-8 text-sm rounded bg-surface shadow-sm">Historie</button>
+        <button class="px-3 h-8 text-sm text-sub">Notizen</button>
+        <button class="px-3 h-8 text-sm text-sub">Aktivität</button>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto px-6 py-4 space-y-3" id="sheet-history"></div>
+    <div class="px-6 py-3 border-t border-line bg-slate-50 flex gap-2">
+      <button class="flex-1 h-9 rounded-md border border-line text-sm hover:bg-surface">Notiz hinzufügen</button>
+      <button class="flex-1 h-9 rounded-md bg-brand text-white text-sm font-medium hover:bg-ink">Antworten</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   MOCK-DATEN
+   ===================================================================== */
+const LEADS = [
+  { firma: 'Brandt & Partner StB', web: 'brandt-partner.de', vn: 'Markus', nn: 'Brandt', firmenmail: 'info@brandt-partner.de', personal: 'm.brandt@brandt-partner.de', signal: 'Veraltete Webseite, kein Mandantenportal' },
+  { firma: 'Wagner & Söhne Steuerkanzlei', web: 'wagner-steuer.de', vn: 'Friedrich', nn: 'Wagner', firmenmail: 'kontakt@wagner-steuer.de', personal: 'f.wagner@wagner-steuer.de', signal: 'Karriere-Seite leer, sucht laut Stellenanzeige Personal' },
+  { firma: 'Krause & Lehmann mbB', web: 'krause-lehmann.de', vn: 'Sabine', nn: 'Lehmann', firmenmail: 'office@krause-lehmann.de', personal: 's.lehmann@krause-lehmann.de', signal: 'Keine Online-Terminbuchung, manueller Mandanten-Onboarding' },
+  { firma: 'Steuerbüro Vogel', web: 'kanzlei-vogel.de', vn: 'Stefan', nn: 'Vogel', firmenmail: 'info@kanzlei-vogel.de', personal: null, signal: null },
+  { firma: 'Möller Steuerberatung', web: 'moeller-steuer.de', vn: 'Anika', nn: 'Möller', firmenmail: 'a.moeller@moeller-steuer.de', personal: null, signal: null },
+  { firma: 'Schmidt & Klein StB-Gesellschaft', web: 'schmidt-klein-stb.de', vn: 'Gerd', nn: 'Schmidt', firmenmail: 'g.schmidt@schmidt-klein-stb.de', personal: 'gerd.schmidt@schmidt-klein-stb.de', signal: 'Keine LinkedIn-Präsenz, geringe Sichtbarkeit' },
+  { firma: 'Steuerkanzlei Berger', web: 'kanzlei-berger.de', vn: 'Tobias', nn: 'Berger', firmenmail: null, personal: null, signal: null },
+  { firma: 'Lange & Hoffmann Treuhand', web: 'lange-hoffmann-treuhand.de', vn: 'Petra', nn: 'Hoffmann', firmenmail: 'info@lange-hoffmann-treuhand.de', personal: 'p.hoffmann@lange-hoffmann-treuhand.de', signal: 'Veraltetes Corporate Design, keine mobile-optimierte Webseite' },
+  { firma: 'Steuerwerk Magdeburg', web: 'steuerwerk-md.de', vn: null, nn: null, firmenmail: 'info@steuerwerk-md.de', personal: null, signal: null },
+  { firma: 'Becker Steuerberatung', web: 'becker-steuer.de', vn: 'Christine', nn: 'Becker', firmenmail: 'c.becker@becker-steuer.de', personal: 'christine.becker@becker-steuer.de', signal: 'Aktive Stellenausschreibung, sucht Steuerassistenz – aber leere Karriere-Seite' },
+];
+
+const CONTACTS = [
+  { id: 'c1', vn: 'Markus', nn: 'Brandt', firma: 'Brandt & Partner StB', email: 'm.brandt@brandt-partner.de', status: 'meeting_booked', tags: ['hot','steuer'], last: 'heute, 09:42', source: 'Kampagne Q2' },
+  { id: 'c2', vn: 'Anika', nn: 'Hoffmann', firma: 'Hoffmann Bau GmbH', email: 'a.hoffmann@hoffmann-bau.de', status: 'in_conversation', tags: ['bau'], last: 'heute, 08:15', source: 'Kampagne Bau' },
+  { id: 'c3', vn: 'Friedrich', nn: 'Wagner', firma: 'Wagner & Söhne StK', email: 'f.wagner@wagner-steuer.de', status: 'qualified', tags: ['steuer','warm'], last: 'gestern, 17:32', source: 'Kampagne Q2' },
+  { id: 'c4', vn: 'Jens', nn: 'Pohlmann', firma: 'Pohlmann Coaching', email: 'jens@pohlmann-coaching.de', status: 'in_conversation', tags: ['coaching'], last: 'gestern, 14:20', source: 'Kampagne DACH' },
+  { id: 'c5', vn: 'Sabine', nn: 'Lehmann', firma: 'Krause & Lehmann mbB', email: 's.lehmann@krause-lehmann.de', status: 'lead', tags: ['steuer'], last: 'vor 3 Tagen', source: 'Kampagne Q2' },
+  { id: 'c6', vn: 'Tobias', nn: 'Berger', firma: 'Kanzlei Berger', email: 't.berger@kanzlei-berger.de', status: 'lead', tags: ['steuer'], last: 'vor 4 Tagen', source: 'Kampagne Q2' },
+  { id: 'c7', vn: 'Petra', nn: 'Hoffmann', firma: 'Lange & Hoffmann Treuhand', email: 'p.hoffmann@lange-hoffmann-treuhand.de', status: 'qualified', tags: ['steuer','hot'], last: 'vor 1 Tag', source: 'Kampagne Q2' },
+  { id: 'c8', vn: 'Carolin', nn: 'Roth', firma: 'Roth Akademie', email: 'c.roth@roth-akademie.de', status: 'meeting_booked', tags: ['coaching','warm'], last: 'gestern, 11:00', source: 'Kampagne DACH' },
+  { id: 'c9', vn: 'Marek', nn: 'Stein', firma: 'Stein Bau AG', email: 'm.stein@stein-bau.de', status: 'lead', tags: ['bau'], last: 'vor 5 Tagen', source: 'Kampagne Bau' },
+  { id: 'c10', vn: 'Linda', nn: 'Sommer', firma: 'Sommer Coaching Lab', email: 'l.sommer@sommer-coaching.com', status: 'won', tags: ['coaching'], last: 'vor 8 Tagen', source: 'Kampagne DACH' },
+  { id: 'c11', vn: 'Robert', nn: 'Adler', firma: 'Adler & Partner', email: 'r.adler@adler-partner.de', status: 'lost', tags: ['steuer','cold'], last: 'vor 12 Tagen', source: 'Kampagne Q2' },
+  { id: 'c12', vn: 'Daniela', nn: 'Engel', firma: 'Engel Coaching Studio', email: 'd.engel@engel-coaching.de', status: 'in_conversation', tags: ['coaching','warm'], last: 'vor 2 Tagen', source: 'Kampagne DACH' },
+];
+
+const HISTORY = {
+  c1: [
+    { dir: 'out', subj: 'Schnelle Frage zu Ihrem Mandantenportal', excerpt: 'Sehr geehrter Herr Brandt, beim Blick auf brandt-partner.de ist mir aufgefallen…', when: 'Mo 28.04.2026, 09:00', tag: 'Erstkontakt' },
+    { dir: 'in',  subj: 'Re: Schnelle Frage zu Ihrem Mandantenportal', excerpt: 'Hallo, ja das ist seit Jahren auf der To-Do-Liste – haben Sie nächste Woche Zeit für 20 Minuten?', when: 'Di 29.04.2026, 14:11', tag: 'Antwort positiv' },
+    { dir: 'out', subj: 'Re: Re: Schnelle Frage zu Ihrem Mandantenportal', excerpt: 'Sehr gerne. Ich habe Ihnen drei Slots geblockt – wählen Sie einen aus…', when: 'Di 29.04.2026, 15:42', tag: 'Termin-Vorschlag' },
+    { dir: 'in',  subj: 'Termin gebucht: Mi 06.05.2026, 11:00', excerpt: 'Termin via Cal.com bestätigt.', when: 'heute, 09:42', tag: 'Termin gebucht' },
+  ],
+  c2: [
+    { dir: 'out', subj: 'Frage zu Ihrer Karriere-Seite', excerpt: 'Sehr geehrte Frau Hoffmann, wir haben gesehen, dass Sie aktuell Bauleiter suchen…', when: 'Sa 03.05.2026, 10:15', tag: 'Erstkontakt' },
+    { dir: 'in',  subj: 'Re: Frage zu Ihrer Karriere-Seite', excerpt: 'Sehr gerne, klingt spannend, wann passt es Ihnen?', when: 'heute, 08:15', tag: 'Antwort positiv' },
+  ],
+};
+
+const STATUS_LABELS = {
+  lead: 'Lead', qualified: 'Qualified', in_conversation: 'In Conversation',
+  meeting_booked: 'Termin gebucht', won: 'Closed Won', lost: 'Closed Lost'
+};
+const STATUS_COLORS = {
+  lead: 'background:#fef3c7;color:#92400e',
+  qualified: 'background:#dbeafe;color:#1d4ed8',
+  in_conversation: 'background:#fde68a;color:#854d0e',
+  meeting_booked: 'background:#d1fae5;color:#047857',
+  won: 'background:#bbf7d0;color:#166534',
+  lost: 'background:#fee2e2;color:#b91c1c'
+};
+
+/* =====================================================================
+   ROUTING / TABS
+   ===================================================================== */
+function enterApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  const shell = document.getElementById('app-shell');
+  shell.classList.remove('hidden');
+  shell.classList.add('flex');
+  navigateTo('dashboard');
+}
+
+const PAGE_META = {
+  dashboard: { title: 'Dashboard', desc: 'Übersicht über alle Vertriebs-, Sichtbarkeits- und CRM-Aktivitäten.' },
+  vertrieb:  { title: 'Vertrieb',  desc: 'Lead-Recherche, Akquise und Cold-Outreach.' },
+  sichtbarkeit: { title: 'Sichtbarkeit', desc: 'Content-Kalender mit automatischer Veröffentlichung.' },
+  crm:       { title: 'CRM',       desc: 'Kontakte, Pipeline und Kommunikationshistorie.' },
+  einstellungen: { title: 'Einstellungen', desc: 'Organisation, Team und externe Integrationen.' },
+};
+
+function navigateTo(target) {
+  document.querySelectorAll('[data-screen]').forEach(s => {
+    s.classList.toggle('active', s.dataset.screen === target);
+  });
+  document.querySelectorAll('.nav-item').forEach(b => {
+    const isActive = b.dataset.target === target;
+    b.classList.toggle('bg-sidebar-soft', isActive);
+    b.classList.toggle('text-white', isActive);
+    b.classList.toggle('text-slate-300', !isActive);
+  });
+  const meta = PAGE_META[target];
+  document.getElementById('page-title').textContent = meta.title;
+  document.getElementById('page-desc').textContent = meta.desc;
+  // Always reset Vertrieb to list view when navigating
+  if (target === 'vertrieb') showSubview('vertrieb', 'vertrieb-list');
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.nav-item');
+  if (btn && btn.dataset.target) navigateTo(btn.dataset.target);
+});
+
+function showSubview(screen, sub) {
+  document.querySelectorAll(`[data-screen="${screen}"] [data-subview]`).forEach(el => {
+    el.classList.toggle('active', el.dataset.subview === sub);
+  });
+}
+
+/* =====================================================================
+   VERTRIEB: Wizard + Live-Lead-Tabelle Animation
+   ===================================================================== */
+let wizardCurrentStep = 1;
+function openWizard() {
+  wizardCurrentStep = 1;
+  updateWizard();
+  const w = document.getElementById('wizard');
+  w.classList.remove('hidden');
+  w.classList.add('flex');
+}
+function closeWizard() {
+  const w = document.getElementById('wizard');
+  w.classList.add('hidden');
+  w.classList.remove('flex');
+}
+function wizardStep(delta) {
+  if (wizardCurrentStep === 3 && delta === 1) {
+    closeWizard();
+    showSubview('vertrieb', 'vertrieb-detail');
+    document.getElementById('campaign-title').textContent = 'Neue Kampagne (Demo)';
+    document.getElementById('campaign-meta').textContent = 'Pipeline startet automatisch …';
+    restartPipelineDemo();
+    return;
+  }
+  wizardCurrentStep = Math.max(1, Math.min(3, wizardCurrentStep + delta));
+  updateWizard();
+}
+function updateWizard() {
+  document.querySelectorAll('[data-wizard-step]').forEach(el => {
+    el.classList.toggle('hidden', el.dataset.wizardStep !== String(wizardCurrentStep));
+  });
+  document.getElementById('wizard-step-label').textContent =
+    `Schritt ${wizardCurrentStep} von 3 · ${['Zielgruppe','Briefing','Tonalität'][wizardCurrentStep-1]}`;
+  document.getElementById('wizard-prev').disabled = wizardCurrentStep === 1;
+  document.getElementById('wizard-next').textContent = wizardCurrentStep === 3 ? 'Kampagne starten' : 'Weiter';
+}
+
+function openCampaign(id) {
+  showSubview('vertrieb', 'vertrieb-detail');
+  // Title doesn't matter for demo
+  restartPipelineDemo();
+}
+
+const COL_KEYS = ['firma','web','vn','nn','firmenmail','personal','reacher','signal','mail0','mail1','mail2'];
+let pipelineTimers = [];
+function restartPipelineDemo() {
+  // Cancel old
+  pipelineTimers.forEach(t => clearTimeout(t));
+  pipelineTimers = [];
+  const tbody = document.getElementById('lead-tbody');
+  tbody.innerHTML = '';
+  LEADS.forEach((lead, i) => {
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-50';
+    tr.innerHTML = `
+      <td class="px-3 py-2 font-medium whitespace-nowrap">${lead.firma}</td>
+      <td class="px-3 py-2 text-sub" data-col="web"></td>
+      <td class="px-3 py-2" data-col="vn"></td>
+      <td class="px-3 py-2" data-col="nn"></td>
+      <td class="px-3 py-2 text-sub" data-col="firmenmail"></td>
+      <td class="px-3 py-2 font-medium" data-col="personal"></td>
+      <td class="px-3 py-2" data-col="reacher"></td>
+      <td class="px-3 py-2 text-sub max-w-[220px] truncate" data-col="signal"></td>
+      <td class="px-3 py-2" data-col="mail0"></td>
+      <td class="px-3 py-2" data-col="mail1"></td>
+      <td class="px-3 py-2" data-col="mail2"></td>
+    `;
+    tbody.appendChild(tr);
+    // Initial: show pending shimmer in all data cols
+    COL_KEYS.slice(1).forEach(k => {
+      const cell = tr.querySelector(`[data-col="${k}"]`);
+      cell.innerHTML = `<span class="pill bg-slate-100 text-sub shimmer">⏳ läuft</span>`;
+    });
+    // Web is "scraped" at start
+    setCell(tr, 'web', `<a class="hover:underline" href="https://${lead.web}" target="_blank">${lead.web}</a>`);
+
+    // Stage 2 (decision maker): different timing per row
+    const t2 = 600 + i*350;
+    pipelineTimers.push(setTimeout(() => {
+      if (lead.vn) {
+        setCell(tr, 'vn', `<span>${lead.vn}</span>`);
+        setCell(tr, 'nn', `<span>${lead.nn}</span>`);
+      } else {
+        setCell(tr, 'vn', `<span class="pill bg-slate-100 text-sub">⏭ übersprungen</span>`);
+        setCell(tr, 'nn', `<span class="pill bg-slate-100 text-sub">⏭</span>`);
+      }
+    }, t2));
+
+    // Stage 3 (email permutation + Reacher)
+    const t3 = 1500 + i*400;
+    pipelineTimers.push(setTimeout(() => {
+      if (lead.firmenmail) setCell(tr, 'firmenmail', `<span>${lead.firmenmail}</span>`);
+      else setCell(tr, 'firmenmail', `<span class="pill bg-rose-50 text-rose-700">❌ nicht gefunden</span>`);
+
+      if (lead.personal) {
+        setCell(tr, 'personal', `<span class="text-ink">${lead.personal}</span>`);
+        setCell(tr, 'reacher', `<span class="pill" style="background:#d1fae5;color:#047857">✓ reachable</span>`);
+      } else {
+        setCell(tr, 'personal', `<span class="pill bg-rose-50 text-rose-700">❌ nicht gefunden</span>`);
+        setCell(tr, 'reacher', `<span class="pill bg-rose-50 text-rose-700">❌ unreachable</span>`);
+      }
+    }, t3));
+
+    // Stage 4 (personalization)
+    const t4 = 2700 + i*500;
+    pipelineTimers.push(setTimeout(() => {
+      if (lead.signal) {
+        setCell(tr, 'signal', `<span title="${lead.signal}">${lead.signal}</span>`);
+        const mailBtn = (label) => `<button class="pill bg-emerald-50 text-emerald-700 hover:bg-emerald-100" onclick="openMailModal('${lead.firma.replace(/'/g, "\\'")}', '${lead.signal.replace(/'/g,"\\'")}', '${lead.vn||''}', '${lead.nn||''}', ${i})">✓ ${label}</button>`;
+        setCell(tr, 'mail0', mailBtn('Erstkontakt'));
+        setCell(tr, 'mail1', mailBtn('Follow-up 1'));
+        setCell(tr, 'mail2', mailBtn('Follow-up 2'));
+      } else {
+        setCell(tr, 'signal', `<span class="pill bg-slate-100 text-sub">⏭ kein Signal</span>`);
+        setCell(tr, 'mail0', `<span class="pill bg-slate-100 text-sub">⏭</span>`);
+        setCell(tr, 'mail1', `<span class="pill bg-slate-100 text-sub">⏭</span>`);
+        setCell(tr, 'mail2', `<span class="pill bg-slate-100 text-sub">⏭</span>`);
+      }
+    }, t4));
+  });
+}
+function setCell(tr, col, html) {
+  const cell = tr.querySelector(`[data-col="${col}"]`);
+  if (cell) {
+    cell.innerHTML = html;
+    cell.classList.remove('shimmer');
+  }
+}
+
+function openMailModal(firma, signal, vn, nn, idx) {
+  document.getElementById('mail-title').textContent = `Cold-Mail · ${firma}`;
+  document.getElementById('mail-signal').textContent = signal;
+  document.getElementById('mail-subject').textContent = `Frage zu Ihrer Webseite ${signal.split(',')[0].toLowerCase()}`;
+  const anrede = vn && nn ? `Sehr geehrte/r ${vn} ${nn}` : 'Sehr geehrte/r Herr/Frau';
+  document.getElementById('mail-body').textContent =
+`${anrede},
+
+beim Blick auf Ihre Webseite ist mir aufgefallen: ${signal}.
+
+Wir helfen ${firma.includes('Steuer') || firma.includes('Kanzlei') ? 'Steuerkanzleien' : 'Unternehmen wie Ihrem'} typischerweise dabei, genau dieses Thema zu lösen – meist in unter 6 Wochen, ohne dass Ihr operatives Geschäft darunter leidet.
+
+Hätten Sie diese Woche 20 Minuten für ein kurzes Telefonat? Ich blocke Ihnen drei Slots auf meinem Kalender:
+→ https://cal.com/sk-coach/erstgespraech
+
+Mit freundlichen Grüßen
+Sascha Kunze
+SK – Dozent und Coach`;
+  const m = document.getElementById('mail-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeMailModal() {
+  const m = document.getElementById('mail-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+/* =====================================================================
+   SICHTBARKEIT: Calendar
+   ===================================================================== */
+const MONTH_NAME = 'Mai 2026';
+// Mai 2026 starts on a Friday. Days 1..31. Show with leading empty days.
+// JS: new Date(2026, 4, 1).getDay() === 5 (Friday)
+function buildCalendar() {
+  const grid = document.getElementById('calendar-grid');
+  const startDow = new Date(2026, 4, 1).getDay(); // 0=Sun, 1=Mon, ...
+  // We want Monday as first column → offset
+  const leading = startDow === 0 ? 6 : startDow - 1; // for Mon-first
+  const totalDays = 31;
+  const cells = leading + totalDays;
+  const rows = Math.ceil(cells / 7);
+  const totalCells = rows * 7;
+
+  // Mock day data (status, platforms, title)
+  const mockDays = {
+    1: { st: 'pub',   pl: ['li','ig'], title: '5 Fehler beim Coaching-Pitch' },
+    2: { st: 'pub',   pl: ['li'], title: 'Wochenende: Buch-Empfehlung' },
+    4: { st: 'pub',   pl: ['li','fb'], title: 'Montagsmotivation: Quote von Drucker' },
+    5: { st: 'pub',   pl: ['li','ig'], title: 'Behind the Scenes: Studio-Setup' },
+    6: { st: 'sched', pl: ['li'], title: '3 Mythen über Coaching' },
+    7: { st: 'draft', pl: ['ig'], title: 'Behind the Scenes: Coaching-Studio' },
+    8: { st: 'sched', pl: ['li','fb'], title: 'Frage der Woche: „Wie misst Du Erfolg?"' },
+    11:{ st: 'draft', pl: ['li','ig'], title: 'Kunden-Case: Realschule Halle' },
+    12:{ st: 'sched', pl: ['li','fb','x'], title: 'Webinar-Ankündigung' },
+    13:{ st: 'draft', pl: ['ig'], title: 'Reel: 60-Sek-Coaching-Tipp' },
+    14:{ st: 'sched', pl: ['li'], title: 'Reflexion: Was Trainer von Coaches lernen' },
+    15:{ st: 'draft', pl: ['li','ig'], title: 'Wochenrückblick' },
+    18:{ st: 'sched', pl: ['li','fb'], title: 'Live-Q&A Ankündigung' },
+    19:{ st: 'draft', pl: ['li'], title: 'Studie: Coaching-ROI' },
+    20:{ st: 'sched', pl: ['ig','li'], title: 'Carousel: 7 Coaching-Frameworks' },
+    22:{ st: 'fail',  pl: ['li','ig'], title: 'Vatertag-Special (Fehler bei Upload)' },
+    25:{ st: 'sched', pl: ['li'], title: 'Pfingstmontag-Reflexion' },
+    27:{ st: 'draft', pl: ['ig'], title: 'Reel: 3 Coaching-Bücher' },
+    28:{ st: 'sched', pl: ['li','x'], title: 'Donnerstags-Tipp' },
+  };
+
+  const today = 5; // 5. Mai 2026
+
+  for (let i = 0; i < totalCells; i++) {
+    const dayNum = i - leading + 1;
+    const isInMonth = dayNum >= 1 && dayNum <= totalDays;
+    const isToday = isInMonth && dayNum === today;
+    const dd = isInMonth ? mockDays[dayNum] : null;
+    const stClass = dd ? `cal-${dd.st}` : 'cal-empty';
+
+    const cell = document.createElement('div');
+    cell.className = `border-r border-b border-line p-2 min-h-[110px] relative ${isInMonth ? stClass : 'bg-slate-50'} ${isInMonth && dd ? 'cursor-pointer hover:brightness-95 transition' : ''}`;
+    if (isInMonth && dd) {
+      cell.onclick = () => openDayModal(dayNum, dd);
+    }
+
+    const dayLabel = `<div class="flex items-center justify-between">
+      <span class="text-xs font-medium ${isToday ? 'h-5 w-5 bg-brand text-white rounded-full inline-flex items-center justify-center' : (isInMonth ? '' : 'text-slate-300')}">${isInMonth ? dayNum : ''}</span>
+      ${dd ? `<div class="flex gap-0.5">${(dd.pl||[]).map(p => `<span class="h-4 w-4 rounded text-[9px] flex items-center justify-center font-bold ${p==='li'?'bg-blue-600 text-white':p==='ig'?'bg-pink-500 text-white':p==='fb'?'bg-blue-700 text-white':'bg-black text-white'}">${p==='li'?'in':p==='ig'?'ig':p==='fb'?'fb':'𝕏'}</span>`).join('')}</div>` : ''}
+    </div>`;
+    const titlePart = dd
+      ? `<div class="mt-1 text-[11px] leading-tight line-clamp-2 ${dd.st==='fail'?'text-rose-700':'text-slate-700'}">${dd.title}</div>`
+      : '';
+
+    cell.innerHTML = dayLabel + titlePart;
+    grid.appendChild(cell);
+  }
+}
+
+function openDayModal(day, dd) {
+  document.getElementById('day-modal-title').textContent =
+    `${['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'][new Date(2026,4,day).getDay()]}, ${day}. Mai 2026`;
+  document.getElementById('day-modal-text').innerHTML = '<strong>' + dd.title + '</strong><br><br>' + (
+    dd.title.includes('3 Mythen')
+      ? `Mythos 1: „Coaching ist nur für Krisen." Falsch. Die besten Sportler haben einen Coach – nicht weil sie versagen, sondern weil sie gewinnen wollen.<br><br>Mythos 2: „Coaches geben Ratschläge." Auch falsch. Coaches stellen Fragen, die Sie selbst nicht stellen würden.<br><br>Mythos 3: „Das ist zu teuer." Rechnen Sie nach: Was kosten Sie nicht-getroffene Entscheidungen?<br><br>#Coaching #Mindset #Führung`
+      : 'Inhalt wurde KI-generiert auf Basis Ihrer Brand-Voice und kann hier bearbeitet werden.<br><br>#Coaching #Lehre #SaschaKunze'
+  );
+  const m = document.getElementById('day-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeDayModal() {
+  const m = document.getElementById('day-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+}
+function setDayPlatform(p) {
+  document.querySelectorAll('#day-modal-tabs button').forEach(b => {
+    const active = b.dataset.platform === p;
+    b.classList.toggle('bg-surface', active);
+    b.classList.toggle('shadow-sm', active);
+    b.classList.toggle('text-ink', active);
+    b.classList.toggle('text-sub', !active);
+  });
+}
+
+/* =====================================================================
+   CRM: Tabelle, Pipeline, Sheet
+   ===================================================================== */
+function renderContacts() {
+  const tbody = document.getElementById('contacts-tbody');
+  tbody.innerHTML = CONTACTS.map(c => `
+    <tr class="hover:bg-slate-50 cursor-pointer" onclick="openContactSheet('${c.id}')">
+      <td class="px-4 py-3">
+        <div class="flex items-center gap-2.5">
+          <div class="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-semibold">${c.vn[0]}${c.nn[0]}</div>
+          <div class="font-medium">${c.vn} ${c.nn}</div>
+        </div>
+      </td>
+      <td class="px-4 py-3 text-sub">${c.firma}</td>
+      <td class="px-4 py-3 text-sub">${c.email}</td>
+      <td class="px-4 py-3"><span class="pill" style="${STATUS_COLORS[c.status]}">${STATUS_LABELS[c.status]}</span></td>
+      <td class="px-4 py-3"><div class="flex flex-wrap gap-1">${c.tags.map(t=>`<span class="pill bg-slate-100 text-sub">${t}</span>`).join('')}</div></td>
+      <td class="px-4 py-3 text-sub text-xs">${c.last}</td>
+    </tr>
+  `).join('');
+}
+function renderPipeline() {
+  const cols = [
+    { key: 'lead', label: 'Lead' },
+    { key: 'qualified', label: 'Qualified' },
+    { key: 'in_conversation', label: 'In Conversation' },
+    { key: 'meeting_booked', label: 'Termin gebucht' },
+    { key: 'won', label: 'Closed Won' },
+  ];
+  const wrap = document.querySelector('[data-crm-view="pipe"]');
+  wrap.innerHTML = cols.map(col => {
+    const items = CONTACTS.filter(c => c.status === col.key);
+    return `
+      <div class="kanban-col rounded-xl border border-line bg-slate-50 p-3">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold text-sm">${col.label}</div>
+          <span class="text-xs text-sub">${items.length}</span>
+        </div>
+        <div class="space-y-2">
+          ${items.map(c => `
+            <div class="bg-surface rounded-lg border border-line p-3 cursor-pointer hover:shadow-sm transition" onclick="openContactSheet('${c.id}')">
+              <div class="text-sm font-medium">${c.vn} ${c.nn}</div>
+              <div class="text-xs text-sub mt-0.5 truncate">${c.firma}</div>
+              <div class="mt-2 flex items-center gap-1 flex-wrap">
+                ${c.tags.slice(0,2).map(t=>`<span class="pill bg-slate-100 text-sub">${t}</span>`).join('')}
+              </div>
+              <div class="text-[10px] text-sub mt-2">${c.last}</div>
+            </div>
+          `).join('') || '<div class="text-xs text-sub text-center py-6">Keine Karten</div>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function setCrmView(v) {
+  document.querySelectorAll('[data-crm-view]').forEach(el => el.classList.toggle('active', el.dataset.crmView === v));
+  document.getElementById('crm-view-table').className = v==='table' ? 'px-3 h-8 text-sm rounded bg-slate-900 text-white' : 'px-3 h-8 text-sm text-sub hover:text-ink';
+  document.getElementById('crm-view-pipe').className  = v==='pipe'  ? 'px-3 h-8 text-sm rounded bg-slate-900 text-white' : 'px-3 h-8 text-sm text-sub hover:text-ink';
+}
+
+function openContactSheet(id) {
+  const c = CONTACTS.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('sheet-name').textContent = `${c.vn} ${c.nn}`;
+  document.getElementById('sheet-company').textContent = c.firma;
+  document.getElementById('sheet-email').textContent = c.email;
+  const status = document.getElementById('sheet-status');
+  status.textContent = STATUS_LABELS[c.status];
+  status.style.cssText = STATUS_COLORS[c.status];
+
+  const hist = HISTORY[c.id] || [{ dir:'out', subj:'Erstkontakt', excerpt:'(Mock-Daten – Historie wird hier chronologisch angezeigt.)', when: c.last, tag:'Erstkontakt' }];
+  document.getElementById('sheet-history').innerHTML = hist.map(h => `
+    <div class="border border-line rounded-lg p-3">
+      <div class="flex items-center gap-2 text-[11px] uppercase tracking-wider">
+        <span class="${h.dir==='in' ? 'text-info' : 'text-sub'} font-medium">${h.dir==='in' ? '← Eingehend' : '→ Ausgehend'}</span>
+        <span class="text-sub">${h.when}</span>
+        ${h.tag ? `<span class="pill bg-slate-100 text-sub ml-auto">${h.tag}</span>` : ''}
+      </div>
+      <div class="mt-1.5 text-sm font-medium">${h.subj}</div>
+      <div class="mt-1 text-xs text-sub">${h.excerpt}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('contact-sheet').classList.remove('hidden');
+}
+function closeContactSheet() {
+  document.getElementById('contact-sheet').classList.add('hidden');
+}
+
+/* =====================================================================
+   EINSTELLUNGEN: Tabs
+   ===================================================================== */
+function setSettingsTab(t) {
+  document.querySelectorAll('[data-settings-tab]').forEach(el => el.classList.toggle('active', el.dataset.settingsTab === t));
+  document.querySelectorAll('.settings-tab').forEach(b => {
+    const active = b.dataset.tab === t;
+    b.className = active
+      ? 'settings-tab px-3 h-8 text-sm rounded bg-slate-900 text-white'
+      : 'settings-tab px-3 h-8 text-sm text-sub hover:text-ink';
+  });
+}
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+buildCalendar();
+renderContacts();
+renderPipeline();
+// Pre-build the campaign detail in case user opens it
+restartPipelineDemo();
+</script>
+
+</body>
+</html>

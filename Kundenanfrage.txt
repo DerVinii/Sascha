@@ -1,0 +1,58 @@
+Hallo,
+
+ich möchte euch heute einen strukturierten Überblick geben, welche Automatisierungen ich in meinem Unternehmen umsetzen möchte. Ziel ist es, Vertrieb, Sichtbarkeit und interne Prozesse effizient zu skalieren und stark zu standardisieren.
+
+Dabei geht es mir insbesondere darum, operative und wiederkehrende Tätigkeiten zu automatisieren, um die Abhängigkeit von manuellen Arbeitsprozessen zu reduzieren und Kapazitäten gezielt für wertschöpfende Aufgaben einzusetzen.
+
+1. Automatisierung Vertrieb (Leadgenerierung & Akquise)
+Der Vertrieb soll weitgehend automatisiert ablaufen, insbesondere in folgenden Bereichen:
+
+- Automatische Leadgenerierung über Google anhand definierter Keywords (B2B-Zielgruppe)
+- KI-gestützte Erstellung von Akquise-Texten (mit Möglichkeit, eigene Inhalte/Keywords vorzugeben)
+- Automatisierter Erstkontakt per E-Mail nach Lead-Erfassung
+- Einrichtung von 2–3 Follow-up-E-Mails zur systematischen Nachverfolgung
+
+Zusätzlich ist mir wichtig:
+
+- Integration einer Terminbuchungsfunktion (z. B. über ), sodass Interessenten direkt Termine für Closing- und Abschlussgespräche buchen können
+- Klare Trennung im Prozess:
+  - Akquise, Erstkontakt und Nachfassen → automatisiert
+  - Closing und Beziehungsaufbau → persönlich
+
+Ziel ist ein System, das Leads eigenständig erkennt, qualifiziert, vorwärmt und dann gezielt in persönliche Gespräche überführt.
+
+2. Automatisierung Sichtbarkeit (Marketing & Social Media)
+
+- Automatisiertes Erstellen und Veröffentlichen von Beiträgen auf Plattformen wie Instagram und LinkedIn
+- KI-gestützte Content-Erstellung (Text + ggf. Bild)
+- Zeitgesteuerte Planung zur kontinuierlichen Präsenz
+
+Ziel ist eine dauerhaft hohe Sichtbarkeit ohne manuellen Aufwand.
+
+3. Automatisierung interner Prozesse (CRM & Datenintegration)
+
+- Automatische Übertragung eingehender E-Mails in das CRM-System (inkl. Zuordnung zu bestehenden Kontakten)
+- Zentrale Speicherung und Nachverfolgung aller Kommunikationsverläufe
+- Synchronisation von Kontaktdaten über verschiedene Systeme hinweg (z. B. über Zapier oder vergleichbare Tools)
+- Trigger-basierte Prozesse: Neue Leads lösen automatisch passende Vertriebsmaßnahmen aus
+- Keyword-basierte Analyse von Anfragen zur gezielten, KI-gestützten Ansprache
+
+Gesamtziel:
+Aufbau eines integrierten Systems, das Leadgenerierung, Ansprache und Nachverfolgung weitgehend automatisiert und skalierbar abbildet.
+
+Der entscheidende Punkt dabei ist:
+Das gesamte „Vorgeplänkel“ im Vertrieb (Akquise, Erstkontakt, Nachfassen) soll vollständig automatisiert werden, während die finale Phase – insbesondere Closing-Gespräche und Beziehungsaufbau – bewusst persönlich bleibt, da hier der größte geschäftliche Hebel liegt.
+
+Gerne würde ich im nächsten Schritt konkret besprechen, welche Tools und Umsetzungsstrategien hierfür sinnvoll sind.
+
+Viele Grüße
+
+Mit freundlichen Grüßen
+Sascha Kunze
+
+SK - Dozent und Coach
+Hohenerxlebener Straße 96
+39418 Staßfurt
+
+Website:
+www.sk-dozentundcoach.de
