@@ -61,6 +61,27 @@
   }
   /* prevent horizontal scroll on small viewports */
   html, body { overflow-x: hidden; }
+  /* chat assistant message: typography for inline HTML */
+  .chat-prose p { margin-bottom: .75rem; }
+  .chat-prose p:last-child { margin-bottom: 0; }
+  .chat-prose h4 { font-weight: 600; margin: 1.25rem 0 .5rem; font-size: .9rem; }
+  .chat-prose ul, .chat-prose ol { padding-left: 1.25rem; margin-bottom: .75rem; }
+  .chat-prose ul { list-style: disc; }
+  .chat-prose ol { list-style: decimal; }
+  .chat-prose li { margin-bottom: .25rem; }
+  .chat-prose strong { font-weight: 600; color: #0f172a; }
+  .chat-prose em { font-style: italic; color: #475569; }
+  .chat-prose blockquote {
+    border-left: 3px solid #e2e8f0;
+    padding: .5rem 0 .5rem 1rem;
+    color: #475569;
+    background: #f8fafc;
+    border-radius: 0 .5rem .5rem 0;
+    margin-bottom: .75rem;
+  }
+  .chat-prose table { border-collapse: collapse; width: 100%; margin-bottom: .75rem; font-size: .85rem; }
+  .chat-prose td { padding: .35rem .6rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .chat-prose td:first-child { color: #64748b; width: 40%; }
 </style>
 </head>
 <body class="bg-bg text-ink">
@@ -142,6 +163,11 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span class="flex-1 text-left">CRM</span>
         <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">41</span>
+      </button>
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="ki-manager">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+        <span class="flex-1 text-left">KI-Manager</span>
+        <span class="text-[10px] font-semibold rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white px-1.5 py-0.5">NEU</span>
       </button>
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="einstellungen">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -600,6 +626,71 @@
         </div>
       </section>
 
+      <!-- ===== KI-MANAGER ===== -->
+      <section data-screen="ki-manager" class="flex h-full">
+        <!-- Mobile-Drawer-Overlay für Verläufe -->
+        <div id="chat-history-overlay" class="fixed inset-0 bg-black/40 z-20 hidden md:hidden" onclick="closeChatHistory()"></div>
+
+        <!-- Verlauf / Chat-History -->
+        <aside id="chat-history" class="w-72 shrink-0 border-r border-line bg-slate-50/60 flex-col fixed md:relative inset-y-0 left-0 z-30 -translate-x-full md:translate-x-0 transition-transform hidden md:flex">
+          <div class="p-3 border-b border-line flex items-center gap-2">
+            <button class="flex-1 h-9 inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface hover:bg-slate-100 text-sm font-medium" onclick="newChat()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Neuer Chat
+            </button>
+            <button class="md:hidden h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-line text-sub" onclick="closeChatHistory()" aria-label="Verläufe schließen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-2" id="chat-history-list"></div>
+          <div class="p-3 border-t border-line">
+            <div class="flex items-center gap-2 text-xs text-sub">
+              <div class="h-7 w-7 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shrink-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+              </div>
+              <div class="leading-tight">
+                <div class="font-medium text-ink text-[11px]">KI-Manager</div>
+                <div>Claude Opus mit Modul-Zugriff</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Chat-Bereich -->
+        <div id="chat-content" class="flex-1 flex flex-col min-w-0">
+          <!-- Mobile-Topbar im Chat -->
+          <div class="md:hidden border-b border-line px-3 py-2 flex items-center justify-between bg-surface">
+            <button onclick="openChatHistory()" class="text-sm font-medium inline-flex items-center gap-2 px-2 h-9 rounded-md hover:bg-slate-100">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              Verläufe
+            </button>
+            <button onclick="newChat()" class="text-sm font-medium inline-flex items-center gap-1.5 px-3 h-9 rounded-md hover:bg-slate-100">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Neu
+            </button>
+          </div>
+
+          <!-- Nachrichten-Bereich -->
+          <div id="chat-messages" class="flex-1 overflow-y-auto"></div>
+
+          <!-- Eingabe -->
+          <div class="border-t border-line p-3 md:p-4 bg-surface">
+            <div class="max-w-3xl mx-auto">
+              <form onsubmit="sendChatMessage(event)" class="rounded-2xl border border-line bg-surface shadow-sm flex items-end gap-1 p-1.5 focus-within:ring-2 focus-within:ring-brand/15 focus-within:border-brand">
+                <textarea id="chat-input" rows="1" placeholder="Frag den KI-Manager – z.B. „Übersicht der letzten 4 Wochen"" class="flex-1 resize-none bg-transparent border-0 outline-none text-sm py-2 px-2 max-h-32" oninput="autoGrow(this)" onkeydown="chatInputKeydown(event)"></textarea>
+                <button type="button" class="h-9 w-9 hidden sm:inline-flex items-center justify-center rounded-md text-sub hover:bg-slate-100 shrink-0" title="Anhang (Demo)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <button type="submit" class="h-9 w-9 inline-flex items-center justify-center rounded-md bg-brand text-white hover:bg-ink shrink-0" title="Senden">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0"/><path d="m13 18 6-6-6-6"/></svg>
+                </button>
+              </form>
+              <div class="mt-2 text-[11px] text-sub text-center px-2">Der KI-Manager hat Zugriff auf Vertrieb, Sichtbarkeit und CRM. Antworten können Fehler enthalten – wichtige Aktionen vor Ausführung prüfen.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ===== EINSTELLUNGEN ===== -->
       <section data-screen="einstellungen" class="p-4 md:p-6">
         <div class="mb-4">
@@ -1016,6 +1107,7 @@ const PAGE_META = {
   vertrieb:  { title: 'Vertrieb',  desc: 'Lead-Recherche, Akquise und Cold-Outreach.' },
   sichtbarkeit: { title: 'Sichtbarkeit', desc: 'Content-Kalender mit automatischer Veröffentlichung.' },
   crm:       { title: 'CRM',       desc: 'Kontakte, Pipeline und Kommunikationshistorie.' },
+  'ki-manager': { title: 'KI-Manager', desc: 'Ihr persönlicher Assistent mit Zugriff auf alle Module.' },
   einstellungen: { title: 'Einstellungen', desc: 'Organisation, Team und externe Integrationen.' },
 };
 
@@ -1412,11 +1504,293 @@ function setSettingsTab(t) {
 }
 
 /* =====================================================================
+   KI-MANAGER (Chat-Interface)
+   ===================================================================== */
+const CHATS = [
+  {
+    id: 'k1', group: 'today', title: 'Übersicht der letzten 4 Wochen',
+    messages: [
+      { role: 'user', text: 'Gib mir bitte eine Übersicht über die Ergebnisse der letzten 4 Wochen über alle Bereiche.' },
+      { role: 'assistant', html:
+`<p>Klar, hier ist die Übersicht für den Zeitraum <strong>08.04.–05.05.2026</strong>:</p>
+<h4>📈 Vertrieb</h4>
+<ul>
+  <li><strong>3 aktive Kampagnen</strong>: 2 laufend (Steuerberater Sachsen-Anhalt, Bauunternehmen), 1 abgeschlossen (Coaching DACH)</li>
+  <li><strong>285 neue Leads</strong> (+84 vs. Vormonat)</li>
+  <li><strong>14,3 % Antwortrate</strong> – die Steuerberater-Kampagne sticht mit 21 % heraus</li>
+  <li><strong>7 Termine gebucht</strong>, 4 davon diese Woche</li>
+</ul>
+<h4>📣 Sichtbarkeit</h4>
+<ul>
+  <li><strong>9 Posts veröffentlicht</strong>, 3 mit über 200 Impressionen</li>
+  <li>Bester Post: <em>„Behind the Scenes: Coaching-Setup"</em> – 1.4k Impressions auf LinkedIn</li>
+  <li><strong>12 weitere Posts geplant</strong> für die nächsten 14 Tage</li>
+</ul>
+<h4>🤝 CRM</h4>
+<ul>
+  <li><strong>41 offene Kontakte</strong>, davon 9 brauchen Follow-up (>5 Tage Stille)</li>
+  <li>1 Closed Won (Linda Sommer, Sommer Coaching Lab) · 1 Closed Lost</li>
+  <li>Geschätzter Pipeline-Wert: <strong>~28.000 €</strong></li>
+</ul>
+<p>Möchtest du Details zu einem Bereich, oder soll ich konkrete Maßnahmen vorschlagen?</p>` },
+      { role: 'user', text: 'Welche Maßnahmen würdest du vorschlagen?' },
+      { role: 'assistant', html:
+`<p>Drei priorisierte Vorschläge:</p>
+<ol>
+  <li><strong>Follow-up-Welle starten</strong> – die 9 stillen Kontakte bekommen heute eine personalisierte Reminder-Mail. Ich kann die Texte vorbereiten, du gibst sie frei.</li>
+  <li><strong>Bauunternehmen-Kampagne booster</strong>n – aktuell 67 Leads, aber 0 % Antwortrate. Die Mails wirken zu generisch; ich schlage vor, die Personalisierung auf konkrete Bauprojekte aus den Stadtnachrichten zu hängen.</li>
+  <li><strong>Webinar-Trichter aufbauen</strong> – das Webinar am 12.05. ist auf 12 Anmeldungen. Mit zusätzlichen Posts auf LinkedIn (3 Tage vorher) und einer Reminder-Mail an die Closed-Lost-Kontakte könnten wir auf 30+ kommen.</li>
+</ol>
+<p>Welcher Punkt zuerst?</p>` },
+    ],
+  },
+  {
+    id: 'k2', group: 'today', title: 'Kampagne IT-Dienstleister Berlin planen',
+    messages: [
+      { role: 'user', text: 'Plane eine neue Kampagne für mittelständische IT-Dienstleister in Berlin – Ziel: 100 Leads.' },
+      { role: 'assistant', html:
+`<p>Vorschlag für die Kampagne <strong>„IT-Dienstleister Berlin – Mai 2026"</strong>:</p>
+<table>
+<tr><td><strong>Nische</strong></td><td>IT-Dienstleister (15–80 MA)</td></tr>
+<tr><td><strong>Orte</strong></td><td>Berlin, Potsdam (Radius 30 km)</td></tr>
+<tr><td><strong>Ziel-Leads</strong></td><td>100</td></tr>
+<tr><td><strong>Quelle</strong></td><td>Google Maps + LinkedIn-Sales-Navigator</td></tr>
+<tr><td><strong>Signal</strong></td><td>Veraltete Karriere-Seite, fehlendes Kunden-Onboarding-Portal</td></tr>
+<tr><td><strong>Tonalität</strong></td><td>Direkt-Professionell (passt zu Tech-Entscheidern)</td></tr>
+<tr><td><strong>Versand</strong></td><td>Über bestehenden Instantly-Account, 50 Mails/Tag, 14 Tage Warmup falls neue Domain</td></tr>
+</table>
+<p>Geschätzte Laufzeit bis zum ersten Termin: <strong>~7 Werktage</strong>. Soll ich die Kampagne als Entwurf anlegen?</p>` },
+    ],
+  },
+  {
+    id: 'k3', group: 'week', title: 'Welche Kontakte brauchen Follow-up?',
+    messages: [
+      { role: 'user', text: 'Welche Kontakte habe ich aktuell, die seit über 5 Tagen keine Antwort bekommen haben?' },
+      { role: 'assistant', html:
+`<p>Aktuell sind <strong>9 Kontakte überfällig</strong>. Top 5 nach Pipeline-Stufe:</p>
+<ol>
+  <li><strong>Friedrich Wagner</strong> (Wagner & Söhne StK) – Qualified, 6 Tage – letzte Mail: Termin-Vorschlag</li>
+  <li><strong>Sabine Lehmann</strong> (Krause & Lehmann) – Lead, 7 Tage – letzte Mail: Erstkontakt</li>
+  <li><strong>Tobias Berger</strong> (Kanzlei Berger) – Lead, 8 Tage – letzte Mail: Erstkontakt</li>
+  <li><strong>Petra Hoffmann</strong> (Lange & Hoffmann) – Qualified, 5 Tage – letzte Mail: Telefontermin offen</li>
+  <li><strong>Marek Stein</strong> (Stein Bau AG) – Lead, 9 Tage – letzte Mail: Erstkontakt</li>
+</ol>
+<p>Soll ich für alle 9 personalisierte Reminder-Texte erstellen?</p>` },
+    ],
+  },
+  {
+    id: 'k4', group: 'week', title: 'Antwort an Markus Brandt formulieren',
+    messages: [
+      { role: 'user', text: 'Markus Brandt hat einen Termin gebucht. Schreib eine kurze Bestätigung mit Vorbereitungsfragen.' },
+      { role: 'assistant', html:
+`<p>Vorschlag:</p>
+<blockquote>Sehr geehrter Herr Brandt,<br><br>
+freut mich sehr, dass es geklappt hat – wir sehen uns also am Mittwoch, 06.05. um 11:00 Uhr.<br><br>
+Damit ich die 30 Minuten optimal für Sie nutze, hätte ich vorab drei kurze Fragen:<br>
+1. Wie viele Mandanten betreuen Sie derzeit – und wie viele davon im Premium-Segment?<br>
+2. Welche Hürde hat das Mandantenportal bisher zurückgehalten – Budget, Zeit, oder die Sorge ums Tagesgeschäft?<br>
+3. Wer trifft die finale Entscheidung – Sie alleine oder gemeinsam mit Ihrem Partner?<br><br>
+Eine kurze Antwort per E-Mail reicht völlig. Ansonsten bis Mittwoch.<br><br>
+Beste Grüße<br>
+Sascha Kunze</blockquote>
+<p>Soll ich's so versenden, oder noch anpassen?</p>` },
+    ],
+  },
+  {
+    id: 'k5', group: 'older', title: 'Webinar-Plan für Mai',
+    messages: [
+      { role: 'user', text: 'Was wäre ein gutes Thema für mein Mai-Webinar?' },
+      { role: 'assistant', html: `<p>Drei Themen, die zu deinem Profil und zur aktuellen Vertriebs-Pipeline passen:</p><ol><li><strong>„Coaching für Steuerberater: Wie aus Mandanten Empfehlungsgeber werden"</strong> – passt zu deiner laufenden Q2-Kampagne, holt potenzielle Teilnehmer aus der Zielgruppe.</li><li><strong>„Die 5 Hebel, mit denen du als Coach 6-stellig skalierst"</strong> – breitenwirksam für die Coaching-DACH-Audience.</li><li><strong>„Verkaufen ohne zu verkaufen – die Coach-Methode"</strong> – zeitlos, gute Wiedernutzbarkeit als Evergreen.</li></ol>` },
+    ],
+  },
+  {
+    id: 'k6', group: 'older', title: 'Best-Performing Posts der letzten 30 Tage',
+    messages: [
+      { role: 'user', text: 'Welche meiner Posts haben in den letzten 30 Tagen am besten performt?' },
+      { role: 'assistant', html: `<p>Top 3 nach Engagement (Likes + Kommentare + Shares):</p><ol><li><strong>„Behind the Scenes: Coaching-Setup"</strong> – LinkedIn, 1.4k Impr., 87 Reactions, 12 Kommentare</li><li><strong>„5 Fehler beim Coaching-Pitch"</strong> – LinkedIn, 1.1k Impr., 64 Reactions, 9 Kommentare</li><li><strong>„Montagsmotivation: Quote von Drucker"</strong> – LinkedIn, 720 Impr., 41 Reactions</li></ol><p>Muster: Behind-the-Scenes und Listen-Formate funktionieren am besten. Soll ich daraus einen Content-Themenplan ableiten?</p>` },
+    ],
+  },
+];
+
+const GROUP_LABELS = { today: 'Heute', week: 'Diese Woche', older: 'Älter' };
+let CURRENT_CHAT_ID = 'k1';
+
+function renderChatHistory() {
+  const list = document.getElementById('chat-history-list');
+  const groups = ['today', 'week', 'older'];
+  list.innerHTML = groups.map(g => {
+    const items = CHATS.filter(c => c.group === g);
+    if (!items.length) return '';
+    return `
+      <div class="text-[10px] uppercase tracking-wider text-sub px-2 pt-3 pb-1 font-medium">${GROUP_LABELS[g]}</div>
+      <div class="space-y-0.5">
+        ${items.map(c => `
+          <button onclick="loadChat('${c.id}')" class="chat-item w-full text-left px-2.5 py-2 rounded-md text-sm hover:bg-slate-200/60 transition flex items-center gap-2 ${c.id===CURRENT_CHAT_ID?'bg-slate-200/80 font-medium':''}">
+            <svg class="text-sub shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="truncate flex-1">${c.title}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function loadChat(id) {
+  CURRENT_CHAT_ID = id;
+  const chat = CHATS.find(c => c.id === id);
+  if (!chat) return;
+  renderChatHistory();
+  renderChatMessages(chat.messages);
+  closeChatHistory();
+}
+
+function renderChatMessages(messages) {
+  const wrap = document.getElementById('chat-messages');
+  if (!messages || messages.length === 0) {
+    wrap.innerHTML = `
+      <div class="h-full flex flex-col items-center justify-center px-6 py-12 text-center">
+        <div class="h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shadow-lg mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+        </div>
+        <h3 class="text-xl font-semibold mb-1">Wie kann ich helfen, Sascha?</h3>
+        <p class="text-sm text-sub max-w-md mb-6">Ich habe Zugriff auf alle deine Kampagnen, Kontakte, Posts und Kommunikation. Frag einfach.</p>
+        <div class="grid sm:grid-cols-2 gap-2 w-full max-w-2xl">
+          ${[
+            { icon: '📊', title: 'Übersicht der letzten 4 Wochen', sub: 'Kampagnen, Sichtbarkeit, CRM' },
+            { icon: '🎯', title: 'Plane eine neue Kampagne', sub: 'Nische, Orte, Tonalität' },
+            { icon: '🔔', title: 'Welche Kontakte brauchen Follow-up?', sub: 'Mit Reminder-Vorschlag' },
+            { icon: '✍️', title: 'Schreib eine Antwort an…', sub: 'Personalisiert, in deiner Tonalität' },
+          ].map(s => `
+            <button onclick="usePrompt('${s.title.replace(/'/g, "\\'")}')" class="text-left rounded-lg border border-line bg-surface hover:bg-slate-50 p-3 transition">
+              <div class="text-lg mb-1">${s.icon}</div>
+              <div class="text-sm font-medium">${s.title}</div>
+              <div class="text-xs text-sub mt-0.5">${s.sub}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="max-w-3xl mx-auto px-3 md:px-6 py-6 space-y-6">
+      ${messages.map(m => renderMessage(m)).join('')}
+    </div>
+  `;
+  // scroll to bottom
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function renderMessage(m) {
+  if (m.role === 'user') {
+    return `
+      <div class="flex justify-end">
+        <div class="max-w-[85%] bg-slate-900 text-slate-50 rounded-2xl rounded-tr-md px-4 py-2.5 text-sm">${escapeHtml(m.text)}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="flex gap-3">
+      <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+      </div>
+      <div class="flex-1 min-w-0 chat-prose text-sm leading-relaxed pt-0.5">${m.html || escapeHtml(m.text || '')}</div>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function newChat() {
+  CURRENT_CHAT_ID = null;
+  renderChatHistory();
+  renderChatMessages([]);
+  closeChatHistory();
+  setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
+}
+
+function openChatHistory() {
+  document.getElementById('chat-history').classList.remove('hidden');
+  document.getElementById('chat-history').classList.add('flex', 'open');
+  document.getElementById('chat-history-overlay').classList.remove('hidden');
+}
+function closeChatHistory() {
+  const h = document.getElementById('chat-history');
+  if (window.innerWidth < 768) {
+    h.classList.add('hidden');
+    h.classList.remove('flex');
+  }
+  h.classList.remove('open');
+  document.getElementById('chat-history-overlay').classList.add('hidden');
+}
+
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+}
+
+function chatInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage(e);
+  }
+}
+
+function usePrompt(text) {
+  const input = document.getElementById('chat-input');
+  input.value = text;
+  autoGrow(input);
+  input.focus();
+}
+
+const FAKE_REPLIES = [
+  `<p>Klar, lass mich kurz nachschauen…</p><p>Auf Basis deiner aktuellen Daten würde ich Folgendes vorschlagen: erst die offenen Kontakte abarbeiten, dann die nächste Kampagne planen. Soll ich konkret werden?</p>`,
+  `<p>Gute Frage. Aktueller Stand:</p><ul><li>3 aktive Kampagnen</li><li>248 Leads diesen Monat</li><li>14,3 % Antwortrate</li></ul><p>Möchtest du tiefer in einen Bereich einsteigen?</p>`,
+  `<p>Hier mein Vorschlag:</p><ol><li>Inhalt schärfen auf das Signal „<em>veraltete Webseite</em>"</li><li>Personalisierung pro Lead aus den Impressums-Daten</li><li>Versand in Wellen à 50 Mails/Tag</li></ol><p>Soll ich es als Entwurf anlegen?</p>`,
+];
+
+function sendChatMessage(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Determine current chat or create a new one
+  let chat = CHATS.find(c => c.id === CURRENT_CHAT_ID);
+  if (!chat) {
+    chat = { id: 'k' + Date.now(), group: 'today', title: text.slice(0, 40), messages: [] };
+    CHATS.unshift(chat);
+    CURRENT_CHAT_ID = chat.id;
+  }
+
+  // Append user message
+  chat.messages.push({ role: 'user', text });
+  // Append a fake "typing" indicator first
+  chat.messages.push({ role: 'assistant', html: `<span class="inline-flex items-center gap-1 text-sub"><span class="h-1.5 w-1.5 rounded-full bg-sub animate-pulse"></span><span class="h-1.5 w-1.5 rounded-full bg-sub animate-pulse" style="animation-delay:.15s"></span><span class="h-1.5 w-1.5 rounded-full bg-sub animate-pulse" style="animation-delay:.3s"></span><span class="ml-1">tippt</span></span>` });
+  renderChatHistory();
+  renderChatMessages(chat.messages);
+  input.value = '';
+  autoGrow(input);
+
+  // Replace typing with fake reply after delay
+  setTimeout(() => {
+    chat.messages.pop();
+    const reply = FAKE_REPLIES[Math.floor(Math.random() * FAKE_REPLIES.length)];
+    chat.messages.push({ role: 'assistant', html: reply });
+    renderChatMessages(chat.messages);
+  }, 1400);
+}
+
+/* =====================================================================
    INIT
    ===================================================================== */
 buildCalendar();
 renderContacts();
 renderPipeline();
+renderChatHistory();
+loadChat('k1');
 // Pre-build the campaign detail in case user opens it
 restartPipelineDemo();
 </script>
