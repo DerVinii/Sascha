@@ -5,7 +5,7 @@ Eine einzige HTML-Datei, kein Build-Schritt nötig.
 
 ## Anschauen
 
-Datei [`prototype/index.html`](prototype/index.html) im Browser öffnen — das war's.
+Datei [`index.html`](index.html) im Browser öffnen — oder über das Vercel-Deployment.
 
 ## Inhalt
 
