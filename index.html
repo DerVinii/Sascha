@@ -154,19 +154,20 @@
         <span class="flex-1 text-left">Vertrieb</span>
         <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">3</span>
       </button>
-      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="sichtbarkeit">
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-500 opacity-50 cursor-not-allowed transition" data-target="sichtbarkeit" disabled title="Kommt in Phase 2">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         <span class="flex-1 text-left">Sichtbarkeit</span>
-        <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">12</span>
+        <span class="text-[10px] font-semibold rounded-full bg-slate-700 text-slate-400 px-1.5 py-0.5">Phase 2</span>
       </button>
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="crm">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span class="flex-1 text-left">CRM</span>
         <span class="text-[10px] font-semibold rounded-full bg-sidebar-soft px-1.5 py-0.5">41</span>
       </button>
-      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="ki-manager">
+      <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-500 opacity-50 cursor-not-allowed transition" data-target="ki-manager" disabled title="Kommt in Phase 2">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
         <span class="flex-1 text-left">KI-Manager</span>
+        <span class="text-[10px] font-semibold rounded-full bg-slate-700 text-slate-400 px-1.5 py-0.5">Phase 2</span>
       </button>
       <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-sidebar-soft transition" data-target="einstellungen">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -199,7 +200,7 @@
       </button>
       <div class="min-w-0 flex-1 md:flex-initial">
         <h1 id="page-title" class="text-sm md:text-base font-semibold leading-none tracking-tight truncate">Dashboard</h1>
-        <p id="page-desc" class="text-[11px] md:text-xs text-sub mt-1 hidden sm:block truncate">Übersicht über alle Vertriebs-, Sichtbarkeits- und CRM-Aktivitäten.</p>
+        <p id="page-desc" class="text-[11px] md:text-xs text-sub mt-1 hidden sm:block truncate">Übersicht über alle Vertriebs- und CRM-Aktivitäten.</p>
       </div>
       <div class="flex-1 hidden md:flex justify-center">
         <div class="relative w-full max-w-sm">
@@ -245,10 +246,11 @@
             <div class="mt-1.5 md:mt-2 text-xl md:text-2xl font-semibold">7</div>
             <div class="mt-1.5 md:mt-2 text-[10px] md:text-xs text-sub">davon 4 diese Woche</div>
           </div>
-          <div class="rounded-xl border border-line bg-surface p-4 md:p-5">
+          <div class="rounded-xl border border-line bg-surface p-4 md:p-5 opacity-50 relative">
+            <span class="absolute top-2 right-2 text-[10px] font-semibold rounded-full bg-slate-200 text-slate-600 px-1.5 py-0.5">Phase 2</span>
             <div class="text-[11px] md:text-xs font-medium text-sub">Geplante Posts</div>
-            <div class="mt-1.5 md:mt-2 text-xl md:text-2xl font-semibold">12</div>
-            <div class="mt-1.5 md:mt-2 text-[10px] md:text-xs text-sub">über 4 Plattformen</div>
+            <div class="mt-1.5 md:mt-2 text-xl md:text-2xl font-semibold text-sub">–</div>
+            <div class="mt-1.5 md:mt-2 text-[10px] md:text-xs text-sub">kommt später</div>
           </div>
           <div class="rounded-xl border border-line bg-surface p-4 md:p-5">
             <div class="text-[11px] md:text-xs font-medium text-sub">Offene Kontakte</div>
@@ -305,13 +307,13 @@
             </div>
           </div>
 
-          <div class="rounded-xl border border-line bg-surface">
+          <div class="rounded-xl border border-line bg-surface opacity-50 pointer-events-none relative">
+            <span class="absolute top-3 right-3 text-[10px] font-semibold rounded-full bg-slate-200 text-slate-600 px-1.5 py-0.5 z-10">Phase 2</span>
             <div class="px-5 py-4 border-b border-line flex items-center justify-between">
               <div>
                 <div class="font-semibold text-sm">Anstehende Posts</div>
                 <div class="text-xs text-sub">Nächste 7 Tage über alle Plattformen</div>
               </div>
-              <button class="text-xs text-sub hover:text-ink" onclick="navigateTo('sichtbarkeit')">Kalender →</button>
             </div>
             <div class="divide-y divide-line">
               <div class="px-5 py-3 flex items-center gap-3">
@@ -1102,7 +1104,7 @@ function enterApp() {
 }
 
 const PAGE_META = {
-  dashboard: { title: 'Dashboard', desc: 'Übersicht über alle Vertriebs-, Sichtbarkeits- und CRM-Aktivitäten.' },
+  dashboard: { title: 'Dashboard', desc: 'Übersicht über alle Vertriebs- und CRM-Aktivitäten.' },
   vertrieb:  { title: 'Vertrieb',  desc: 'Lead-Recherche, Akquise und Cold-Outreach.' },
   sichtbarkeit: { title: 'Sichtbarkeit', desc: 'Content-Kalender mit automatischer Veröffentlichung.' },
   crm:       { title: 'CRM',       desc: 'Kontakte, Pipeline und Kommunikationshistorie.' },
