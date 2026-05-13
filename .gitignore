@@ -14,3 +14,14 @@ node_modules/
 dist/
 build/
 *.log
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+
+# Next.js
+next-env.d.ts
+
+# Drizzle migrations (generated)
+drizzle/
