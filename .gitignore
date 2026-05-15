@@ -23,5 +23,8 @@ build/
 # Next.js
 next-env.d.ts
 
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
 # Drizzle migrations (generated)
 drizzle/
