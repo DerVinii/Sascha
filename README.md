@@ -95,6 +95,10 @@ Siehe [src/db/schema.ts](src/db/schema.ts). Architektur-Plan im Plan-File Teil D
 
 Siehe Plan-File Teil D. Aktueller Vertrag (10.500 € / 6 Wochen) liefert **Phase 1**. Phasen 2–5 als separate Angebote.
 
+## Feature-Status
+
+Lebendiger Überblick mit Status pro PDF-Punkt: [`docs/STATUS.md`](docs/STATUS.md). Diese Datei wird bei jedem Feature-Push aktualisiert und ist die Single Source of Truth für „was kann die App schon".
+
 ## Deployment
 
 Vercel-Integration: Branch `implementation` → Preview, `main` → Production-Prototyp. Vor Produktiv-Switch der echten App: Vercel-Project umkonfigurieren oder neues Project auf `implementation` anlegen.
