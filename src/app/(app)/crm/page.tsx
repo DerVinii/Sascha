@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { db } from "@/db";
 import { contacts, companies } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -83,6 +84,18 @@ export default async function CrmPage({
         </div>
         <div className="flex items-center gap-2">
           <ViewToggle />
+          <a
+            href={
+              filterStatus
+                ? `/api/crm/export?status=${filterStatus}`
+                : "/api/crm/export"
+            }
+            className="h-9 px-3 inline-flex items-center justify-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition shrink-0"
+            title="Aktuelle Liste als CSV exportieren"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </a>
           <NewContactModal />
         </div>
       </div>

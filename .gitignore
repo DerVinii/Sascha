@@ -28,3 +28,4 @@ tsconfig.tsbuildinfo
 
 # Drizzle migrations (generated)
 drizzle/
+.vercel
