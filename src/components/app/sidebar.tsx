@@ -26,7 +26,13 @@ const NAV: NavItem[] = [
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
 ];
 
-export function Sidebar({ userEmail }: { userEmail: string }) {
+export function Sidebar({
+  userEmail,
+  orgName,
+}: {
+  userEmail: string;
+  orgName: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -43,12 +49,12 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
         <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-700 text-white font-bold text-sm">
           SK
         </div>
-        <div className="ml-2.5">
-          <div className="text-sm font-semibold text-white leading-tight">
+        <div className="ml-2.5 min-w-0">
+          <div className="text-sm font-semibold text-white leading-tight truncate">
             Kommandozentrale
           </div>
-          <div className="text-[10px] text-slate-400 leading-tight">
-            SK Dozent &amp; Coach
+          <div className="text-[10px] text-slate-400 leading-tight truncate">
+            {orgName}
           </div>
         </div>
       </div>
