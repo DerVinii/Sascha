@@ -8,6 +8,7 @@ import {
   Users,
   Settings,
   LogOut,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/vertrieb", label: "Vertrieb", icon: Megaphone },
   { href: "/crm", label: "CRM", icon: Users },
+  { href: "/aufgaben", label: "Aufgaben", icon: ListTodo },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
 ];
 

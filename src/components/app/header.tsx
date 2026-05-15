@@ -16,6 +16,10 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "CRM",
     desc: "Kontakte, Pipeline und Kommunikationshistorie.",
   },
+  "/aufgaben": {
+    title: "Aufgaben",
+    desc: "Aufgaben, Anrufe, Termine und Follow-ups.",
+  },
   "/einstellungen": {
     title: "Einstellungen",
     desc: "Organisation, Team und externe Integrationen.",
