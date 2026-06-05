@@ -5,8 +5,9 @@ Vertrieb, Sichtbarkeit und CRM für **SK – Dozent und Coach**. Volle Next.js +
 ## Stack
 
 - **Next.js 15** (App Router) + **TypeScript** + **Tailwind**
-- **Supabase** — Auth (Magic Link), Postgres + RLS, Storage, Realtime
+- **Supabase** — Postgres (Storage, Realtime für spätere Phasen)
 - **Drizzle ORM** — Schema + Migrations
+- **Keine Anmeldung** — die App läuft ohne Login auf einer festen Organisation
 - **TanStack Table** — Tabellen
 - **dnd-kit** — Drag & Drop für Kanban-Pipeline
 - **lucide-react** — Icons
@@ -20,15 +21,17 @@ npm install
 # 2. .env.local aus .env.example anlegen und ausfüllen
 cp .env.example .env.local
 
-# 3. Supabase-Projekt anlegen
+# 3. Supabase-Projekt anlegen (nur als Postgres-Host)
 #    https://supabase.com/dashboard → New project (EU-Region wählen)
-#    SUPABASE_URL und ANON_KEY in .env.local eintragen
 #    DATABASE_URL (Transaction mode) in .env.local eintragen
 
 # 4. Drizzle Schema in die Datenbank pushen
 npm run db:push
 
-# 5. Dev-Server starten
+# 5. Organisation + Standard-Pipeline anlegen
+npm run seed
+
+# 6. Dev-Server starten
 npm run dev
 ```
 
@@ -39,14 +42,14 @@ App läuft auf [http://localhost:3000](http://localhost:3000).
 ```
 src/
 ├── app/
-│   ├── (app)/                  # Authenticated routes
+│   ├── (app)/                  # App-Routes (ohne Login erreichbar)
 │   │   ├── layout.tsx          # Sidebar + Header
 │   │   ├── dashboard/page.tsx
 │   │   ├── vertrieb/page.tsx
 │   │   ├── crm/page.tsx
+│   │   ├── aufgaben/page.tsx
 │   │   └── einstellungen/page.tsx
-│   ├── auth/callback/route.ts  # OAuth/Magic-Link-Callback
-│   ├── login/page.tsx          # Public login
+│   ├── api/crm/export/route.ts # CSV-Export
 │   ├── layout.tsx              # Root
 │   ├── page.tsx                # Redirect → /dashboard
 │   └── globals.css
@@ -56,14 +59,11 @@ src/
 ├── db/
 │   ├── schema.ts               # Drizzle-Schema (alle Tabellen)
 │   └── index.ts                # DB-Client
-├── lib/
-│   ├── supabase/
-│   │   ├── client.ts           # Browser-Client
-│   │   ├── server.ts           # Server-Client
-│   │   └── middleware.ts       # Session-Refresh + Redirects
-│   └── utils.ts                # cn() helper
-└── middleware.ts               # Next.js Middleware
+└── lib/
+    ├── server/active-org.ts    # Org-Auflösung (erste Org in der DB)
+    └── utils.ts                # cn() helper
 
+scripts/seed-org.ts             # Org + Standard-Pipeline anlegen
 docs/                           # Specs & Kundenanfragen (PDF, TXT)
 ```
 
@@ -83,12 +83,16 @@ Siehe [src/db/schema.ts](src/db/schema.ts). Architektur-Plan im Plan-File Teil D
 - `documents` — Dokumentenbibliothek
 - `audit_log` — Änderungs-Historie
 
-## Auth-Flow
+## Zugang
 
-1. User gibt E-Mail auf `/login` ein
-2. Supabase schickt Magic-Link
-3. Klick auf Link → `/auth/callback` → Session-Cookie → Redirect zu `/dashboard`
-4. Middleware ([src/middleware.ts](src/middleware.ts)) blockt unauthentifizierte Requests auf alle Routes außer `/login` und `/auth`
+Die Anmeldung wurde entfernt — es gibt keinen Login. Alle Routes sind direkt
+erreichbar und arbeiten auf einer festen Organisation. Diese wird über
+[src/lib/server/active-org.ts](src/lib/server/active-org.ts) aufgelöst: standardmäßig
+die erste/älteste Org in der DB, optional fest per Env-Var `ACTIVE_ORG_ID`.
+
+> ⚠️ Ohne Login ist die App für jeden mit der URL offen zugänglich. Vor einem
+> öffentlichen Produktiv-Einsatz mit echten (DSGVO-relevanten) Kontaktdaten muss
+> wieder ein Auth-/Zugriffsschutz davor.
 
 ## Phasen-Roadmap
 

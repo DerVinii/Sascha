@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { activities } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/server/active-org";
 
 export type ActivityType =
@@ -31,10 +30,6 @@ function parseType(v: FormDataEntryValue | null): ActivityType {
 
 export async function createActivityAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const title = String(formData.get("title") ?? "").trim();
   if (!title) throw new Error("Titel darf nicht leer sein");
@@ -51,7 +46,7 @@ export async function createActivityAction(formData: FormData) {
     body,
     dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
     contactId: contactIdRaw || null,
-    assigneeId: user?.id,
+    assigneeId: null,
   });
 
   revalidatePath("/aufgaben");

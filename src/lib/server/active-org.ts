@@ -1,7 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
-import { orgMembers, organizations } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { organizations } from "@/db/schema";
+import { asc, eq } from "drizzle-orm";
 
 export type ActiveOrg = {
   id: string;
@@ -10,63 +9,48 @@ export type ActiveOrg = {
 };
 
 /**
- * Returns the user's first/active organization, or null if they have none yet.
- * Multi-org switching kommt in Phase 2 — bis dahin: erste Org gewinnt.
+ * Liefert die aktive Organisation.
+ *
+ * Die Anmeldung wurde entfernt — es gibt keinen User-Kontext mehr.
+ * Standard: die erste (älteste) Organisation in der Datenbank.
+ * Optional über die Env-Var `ACTIVE_ORG_ID` fest auswählbar.
  */
 export async function getActiveOrg(): Promise<ActiveOrg | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
+  const fixedId = process.env.ACTIVE_ORG_ID;
 
   const rows = await db
-    .select({
-      id: organizations.id,
-      name: organizations.name,
-      role: orgMembers.role,
-    })
-    .from(orgMembers)
-    .innerJoin(organizations, eq(orgMembers.orgId, organizations.id))
-    .where(eq(orgMembers.userId, user.id))
+    .select({ id: organizations.id, name: organizations.name })
+    .from(organizations)
+    .where(fixedId ? eq(organizations.id, fixedId) : undefined)
+    .orderBy(asc(organizations.createdAt))
     .limit(1);
 
-  return rows[0] ?? null;
+  const org = rows[0];
+  if (!org) return null;
+
+  // Ohne Auth gibt es keine Rollen-Differenzierung — voller Zugriff.
+  return { id: org.id, name: org.name, role: "owner" };
 }
 
 /**
- * Variant that throws if no org — for routes that REQUIRE an org context.
+ * Variante, die wirft, wenn keine Org existiert — für Routes, die zwingend
+ * einen Org-Kontext brauchen.
  */
 export async function requireActiveOrg(): Promise<ActiveOrg> {
   const org = await getActiveOrg();
   if (!org) {
-    throw new Error("No active organization for user");
+    throw new Error(
+      "Keine Organisation in der Datenbank gefunden. Bitte zuerst `npm run seed` ausführen.",
+    );
   }
   return org;
 }
 
 /**
- * Verify user is a member of given org_id (used in server actions for safety).
+ * Früher: Prüfung, ob der eingeloggte User Mitglied der Org ist.
+ * Ohne Anmeldung entfällt diese Prüfung — bleibt als kompatible Signatur
+ * erhalten, damit bestehende Aufrufer unverändert weiterlaufen.
  */
-export async function assertOrgAccess(orgId: string): Promise<ActiveOrg> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const rows = await db
-    .select({
-      id: organizations.id,
-      name: organizations.name,
-      role: orgMembers.role,
-    })
-    .from(orgMembers)
-    .innerJoin(organizations, eq(orgMembers.orgId, organizations.id))
-    .where(and(eq(orgMembers.userId, user.id), eq(orgMembers.orgId, orgId)))
-    .limit(1);
-
-  if (!rows[0]) throw new Error("No access to this organization");
-  return rows[0];
+export async function assertOrgAccess(_orgId: string): Promise<ActiveOrg> {
+  return requireActiveOrg();
 }
