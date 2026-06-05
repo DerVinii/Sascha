@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+  body {
+    @apply bg-bg text-ink font-sans;
+  }
+}
+
+@layer components {
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-px rounded-full text-[11px] font-medium;
+  }
+}
