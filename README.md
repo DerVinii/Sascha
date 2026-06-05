@@ -1,6 +1,6 @@
 # SK Kommandozentrale
 
-Vertrieb, Sichtbarkeit und CRM für **SK – Dozent und Coach**. Volle Next.js + Supabase Implementation auf Branch `implementation`. Der UI-Prototyp (single-file HTML) liegt auf Branch `main` und in [`prototype/`](prototype/).
+Vertrieb, Sichtbarkeit und CRM für **SK – Dozent und Coach**. Volle Next.js + Supabase Implementation auf Branch `implementation`.
 
 ## Stack
 
@@ -65,7 +65,6 @@ src/
 └── middleware.ts               # Next.js Middleware
 
 docs/                           # Specs & Kundenanfragen (PDF, TXT)
-prototype/                      # Alter HTML-Prototyp (Referenz)
 ```
 
 ## Datenbank-Schema
@@ -101,4 +100,4 @@ Lebendiger Überblick mit Status pro PDF-Punkt: [`docs/STATUS.md`](docs/STATUS.m
 
 ## Deployment
 
-Vercel-Integration: Branch `implementation` → Preview, `main` → Production-Prototyp. Vor Produktiv-Switch der echten App: Vercel-Project umkonfigurieren oder neues Project auf `implementation` anlegen.
+Vercel-Integration über das Next.js-Framework-Preset. `implementation` ist die aktive Code-Basis der echten App. Für den Produktiv-Launch: Vercel-Project auf `implementation` (bzw. den künftigen Haupt-Branch) ausrichten.
