@@ -3,7 +3,9 @@
 > **Lebendige Dokumentation.** Quelle: [`CRM_Bildungsoperationssystem_Uebersicht.pdf`](CRM_Bildungsoperationssystem_Uebersicht.pdf) (Saschas PDF mit 12 Kategorien).
 > Diese Datei wird bei jedem Feature-Push aktualisiert.
 
-**Stand:** 2026-05-15 · **Aktuelle Phase:** 1 · **Branch:** `implementation`
+**Stand:** 2026-06-05 · **Aktuelle Phase:** 1 · **Branch:** `implementation` (= `main`)
+
+> ⚠️ **Anmeldung entfernt (2026-06-05):** Die App läuft jetzt **ohne Login** auf einer festen Organisation und ist öffentlich live unter https://sascha-wyvernai.vercel.app. Auth (Magic-Link/Passwort) wurde komplett ausgebaut, die Vercel-Protection deaktiviert. Details unter „Tech-Debt → Sicherheit".
 
 ---
 
@@ -23,7 +25,7 @@
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| **0 — Setup** | Next.js, Supabase, Drizzle, Auth, Layout, RLS | ✅ Abgeschlossen |
+| **0 — Setup** | Next.js, Supabase, Drizzle, ~~Auth~~ (entfernt), Layout, RLS | ✅ Abgeschlossen |
 | **1 — Basis-CRM** | Lead-Inbox, Kontakte, Pipeline, Aufgaben, Dashboard | ✅ Abgeschlossen |
 | **2 — Vertriebs-CRM voll** | Multi-Pipeline, Telefonie, Workflow-Automationen, Dokumente | 🔮 Geplant |
 | **3 — Bildungs-Operations** | Maßnahmen, Klassenbücher, Anwesenheit | 🔮 Geplant |
@@ -213,6 +215,8 @@
 ## Tech-Debt & bekannte Verbesserungen
 
 ### 🐛 Sicherheit
+- **KEINE Anmeldung mehr — App ist komplett öffentlich.** Login/Auth wurde am 2026-06-05 entfernt; zusätzlich ist die Vercel Deployment Protection deaktiviert. Jeder mit der URL sieht und ändert alle CRM-/Kontaktdaten. Vor echtem Betrieb mit Sascha-Daten zwingend ein Zugriffsschutz nötig (Auth wieder rein, Vercel-Protection oder Passwortschutz).
+- **Org-Auflösung ohne User:** `getActiveOrg()` nimmt die erste Org in der DB (optional `ACTIVE_ORG_ID`). Kein Request-bezogener Multi-Tenant-Schutz mehr; `assignee`/`author` werden nicht mehr gesetzt (null).
 - **Drizzle nutzt Direct-Connection (postgres role) → RLS wird BYPASSED.** Server-Actions filtern manuell via `requireActiveOrg()`. Vor Production-Launch: separate Application-Role mit aktiver RLS, oder Supabase-JS-Client für Read-Operations
 - **AV-Vertrag mit Sascha noch offen** — wer ist DSGVO-Verantwortlicher?
 
