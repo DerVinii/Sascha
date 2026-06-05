@@ -11,6 +11,8 @@ import { ViewToggle } from "./_components/view-toggle";
 import { PipelineView } from "./_components/pipeline-view";
 import type { ContactStatus } from "./actions";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(d: Date | null) {
   if (!d) return "—";
   return new Intl.DateTimeFormat("de-DE", {

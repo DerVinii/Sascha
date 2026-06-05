@@ -6,6 +6,9 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { STATUS_LABELS } from "@/components/crm/status-pill";
 
+// DB-Query zur Laufzeit, nicht beim Build.
+export const dynamic = "force-dynamic";
+
 const VALID_STATUSES = Object.keys(STATUS_LABELS);
 
 function formatDate(d: Date | null) {

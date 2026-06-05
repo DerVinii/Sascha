@@ -19,6 +19,9 @@ build/
 .env
 .env.local
 .env.*.local
+Vercel_token
+*_token
+*.token
 
 # Next.js
 next-env.d.ts
