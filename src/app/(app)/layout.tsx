@@ -2,6 +2,10 @@ import { getActiveOrg } from "@/lib/server/active-org";
 import { Sidebar } from "@/components/app/sidebar";
 import { Header } from "@/components/app/header";
 
+// DB-gebundene App-Routes zur Laufzeit rendern (Live-Daten), nicht beim Build
+// statisch prerendern. Greift für das gesamte (app)-Segment.
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({
   children,
 }: {

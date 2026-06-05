@@ -8,6 +8,8 @@ import { NewActivityModal } from "./_components/new-activity-modal";
 import { ActivityToggle } from "./_components/activity-toggle";
 import type { ActivityType } from "./actions";
 
+export const dynamic = "force-dynamic";
+
 const TYPE_LABELS: Record<ActivityType, string> = {
   task: "Aufgabe",
   call: "Anruf",

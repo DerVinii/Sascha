@@ -14,6 +14,8 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { StatusPill, STATUS_LABELS } from "@/components/crm/status-pill";
 import { updateContactStatusAction, deleteContactAction } from "../actions";
+
+export const dynamic = "force-dynamic";
 import type { ContactStatus } from "../actions";
 import { StatusSelect } from "./_components/status-select";
 import { NewNoteForm } from "./_components/new-note-form";

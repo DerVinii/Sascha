@@ -6,6 +6,8 @@ import { eq, and, gte, sql, isNull, inArray, desc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { StatusPill } from "@/components/crm/status-pill";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(d: Date | null) {
   if (!d) return "—";
   return new Intl.DateTimeFormat("de-DE", {

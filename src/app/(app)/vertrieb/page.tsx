@@ -8,6 +8,8 @@ import { NewContactModal } from "../crm/_components/new-contact-modal";
 import { CsvImportModal } from "./_components/csv-import-modal";
 import { LeadRowActions } from "./_components/lead-row-actions";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(d: Date | null) {
   if (!d) return "—";
   return new Intl.DateTimeFormat("de-DE", {
