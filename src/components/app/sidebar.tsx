@@ -7,12 +7,9 @@ import {
   Megaphone,
   Users,
   Settings,
-  LogOut,
   ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 type NavItem = {
   href: string;
@@ -28,22 +25,8 @@ const NAV: NavItem[] = [
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
 ];
 
-export function Sidebar({
-  userEmail,
-  orgName,
-}: {
-  userEmail: string;
-  orgName: string;
-}) {
+export function Sidebar({ orgName }: { orgName: string }) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
 
   return (
     <aside className="hidden md:flex md:w-60 flex-col bg-sidebar text-slate-300">
@@ -83,26 +66,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      <div className="border-t border-slate-800 p-3">
-        <div className="flex items-center gap-2.5 px-1 py-1.5">
-          <div className="h-7 w-7 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-semibold text-white">
-            {userEmail.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-slate-400 truncate">
-              {userEmail}
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-slate-400 hover:text-white transition"
-            title="Abmelden"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

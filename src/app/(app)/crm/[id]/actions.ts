@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { notes, contacts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/server/active-org";
 
 export async function addNoteAction(contactId: string, body: string) {
@@ -12,10 +11,6 @@ export async function addNoteAction(contactId: string, body: string) {
   if (!trimmed) return;
 
   const org = await requireActiveOrg();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Verify contact belongs to this org
   const [contact] = await db
@@ -30,7 +25,7 @@ export async function addNoteAction(contactId: string, body: string) {
     orgId: org.id,
     contactId,
     body: trimmed,
-    authorId: user?.id,
+    authorId: null,
   });
 
   revalidatePath(`/crm/${contactId}`);
