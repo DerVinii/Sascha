@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, Radar } from "lucide-react";
 import { db } from "@/db";
 import { contacts, companies } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -58,6 +58,13 @@ export default async function VertriebPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/vertrieb/scraping"
+            className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition shrink-0"
+          >
+            <Radar className="h-4 w-4" />
+            <span className="hidden sm:inline">Leads scrapen</span>
+          </Link>
           <a
             href="/api/crm/export?status=lead"
             className="h-9 px-3 inline-flex items-center justify-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition shrink-0"

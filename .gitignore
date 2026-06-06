@@ -26,6 +26,10 @@ Vercel_token
 *api_key*
 *API_key*
 
+# n8n-Exporte (enthalten Klartext-API-Keys) — nie committen
+*.n8n.json
+TRW Lead generierung.json
+
 # Next.js
 next-env.d.ts
 
