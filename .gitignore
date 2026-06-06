@@ -22,6 +22,9 @@ build/
 Vercel_token
 *_token
 *.token
+*_key.txt
+*api_key*
+*API_key*
 
 # Next.js
 next-env.d.ts
