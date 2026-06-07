@@ -29,6 +29,7 @@ import { CellDetailsDrawer } from "./cell-details-drawer";
 import { ColumnConfigModal } from "./column-config-modal";
 import { AiColumnModal } from "./ai-column-modal";
 import { ManualLeadModal } from "./manual-lead-modal";
+import { InstantlySendModal } from "./instantly-send-modal";
 import { BulkRunBar } from "./bulk-run-bar";
 import { CsvImportModal } from "../../_components/csv-import-modal";
 
@@ -86,6 +87,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [aiColumn, setAiColumn] = useState<LeadColumn | null>(null);
   const [csvOpen, setCsvOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [instantlyOpen, setInstantlyOpen] = useState(false);
 
   const refreshing = useRef(false);
 
@@ -286,6 +288,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onAddManual={() => setManualOpen(true)}
         onAddColumn={() => setAddColumnOpen(true)}
         onUpdateCells={updateCells}
+        onSendInstantly={() => setInstantlyOpen(true)}
         exportHref="/api/crm/export?status=lead"
         progress={runner.progress}
         onStop={runner.stop}
@@ -447,6 +450,11 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onClose={() => setManualOpen(false)}
         listId={listId}
         onAdded={() => refresh()}
+      />
+      <InstantlySendModal
+        open={instantlyOpen}
+        onClose={() => setInstantlyOpen(false)}
+        listId={listId}
       />
       <AddColumnPanel
         open={addColumnOpen}

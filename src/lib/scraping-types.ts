@@ -118,6 +118,47 @@ export type LeadList = {
   createdAt?: string | null;
 };
 
+// --- Instantly (Phase 2: Liste → Kampagne) ---------------------------------
+
+/** Eine Instantly-Kampagne (für das Auswahl-Dropdown). */
+export type InstantlyCampaign = {
+  id: string;
+  name: string;
+  /** Instantly-Status-Code (0=Entwurf,1=aktiv,2=pausiert,3=fertig …) oder null. */
+  status: number | null;
+};
+
+/** Welche Leads einer Liste in die Kampagne sollen. E-Mail ist immer Pflicht. */
+export type InstantlySendFilter = {
+  /** nur Leads mit erfolgreichem Enrichment (Geschäftsführer gefunden). */
+  onlyEnriched: boolean;
+  /** bereits an diese Kampagne gesendete Leads überspringen. */
+  skipAlreadySent: boolean;
+};
+
+/** Live-Zähler im Modal vor dem Versand. */
+export type InstantlySendPreview = {
+  total: number;
+  withEmail: number;
+  noEmail: number;
+  enriched: number;
+  alreadySent: number;
+  /** Anzahl, die mit dem aktuellen Filter gesendet würde. */
+  eligible: number;
+};
+
+/** Ergebnis eines Versand-Batches (Client schleift per offset bis remaining=0). */
+export type InstantlySendResult = {
+  processed: number;
+  sent: number;
+  skippedNoEmail: number;
+  skippedNotEnriched: number;
+  skippedAlreadySent: number;
+  failed: number;
+  remaining: number;
+  error?: string | null;
+};
+
 export type LeadTableData = {
   columns: LeadColumn[];
   rows: LeadRow[];

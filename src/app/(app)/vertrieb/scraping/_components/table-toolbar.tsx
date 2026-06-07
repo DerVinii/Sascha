@@ -13,6 +13,7 @@ import {
   Square,
   Upload,
   UserPlus,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -50,6 +51,7 @@ type Props = {
   onAddManual: () => void;
   onAddColumn: () => void;
   onUpdateCells: () => void;
+  onSendInstantly: () => void;
   exportHref: string;
   progress: RunnerProgress;
   onStop: () => void;
@@ -73,6 +75,7 @@ export function TableToolbar(props: Props) {
     onAddManual,
     onAddColumn,
     onUpdateCells,
+    onSendInstantly,
     exportHref,
     progress,
     onStop,
@@ -133,6 +136,14 @@ export function TableToolbar(props: Props) {
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Update cells</span>
+          </button>
+          <button
+            onClick={onSendInstantly}
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            title="Leads in eine Instantly-Kampagne senden"
+          >
+            <Send className="h-3.5 w-3.5 text-info" />
+            <span className="hidden sm:inline">An Instantly</span>
           </button>
           <a
             href={exportHref}

@@ -9,11 +9,16 @@ import {
   leadColumns,
   leadLists,
 } from "@/db/schema";
-import { eq, and, sql, asc, desc } from "drizzle-orm";
+import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
 import { runProvider } from "@/lib/server/scraping/providers";
 import { runAiColumn } from "@/lib/server/scraping/ai-column";
+import {
+  listCampaigns,
+  bulkAddLeads,
+  type InstantlyLead,
+} from "@/lib/server/instantly/client";
 import {
   ensureDefaultColumns,
   getColumns,
@@ -36,6 +41,10 @@ import type {
   LeadView,
   RunBatchResult,
   RunScope,
+  InstantlyCampaign,
+  InstantlySendFilter,
+  InstantlySendPreview,
+  InstantlySendResult,
 } from "@/lib/scraping-types";
 
 const SOURCE = "Google Maps";
@@ -824,4 +833,202 @@ export async function addManualLeadAction(input: {
 
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
+}
+
+// ============================================================================
+// INSTANTLY (Phase 2): Liste → Cold-Email-Kampagne
+// ============================================================================
+
+const INSTANTLY_BATCH = 100; // Leads pro Server-Action-Aufruf (Free-Tier-freundlich)
+
+function rowHasEmail(src: RowSources): boolean {
+  const e = src.contact.email;
+  return !!e && e.includes("@");
+}
+
+function rowEnriched(src: RowSources): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cells = (src.contact.customFields?.cells ?? {}) as Record<string, any>;
+  return cells[ENRICHMENT_KEY]?.status === "success";
+}
+
+function rowSentTo(src: RowSources, campaignId: string): boolean {
+  const camps = (src.contact.customFields?.instantly?.campaigns ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return !!camps[campaignId];
+}
+
+function buildInstantlyLead(src: RowSources): InstantlyLead {
+  const c = src.contact;
+  const co = src.company;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cf = (co?.customFields ?? {}) as Record<string, any>;
+  const custom: Record<string, string> = {};
+  if (cf.niche) custom.niche = String(cf.niche);
+  if (cf.city) custom.city = String(cf.city);
+  if (c.phone) custom.telefon = String(c.phone);
+  return {
+    email: String(c.email),
+    first_name: c.firstName || undefined,
+    last_name: c.lastName || undefined,
+    company_name: co?.name || undefined,
+    website: (cf.websiteUri as string) || co?.domain || undefined,
+    phone: c.phone || undefined,
+    custom_variables: Object.keys(custom).length ? custom : undefined,
+  };
+}
+
+/** jsonb-Merge: markiert customFields.instantly.campaigns[campaignId] = iso. */
+function sentPatch(campaignId: string, iso: string) {
+  const camp = JSON.stringify({ [campaignId]: iso });
+  return sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('instantly', coalesce(${contacts.customFields} -> 'instantly', '{}'::jsonb) || jsonb_build_object('campaigns', coalesce(${contacts.customFields} -> 'instantly' -> 'campaigns', '{}'::jsonb) || ${camp}::jsonb))`;
+}
+
+export async function listInstantlyCampaignsAction(): Promise<{
+  campaigns: InstantlyCampaign[];
+  error: string | null;
+}> {
+  await requireActiveOrg();
+  try {
+    const campaigns = await listCampaigns();
+    return { campaigns, error: null };
+  } catch (e) {
+    return {
+      campaigns: [],
+      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
+}
+
+export async function previewInstantlySendAction(input: {
+  listId: string;
+  campaignId: string;
+  filter: InstantlySendFilter;
+}): Promise<InstantlySendPreview> {
+  const org = await requireActiveOrg();
+  const all = await loadLeadRows(org.id, input.listId);
+
+  let withEmail = 0;
+  let noEmail = 0;
+  let enriched = 0;
+  let alreadySent = 0;
+  let eligible = 0;
+
+  for (const src of all) {
+    if (!rowHasEmail(src)) {
+      noEmail++;
+      continue;
+    }
+    withEmail++;
+    const isEnriched = rowEnriched(src);
+    if (isEnriched) enriched++;
+    const sent = input.campaignId ? rowSentTo(src, input.campaignId) : false;
+    if (sent) alreadySent++;
+
+    if (input.filter.onlyEnriched && !isEnriched) continue;
+    if (input.filter.skipAlreadySent && sent) continue;
+    eligible++;
+  }
+
+  return { total: all.length, withEmail, noEmail, enriched, alreadySent, eligible };
+}
+
+export async function sendListToInstantlyAction(input: {
+  listId: string;
+  campaignId: string;
+  filter: InstantlySendFilter;
+  offset?: number;
+}): Promise<InstantlySendResult> {
+  const org = await requireActiveOrg();
+  const base: InstantlySendResult = {
+    processed: 0,
+    sent: 0,
+    skippedNoEmail: 0,
+    skippedNotEnriched: 0,
+    skippedAlreadySent: 0,
+    failed: 0,
+    remaining: 0,
+    error: null,
+  };
+  if (!input.campaignId) return { ...base, error: "Keine Kampagne ausgewählt." };
+  if (!input.listId) return { ...base, error: "Keine Liste ausgewählt." };
+
+  try {
+    // offset läuft stabil über ALLE Zeilen (Markieren verschiebt das Slicing nicht).
+    const all = await loadLeadRows(org.id, input.listId);
+    const offset = Math.max(0, input.offset ?? 0);
+    const slice = all.slice(offset, offset + INSTANTLY_BATCH);
+
+    const toSend: RowSources[] = [];
+    let skippedNoEmail = 0;
+    let skippedNotEnriched = 0;
+    let skippedAlreadySent = 0;
+    for (const src of slice) {
+      if (!rowHasEmail(src)) {
+        skippedNoEmail++;
+        continue;
+      }
+      if (input.filter.onlyEnriched && !rowEnriched(src)) {
+        skippedNotEnriched++;
+        continue;
+      }
+      if (input.filter.skipAlreadySent && rowSentTo(src, input.campaignId)) {
+        skippedAlreadySent++;
+        continue;
+      }
+      toSend.push(src);
+    }
+
+    let sent = 0;
+    let failed = 0;
+    let error: string | null = null;
+
+    if (toSend.length > 0) {
+      try {
+        await bulkAddLeads(input.campaignId, toSend.map(buildInstantlyLead), {
+          skipIfInCampaign: input.filter.skipAlreadySent,
+        });
+        sent = toSend.length;
+        const iso = new Date().toISOString();
+        await db
+          .update(contacts)
+          .set({ customFields: sentPatch(input.campaignId, iso) })
+          .where(
+            and(
+              eq(contacts.orgId, org.id),
+              inArray(
+                contacts.id,
+                toSend.map((s) => s.contact.id),
+              ),
+            ),
+          );
+      } catch (e) {
+        failed = toSend.length;
+        error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      }
+    }
+
+    // Bei Fehler abbrechen (remaining=0), sonst weiter bis zum Listenende.
+    const remaining = error
+      ? 0
+      : Math.max(0, all.length - (offset + slice.length));
+
+    return {
+      processed: slice.length,
+      sent,
+      skippedNoEmail,
+      skippedNotEnriched,
+      skippedAlreadySent,
+      failed,
+      remaining,
+      error,
+    };
+  } catch (e) {
+    return {
+      ...base,
+      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
 }
