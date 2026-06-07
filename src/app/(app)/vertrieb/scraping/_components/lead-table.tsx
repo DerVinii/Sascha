@@ -27,6 +27,7 @@ import { SourcePanel } from "./source-panel";
 import { AddColumnPanel, type NewColumnInput } from "./add-column-panel";
 import { CellDetailsDrawer } from "./cell-details-drawer";
 import { ColumnConfigModal } from "./column-config-modal";
+import { AiColumnModal } from "./ai-column-modal";
 import { BulkRunBar } from "./bulk-run-bar";
 
 function isEmptyVal(v: unknown) {
@@ -79,6 +80,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     row: LeadRow;
   } | null>(null);
   const [configColumn, setConfigColumn] = useState<LeadColumn | null>(null);
+  const [aiColumn, setAiColumn] = useState<LeadColumn | null>(null);
 
   const refreshing = useRef(false);
 
@@ -321,10 +323,11 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
                       onToggleHide={() => patchColumn(col.id, { hidden: true })}
                       onDelete={() => onDeleteColumn(col.id)}
                       onEditConfig={
-                        col.kind === "enrichment"
+                        col.kind === "enrichment" && col.config.provider
                           ? () => setConfigColumn(col)
                           : undefined
                       }
+                      onAiFill={() => setAiColumn(col)}
                     />
                   </th>
                 ))}
@@ -436,11 +439,29 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onAddAsColumn={onAddAsColumn}
       />
       <ColumnConfigModal
+        key={`cfg-${configColumn?.id ?? "none"}`}
         open={!!configColumn}
         onClose={() => setConfigColumn(null)}
         column={configColumn}
         onSave={async (config) => {
           if (configColumn) await patchColumn(configColumn.id, { config });
+        }}
+      />
+      <AiColumnModal
+        key={`ai-${aiColumn?.id ?? "none"}`}
+        open={!!aiColumn}
+        onClose={() => setAiColumn(null)}
+        column={aiColumn}
+        columns={columns}
+        onSave={async (prompt, run) => {
+          if (!aiColumn) return;
+          await patchColumn(aiColumn.id, {
+            config: { ...aiColumn.config, ai: { prompt } },
+          });
+          if (run) {
+            setError(null);
+            runner.runMissing(aiColumn.key, "KI ausfüllen");
+          }
         }}
       />
     </div>

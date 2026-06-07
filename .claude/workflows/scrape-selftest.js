@@ -16,6 +16,7 @@ const SCENARIOS = [
   { label: 'scrape:Zahnarzt Berlin', url: `${base}/api/scrape-selftest?t=${token}&niche=Zahnarzt&city=Berlin` },
   { label: 'scrape:Friseur Hamburg', url: `${base}/api/scrape-selftest?t=${token}&niche=Friseur&city=Hamburg` },
   { label: 'enrich:Dachdecker Magdeburg', url: `${base}/api/scrape-selftest?t=${token}&mode=enrich&niche=Dachdecker&city=Magdeburg` },
+  { label: 'ai:Stadt aus Adresse', url: `${base}/api/scrape-selftest?t=${token}&mode=ai&niche=Dachdecker&city=Magdeburg&prompt=${encodeURIComponent('Nenne die Stadt aus der Adresse in genau einem Wort.')}` },
 ]
 
 const TEST_SCHEMA = {

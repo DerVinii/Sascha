@@ -35,7 +35,7 @@ export function LeadCellView({
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isEnrichment = column.kind === "enrichment";
+  const isEnrichment = column.kind === "enrichment" || !!column.config.ai;
   const isRunning = running || cell.status === "running";
   const editable = !!onEdit && cell.editable && !isEnrichment;
 

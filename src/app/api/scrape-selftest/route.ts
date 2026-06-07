@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { searchPlaces } from "@/lib/server/scraping/places";
 import { enrichLead } from "@/lib/server/scraping/enrich";
+import { runAiColumn } from "@/lib/server/scraping/ai-column";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -53,6 +54,20 @@ export async function GET(req: Request) {
         hasEmail: r.email !== "NF" && r.email.includes("@"),
       };
     }
+
+    if (mode === "ai" && places[0]) {
+      // testet die "Mit KI ausfüllen"-Spalte (Gemini 2.5 flash-lite).
+      const prompt =
+        url.searchParams.get("prompt") ??
+        "Nenne die Stadt aus der Adresse in genau einem Wort.";
+      const value = await runAiColumn(prompt, {
+        Firma: places[0].name,
+        Adresse: places[0].formattedAddress,
+        Webseite: places[0].websiteUri,
+      });
+      out.ai = { value, found: value.toUpperCase() !== "NF" };
+    }
+
     out.ok = true;
   } catch (e) {
     out.ok = false;

@@ -7,6 +7,7 @@ import { eq, and, sql, asc, desc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
 import { runProvider } from "@/lib/server/scraping/providers";
+import { runAiColumn } from "@/lib/server/scraping/ai-column";
 import {
   ensureDefaultColumns,
   getColumns,
@@ -271,7 +272,51 @@ async function runEnrichmentForRow(
   orgId: string,
   column: LeadColumn,
   src: RowSources,
+  columns: LeadColumn[],
 ): Promise<"success" | "not_found" | "error"> {
+  // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
+  if (column.config.ai?.prompt) {
+    const runAt = new Date().toISOString();
+    try {
+      const cellsNow = buildCells(columns, src);
+      const ctx: Record<string, unknown> = {};
+      for (const c of columns) {
+        if (c.key === column.key) continue;
+        const v = cellsNow[c.key]?.value;
+        if (v !== null && v !== undefined && v !== "") ctx[c.label] = v;
+      }
+      const value = await runAiColumn(column.config.ai.prompt, ctx);
+      const found = value.toUpperCase() !== "NF" && value.trim() !== "";
+      const cell = {
+        status: found ? "success" : "not_found",
+        provider: "gemini",
+        runAt,
+        error: null,
+        value: found ? value : "",
+        raw: { prompt: column.config.ai.prompt, value },
+      };
+      await db
+        .update(contacts)
+        .set({ customFields: cellPatch(column.key, cell) })
+        .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
+      return found ? "success" : "not_found";
+    } catch (e) {
+      const cell = {
+        status: "error",
+        provider: null,
+        runAt,
+        error: e instanceof Error ? e.message.slice(0, 300) : "Fehler",
+        value: "",
+        raw: null,
+      };
+      await db
+        .update(contacts)
+        .set({ customFields: cellPatch(column.key, cell) })
+        .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
+      return "error";
+    }
+  }
+
   const inputs = column.config.inputs ?? {};
   const firmenname = String(
     resolveRowPath(inputs["Firmenname"] ?? "company.name", src) ?? "",
@@ -365,8 +410,8 @@ export async function runEnrichmentBatchAction(input: {
 }): Promise<RunBatchResult> {
   const org = await requireActiveOrg();
   const column = await getColumnByKey(org.id, input.columnKey);
-  if (!column || column.kind !== "enrichment") {
-    throw new Error("Spalte ist keine Enrichment-Spalte.");
+  if (!column || (column.kind !== "enrichment" && !column.config.ai)) {
+    throw new Error("Spalte ist keine Enrichment-/KI-Spalte.");
   }
 
   const columns = await getColumns(org.id);
@@ -403,7 +448,7 @@ export async function runEnrichmentBatchAction(input: {
   }
 
   const results = await Promise.all(
-    toProcess.map((src) => runEnrichmentForRow(org.id, column, src)),
+    toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
   );
 
   let succeeded = 0;
