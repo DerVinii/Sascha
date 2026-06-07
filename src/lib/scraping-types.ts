@@ -41,6 +41,8 @@ export type LeadColumnConfig = {
   source?: string;
   /** select: Optionen. */
   options?: string[];
+  /** "Mit KI ausfüllen" (Claygent): freier Prompt, pro Zeile von Gemini ausgeführt. */
+  ai?: { prompt: string };
 };
 
 export type LeadColumn = {

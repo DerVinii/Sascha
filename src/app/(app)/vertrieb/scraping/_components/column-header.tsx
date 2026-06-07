@@ -16,6 +16,7 @@ import {
   Trash2,
   Settings2,
   Check,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LeadColumn } from "@/lib/scraping-types";
@@ -38,7 +39,7 @@ const SWATCHES = [
 
 function KindIcon({ column }: { column: LeadColumn }) {
   const cls = cn("h-3.5 w-3.5 shrink-0", column.color && COLOR_TOKENS[column.color]);
-  if (column.kind === "enrichment")
+  if (column.kind === "enrichment" || column.config.ai)
     return <Sparkles className={cn(cls, !column.color && "text-info")} />;
   if (column.kind === "action") return <Send className={cls} />;
   if (column.kind === "source") return <Database className={cn(cls, "text-sub")} />;
@@ -55,6 +56,7 @@ type Props = {
   onToggleHide: () => void;
   onDelete: () => void;
   onEditConfig?: () => void;
+  onAiFill?: () => void;
 };
 
 export function ColumnHeader({
@@ -67,12 +69,15 @@ export function ColumnHeader({
   onToggleHide,
   onDelete,
   onEditConfig,
+  onAiFill,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(column.label);
 
-  const isEnrichment = column.kind === "enrichment";
+  const runnable = column.kind === "enrichment" || !!column.config.ai;
+  // "Mit KI ausfüllen" für eigene Daten-/KI-Spalten (nicht Source, nicht find_dm).
+  const canAi = column.kind !== "source" && !column.config.provider;
 
   function close() {
     setOpen(false);
@@ -137,7 +142,7 @@ export function ColumnHeader({
             />
             <Divider />
 
-            {isEnrichment && (
+            {runnable && (
               <>
                 <MenuItem
                   icon={<Play className="h-3.5 w-3.5" />}
@@ -165,6 +170,20 @@ export function ColumnHeader({
                     }}
                   />
                 )}
+                <Divider />
+              </>
+            )}
+
+            {canAi && onAiFill && (
+              <>
+                <MenuItem
+                  icon={<Wand2 className="h-3.5 w-3.5 text-info" />}
+                  label={column.config.ai ? "KI-Prompt bearbeiten" : "Mit KI ausfüllen"}
+                  onClick={() => {
+                    onAiFill();
+                    close();
+                  }}
+                />
                 <Divider />
               </>
             )}

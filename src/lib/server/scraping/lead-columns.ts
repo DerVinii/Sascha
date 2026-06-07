@@ -357,7 +357,7 @@ export function buildCells(
   const cells: Record<string, LeadCell> = {};
 
   for (const col of columns) {
-    if (col.kind === "enrichment" || col.kind === "action") {
+    if (col.kind === "enrichment" || col.kind === "action" || col.config.ai) {
       const base = enrichmentCell(col.key, src.contact.customFields);
       // Für find_dm: zeige den Personennamen auch wenn nur die Alt-Daten da sind.
       if (
