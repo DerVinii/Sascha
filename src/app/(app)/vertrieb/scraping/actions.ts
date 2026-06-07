@@ -130,88 +130,112 @@ export type ScrapeResult = {
   imported: number;
   duplicates: number;
   query: string;
+  error?: string | null;
 };
 
 export async function runSourceAction(input: {
   niche: string;
   city: string;
 }): Promise<ScrapeResult> {
-  const org = await requireActiveOrg();
   const niche = input.niche?.trim() ?? "";
   const city = input.city?.trim() ?? "";
   const query = `${niche} ${city}`.trim();
 
-  if (!niche || !city) throw new Error("Bitte Nische und Stadt angeben.");
-
-  const places = await searchPlaces(niche, city);
-  if (places.length === 0)
-    return { found: 0, imported: 0, duplicates: 0, query };
-
-  const existingRows = await db
-    .select({
-      pid: sql<string>`(${companies.customFields} ->> 'googlePlaceId')`,
-    })
-    .from(companies)
-    .where(eq(companies.orgId, org.id));
-  const existing = new Set(
-    existingRows.map((r) => r.pid).filter(Boolean) as string[],
-  );
-
-  const fresh = places.filter((p) => !existing.has(p.placeId));
-  if (fresh.length === 0)
+  if (!niche || !city) {
     return {
-      found: places.length,
+      found: 0,
       imported: 0,
-      duplicates: places.length,
+      duplicates: 0,
       query,
+      error: "Bitte Nische und Stadt angeben.",
     };
+  }
 
-  const insertedCompanies = await db
-    .insert(companies)
-    .values(
+  // Fehler werden zurückgegeben (nicht geworfen) — sonst redacted Next sie in
+  // Production zu einer generischen Meldung ohne Details.
+  try {
+    const org = await requireActiveOrg();
+
+    const places = await searchPlaces(niche, city);
+    if (places.length === 0)
+      return { found: 0, imported: 0, duplicates: 0, query };
+
+    const existingRows = await db
+      .select({
+        pid: sql<string>`(${companies.customFields} ->> 'googlePlaceId')`,
+      })
+      .from(companies)
+      .where(eq(companies.orgId, org.id));
+    const existing = new Set(
+      existingRows.map((r) => r.pid).filter(Boolean) as string[],
+    );
+
+    const fresh = places.filter((p) => !existing.has(p.placeId));
+    if (fresh.length === 0)
+      return {
+        found: places.length,
+        imported: 0,
+        duplicates: places.length,
+        query,
+      };
+
+    const insertedCompanies = await db
+      .insert(companies)
+      .values(
+        fresh.map((p) => ({
+          orgId: org.id,
+          name: p.name,
+          domain: extractDomain(p.websiteUri),
+          address: p.formattedAddress
+            ? { formatted: p.formattedAddress }
+            : null,
+          customFields: {
+            googlePlaceId: p.placeId,
+            googleMapsUri: p.googleMapsUri,
+            rating: p.rating,
+            websiteUri: p.websiteUri,
+            niche,
+            city,
+          },
+        })),
+      )
+      .returning({
+        id: companies.id,
+        pid: sql<string>`(${companies.customFields} ->> 'googlePlaceId')`,
+      });
+
+    const companyByPlace = new Map(insertedCompanies.map((c) => [c.pid, c.id]));
+
+    await db.insert(contacts).values(
       fresh.map((p) => ({
         orgId: org.id,
-        name: p.name,
-        domain: extractDomain(p.websiteUri),
-        address: p.formattedAddress ? { formatted: p.formattedAddress } : null,
-        customFields: {
-          googlePlaceId: p.placeId,
-          googleMapsUri: p.googleMapsUri,
-          rating: p.rating,
-          websiteUri: p.websiteUri,
-          niche,
-          city,
-        },
+        companyId: companyByPlace.get(p.placeId) ?? null,
+        phone: p.phone,
+        status: "lead" as const,
+        source: SOURCE,
+        customFields: {},
       })),
-    )
-    .returning({
-      id: companies.id,
-      pid: sql<string>`(${companies.customFields} ->> 'googlePlaceId')`,
-    });
+    );
 
-  const companyByPlace = new Map(insertedCompanies.map((c) => [c.pid, c.id]));
+    revalidatePath("/vertrieb/scraping");
+    revalidatePath("/vertrieb");
+    revalidatePath("/crm");
 
-  await db.insert(contacts).values(
-    fresh.map((p) => ({
-      orgId: org.id,
-      companyId: companyByPlace.get(p.placeId) ?? null,
-      phone: p.phone,
-      status: "lead" as const,
-      source: SOURCE,
-      customFields: {},
-    })),
-  );
-
-  revalidatePath("/vertrieb/scraping");
-  revalidatePath("/vertrieb");
-  revalidatePath("/crm");
-
-  return {
-    found: places.length,
-    imported: fresh.length,
-    duplicates: places.length - fresh.length,
-    query,
-  };
+    return {
+      found: places.length,
+      imported: fresh.length,
+      duplicates: places.length - fresh.length,
+      query,
+    };
+  } catch (e) {
+    return {
+      found: 0,
+      imported: 0,
+      duplicates: 0,
+      query,
+      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
 }
 
 // ============================================================================

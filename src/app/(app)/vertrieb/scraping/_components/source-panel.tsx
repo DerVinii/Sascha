@@ -25,6 +25,10 @@ export function SourcePanel({ open, onClose, onImported }: Props) {
     startTransition(async () => {
       try {
         const r = await runSourceAction({ niche, city });
+        if (r.error) {
+          setError(r.error);
+          return;
+        }
         setResult(r);
         onImported(r);
       } catch (e) {
