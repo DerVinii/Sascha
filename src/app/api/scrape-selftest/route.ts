@@ -13,8 +13,11 @@ export const maxDuration = 60;
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  if (url.searchParams.get("t") !== "diag") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Gate über geheimes Token aus der Env (nicht im public Repo). Ohne gesetztes
+  // SELFTEST_TOKEN ist der Endpoint deaktiviert (404).
+  const token = process.env.SELFTEST_TOKEN;
+  if (!token || url.searchParams.get("t") !== token) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const niche = url.searchParams.get("niche") ?? "Dachdecker";
   const city = url.searchParams.get("city") ?? "Magdeburg";
