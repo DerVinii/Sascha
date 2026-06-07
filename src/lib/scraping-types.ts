@@ -111,9 +111,18 @@ export type RunBatchResult = {
   rowIds: string[];
 };
 
+export type LeadList = {
+  id: string;
+  name: string;
+  count: number;
+  createdAt?: string | null;
+};
+
 export type LeadTableData = {
   columns: LeadColumn[];
   rows: LeadRow[];
   total: number;
   views: LeadView[];
+  listId: string;
+  listName: string;
 };

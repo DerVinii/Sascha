@@ -96,6 +96,22 @@ export const orgInvites = pgTable("org_invites", {
     .notNull(),
 });
 
+// Listen/Ordner für gescrapte & importierte Leads (im Vertrieb sichtbar).
+export const leadLists = pgTable(
+  "lead_lists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("lead_lists_org_idx").on(t.orgId)],
+);
+
 export const companies = pgTable(
   "companies",
   {
@@ -103,6 +119,9 @@ export const companies = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    leadListId: uuid("lead_list_id").references(() => leadLists.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     domain: text("domain"),
     address: jsonb("address"),
@@ -121,6 +140,9 @@ export const contacts = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    leadListId: uuid("lead_list_id").references(() => leadLists.id, {
+      onDelete: "cascade",
+    }),
     companyId: uuid("company_id").references(() => companies.id, {
       onDelete: "set null",
     }),

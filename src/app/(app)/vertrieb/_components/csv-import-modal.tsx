@@ -47,8 +47,18 @@ function mapRow(row: Record<string, string>): ImportRow {
   };
 }
 
-export function CsvImportModal() {
-  const [open, setOpen] = useState(false);
+export function CsvImportModal({
+  listId,
+  open: openProp,
+  onClose,
+}: {
+  listId?: string;
+  open?: boolean;
+  onClose?: () => void;
+} = {}) {
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? !!openProp : openState;
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -70,15 +80,16 @@ export function CsvImportModal() {
   }
 
   function close() {
-    setOpen(false);
     setRows([]);
     setFileName(null);
     setResult(null);
+    if (controlled) onClose?.();
+    else setOpenState(false);
   }
 
   function doImport() {
     startTransition(async () => {
-      const r = await importLeadsAction(rows);
+      const r = await importLeadsAction(rows, listId);
       setResult(r);
       setRows([]);
     });
@@ -86,13 +97,15 @@ export function CsvImportModal() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition shrink-0"
-      >
-        <Upload className="h-4 w-4" />
-        CSV importieren
-      </button>
+      {!controlled && (
+        <button
+          onClick={() => setOpenState(true)}
+          className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition shrink-0"
+        >
+          <Upload className="h-4 w-4" />
+          CSV importieren
+        </button>
+      )}
 
       {open && (
         <div

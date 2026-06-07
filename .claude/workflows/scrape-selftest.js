@@ -9,14 +9,15 @@ export const meta = {
 }
 
 const base = (args && args.base) || 'https://sascha-one.vercel.app'
-const token = (args && args.token) || '' // Gate-Token des /api/scrape-selftest-Endpoints
+// Gate-Token NICHT im Skript (public Repo) — Agenten lesen es zur Laufzeit aus .env.local.
+const ENV_PATH = '/home/vini/Sascha/.env.local'
 
 const SCENARIOS = [
-  { label: 'scrape:Dachdecker Magdeburg', url: `${base}/api/scrape-selftest?t=${token}&niche=Dachdecker&city=Magdeburg` },
-  { label: 'scrape:Zahnarzt Berlin', url: `${base}/api/scrape-selftest?t=${token}&niche=Zahnarzt&city=Berlin` },
-  { label: 'scrape:Friseur Hamburg', url: `${base}/api/scrape-selftest?t=${token}&niche=Friseur&city=Hamburg` },
-  { label: 'enrich:Dachdecker Magdeburg', url: `${base}/api/scrape-selftest?t=${token}&mode=enrich&niche=Dachdecker&city=Magdeburg` },
-  { label: 'ai:Stadt aus Adresse', url: `${base}/api/scrape-selftest?t=${token}&mode=ai&niche=Dachdecker&city=Magdeburg&prompt=${encodeURIComponent('Nenne die Stadt aus der Adresse in genau einem Wort.')}` },
+  { label: 'scrape:Dachdecker Magdeburg', path: `/api/scrape-selftest?niche=Dachdecker&city=Magdeburg` },
+  { label: 'scrape:Zahnarzt Berlin', path: `/api/scrape-selftest?niche=Zahnarzt&city=Berlin` },
+  { label: 'scrape:Friseur Hamburg', path: `/api/scrape-selftest?niche=Friseur&city=Hamburg` },
+  { label: 'enrich:Dachdecker Magdeburg', path: `/api/scrape-selftest?mode=enrich&niche=Dachdecker&city=Magdeburg` },
+  { label: 'ai:Stadt aus Adresse', path: `/api/scrape-selftest?mode=ai&niche=Dachdecker&city=Magdeburg&prompt=${encodeURIComponent('Nenne die Stadt aus der Adresse in genau einem Wort.')}` },
 ]
 
 const TEST_SCHEMA = {
@@ -32,14 +33,15 @@ const TEST_SCHEMA = {
 }
 
 function testPrompt(s) {
-  return `Führe GENAU diesen Shell-Befehl aus (nutze Bash):
-curl -s -m 70 -w "\\nHTTP:%{http_code}" "${s.url}"
+  return `Führe in Bash GENAU diese Befehle aus (das Gate-Token aus .env.local lesen und an die URL anhängen):
+TOK=$(grep '^SELFTEST_TOKEN=' ${ENV_PATH} | cut -d= -f2-)
+curl -s -m 70 -w "\\nHTTP:%{http_code}" "${base}${s.path}&t=$TOK"
 
 Werte die Antwort aus und gib das Ergebnis strukturiert zurück:
 - label = "${s.label}"
 - http = der HTTP-Statuscode
 - ok = true NUR wenn HTTP 200 UND der JSON-Body \`"ok":true\` enthält UND kein \`"error"\`-Feld gesetzt ist.
-- summary = bei Erfolg kurz "count=<n>" bzw. für enrich "found=<bool>, hasEmail=<bool>"; bei Fehler den exakten error-Text bzw. HTTP-Status.
+- summary = bei Erfolg kurz "count=<n>" bzw. für enrich "found=<bool>, hasEmail=<bool>" bzw. für ai den zurückgegebenen Wert; bei Fehler den exakten error-Text bzw. HTTP-Status.
 Erfinde nichts — nur was die Antwort hergibt.`
 }
 

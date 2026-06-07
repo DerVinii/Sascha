@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { contacts, companies, organizations, leadColumns } from "@/db/schema";
+import {
+  contacts,
+  companies,
+  organizations,
+  leadColumns,
+  leadLists,
+} from "@/db/schema";
 import { eq, and, sql, asc, desc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
@@ -25,6 +31,7 @@ import type {
   LeadColumnConfig,
   LeadColumnKind,
   LeadDataType,
+  LeadList,
   LeadTableData,
   LeadView,
   RunBatchResult,
@@ -40,6 +47,7 @@ const MAX_ROWS = 1000; // Phase-1-Cap (ein Kunde); Server-Pagination = Phase 2.
 
 async function loadLeadRows(
   orgId: string,
+  listId: string,
   limit = MAX_ROWS,
 ): Promise<RowSources[]> {
   const rows = await db
@@ -58,7 +66,7 @@ async function loadLeadRows(
     })
     .from(contacts)
     .leftJoin(companies, eq(contacts.companyId, companies.id))
-    .where(and(eq(contacts.orgId, orgId), eq(contacts.source, SOURCE)))
+    .where(and(eq(contacts.orgId, orgId), eq(contacts.leadListId, listId)))
     .orderBy(desc(contacts.createdAt), asc(contacts.id))
     .limit(limit);
 
@@ -137,9 +145,11 @@ export type ScrapeResult = {
 export async function runSourceAction(input: {
   niche: string;
   city: string;
+  listId: string;
 }): Promise<ScrapeResult> {
   const niche = input.niche?.trim() ?? "";
   const city = input.city?.trim() ?? "";
+  const listId = input.listId;
   const query = `${niche} ${city}`.trim();
 
   if (!niche || !city) {
@@ -149,6 +159,15 @@ export async function runSourceAction(input: {
       duplicates: 0,
       query,
       error: "Bitte Nische und Stadt angeben.",
+    };
+  }
+  if (!listId) {
+    return {
+      found: 0,
+      imported: 0,
+      duplicates: 0,
+      query,
+      error: "Keine Liste ausgewählt.",
     };
   }
 
@@ -166,7 +185,9 @@ export async function runSourceAction(input: {
         pid: sql<string>`(${companies.customFields} ->> 'googlePlaceId')`,
       })
       .from(companies)
-      .where(eq(companies.orgId, org.id));
+      .where(
+        and(eq(companies.orgId, org.id), eq(companies.leadListId, listId)),
+      );
     const existing = new Set(
       existingRows.map((r) => r.pid).filter(Boolean) as string[],
     );
@@ -185,6 +206,7 @@ export async function runSourceAction(input: {
       .values(
         fresh.map((p) => ({
           orgId: org.id,
+          leadListId: listId,
           name: p.name,
           domain: extractDomain(p.websiteUri),
           address: p.formattedAddress
@@ -210,6 +232,7 @@ export async function runSourceAction(input: {
     await db.insert(contacts).values(
       fresh.map((p) => ({
         orgId: org.id,
+        leadListId: listId,
         companyId: companyByPlace.get(p.placeId) ?? null,
         phone: p.phone,
         status: "lead" as const,
@@ -243,16 +266,26 @@ export async function runSourceAction(input: {
 // TABLE laden
 // ============================================================================
 
-export async function listLeadTableAction(): Promise<LeadTableData> {
+export async function listLeadTableAction(input: {
+  listId: string;
+}): Promise<LeadTableData> {
   const org = await requireActiveOrg();
+  const listId = input.listId;
   const columns = await ensureDefaultColumns(org.id);
+
+  const [listRow] = await db
+    .select({ name: leadLists.name })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, org.id)))
+    .limit(1);
+  if (!listRow) throw new Error("Liste nicht gefunden.");
 
   const [totalRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(contacts)
-    .where(and(eq(contacts.orgId, org.id), eq(contacts.source, SOURCE)));
+    .where(and(eq(contacts.orgId, org.id), eq(contacts.leadListId, listId)));
 
-  const srcs = await loadLeadRows(org.id);
+  const srcs = await loadLeadRows(org.id, listId);
   const rows = srcs.map((src) => ({
     id: src.contact.id,
     companyId: src.contact.companyId,
@@ -261,7 +294,14 @@ export async function listLeadTableAction(): Promise<LeadTableData> {
 
   const views = [...BUILTIN_VIEWS, ...(await getOrgViews(org.id))];
 
-  return { columns, rows, total: totalRow?.total ?? 0, views };
+  return {
+    columns,
+    rows,
+    total: totalRow?.total ?? 0,
+    views,
+    listId,
+    listName: listRow.name,
+  };
 }
 
 // ============================================================================
@@ -407,6 +447,7 @@ async function runEnrichmentForRow(
 export async function runEnrichmentBatchAction(input: {
   columnKey: string;
   scope: RunScope;
+  listId: string;
 }): Promise<RunBatchResult> {
   const org = await requireActiveOrg();
   const column = await getColumnByKey(org.id, input.columnKey);
@@ -415,7 +456,7 @@ export async function runEnrichmentBatchAction(input: {
   }
 
   const columns = await getColumns(org.id);
-  const all = await loadLeadRows(org.id);
+  const all = await loadLeadRows(org.id, input.listId);
   const limit = clamp(
     ("limit" in input.scope ? input.scope.limit : undefined) ?? 4,
     1,
@@ -671,4 +712,102 @@ export async function deleteViewAction(input: { id: string }): Promise<void> {
     .set({ settings: { ...settings, leadViews: views } })
     .where(eq(organizations.id, org.id));
   revalidatePath("/vertrieb/scraping");
+}
+
+// ============================================================================
+// LISTEN / ORDNER
+// ============================================================================
+
+export async function createListAction(input: {
+  name: string;
+}): Promise<{ id: string }> {
+  const org = await requireActiveOrg();
+  const name = input.name?.trim() || "Neue Liste";
+  const [row] = await db
+    .insert(leadLists)
+    .values({ orgId: org.id, name })
+    .returning({ id: leadLists.id });
+  revalidatePath("/vertrieb");
+  return { id: row.id };
+}
+
+export async function listListsAction(): Promise<LeadList[]> {
+  const org = await requireActiveOrg();
+  const rows = await db
+    .select({
+      id: leadLists.id,
+      name: leadLists.name,
+      createdAt: leadLists.createdAt,
+      count: sql<number>`(select count(*)::int from contacts ct where ct.lead_list_id = ${leadLists.id})`,
+    })
+    .from(leadLists)
+    .where(eq(leadLists.orgId, org.id))
+    .orderBy(desc(leadLists.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    count: r.count,
+    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+  }));
+}
+
+export async function renameListAction(input: {
+  id: string;
+  name: string;
+}): Promise<void> {
+  const org = await requireActiveOrg();
+  const name = input.name?.trim();
+  if (!name) return;
+  await db
+    .update(leadLists)
+    .set({ name })
+    .where(and(eq(leadLists.id, input.id), eq(leadLists.orgId, org.id)));
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+}
+
+export async function deleteListAction(input: { id: string }): Promise<void> {
+  const org = await requireActiveOrg();
+  // contacts/companies mit dieser lead_list_id werden per ON DELETE CASCADE entfernt.
+  await db
+    .delete(leadLists)
+    .where(and(eq(leadLists.id, input.id), eq(leadLists.orgId, org.id)));
+  revalidatePath("/vertrieb");
+  revalidatePath("/crm");
+}
+
+export async function addManualLeadAction(input: {
+  listId: string;
+  firma: string;
+  webseite?: string;
+  telefon?: string;
+}): Promise<void> {
+  const org = await requireActiveOrg();
+  const firma = input.firma?.trim();
+  if (!firma || !input.listId) throw new Error("Firma und Liste erforderlich.");
+  const webseite = input.webseite?.trim() || null;
+
+  const [company] = await db
+    .insert(companies)
+    .values({
+      orgId: org.id,
+      leadListId: input.listId,
+      name: firma,
+      domain: extractDomain(webseite),
+      customFields: { websiteUri: webseite },
+    })
+    .returning({ id: companies.id });
+
+  await db.insert(contacts).values({
+    orgId: org.id,
+    leadListId: input.listId,
+    companyId: company.id,
+    phone: input.telefon?.trim() || null,
+    status: "lead" as const,
+    source: "Manuell",
+    customFields: {},
+  });
+
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/vertrieb");
 }

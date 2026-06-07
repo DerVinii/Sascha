@@ -27,6 +27,8 @@ const ZERO: RunnerProgress = {
 };
 
 type Callbacks = {
+  /** Liste, auf die sich die Runs beziehen. */
+  listId: string;
   /** nach jedem Batch (z. B. Tabelle neu laden). */
   onBatch?: (r: RunBatchResult) => void | Promise<void>;
   /** bekannte Zeilen, die gleich laufen (für optimistisches "running"). */
@@ -39,7 +41,7 @@ type Callbacks = {
  * Free-Tier-Pattern: jeder Server-Call verarbeitet nur ~4 Zeilen, der Client
  * wiederholt bis nichts mehr offen ist (oder "Stop").
  */
-export function useBatchRunner(cb: Callbacks = {}) {
+export function useBatchRunner(cb: Callbacks) {
   const [progress, setProgress] = useState<RunnerProgress>(ZERO);
   const stopRef = useRef(false);
   const running = useRef(false);
@@ -94,10 +96,11 @@ export function useBatchRunner(cb: Callbacks = {}) {
       loop(label, () =>
         runEnrichmentBatchAction({
           columnKey,
+          listId: cb.listId,
           scope: { mode: "missing", limit: BATCH },
         }),
       ),
-    [loop],
+    [cb.listId, loop],
   );
 
   const runForce = useCallback(
@@ -106,13 +109,14 @@ export function useBatchRunner(cb: Callbacks = {}) {
       return loop(label, async () => {
         const r = await runEnrichmentBatchAction({
           columnKey,
+          listId: cb.listId,
           scope: { mode: "force", limit: BATCH, offset },
         });
         offset += r.processed;
         return r;
       });
     },
-    [loop],
+    [cb.listId, loop],
   );
 
   const runRows = useCallback(
@@ -123,6 +127,7 @@ export function useBatchRunner(cb: Callbacks = {}) {
         if (rest.length === 0) return null;
         const r = await runEnrichmentBatchAction({
           columnKey,
+          listId: cb.listId,
           scope: { rowIds: rest, limit: BATCH },
         });
         rest = rest.filter((id) => !r.rowIds.includes(id));
