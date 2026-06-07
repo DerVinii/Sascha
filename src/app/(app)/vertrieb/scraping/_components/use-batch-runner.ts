@@ -41,7 +41,7 @@ type Callbacks = {
  * Free-Tier-Pattern: jeder Server-Call verarbeitet nur ~4 Zeilen, der Client
  * wiederholt bis nichts mehr offen ist (oder "Stop").
  */
-export function useBatchRunner(cb: Callbacks = {}) {
+export function useBatchRunner(cb: Callbacks) {
   const [progress, setProgress] = useState<RunnerProgress>(ZERO);
   const stopRef = useRef(false);
   const running = useRef(false);
