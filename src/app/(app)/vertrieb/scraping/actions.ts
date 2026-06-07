@@ -733,21 +733,35 @@ export async function createListAction(input: {
 
 export async function listListsAction(): Promise<LeadList[]> {
   const org = await requireActiveOrg();
-  const rows = await db
+
+  const lists = await db
     .select({
       id: leadLists.id,
       name: leadLists.name,
       createdAt: leadLists.createdAt,
-      count: sql<number>`(select count(*)::int from contacts ct where ct.lead_list_id = ${leadLists.id})`,
     })
     .from(leadLists)
     .where(eq(leadLists.orgId, org.id))
     .orderBy(desc(leadLists.createdAt));
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    count: r.count,
-    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+
+  // Counts separat (robuster als korrelierte Subquery im SELECT).
+  const counts = await db
+    .select({
+      listId: contacts.leadListId,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(contacts)
+    .where(eq(contacts.orgId, org.id))
+    .groupBy(contacts.leadListId);
+
+  const countByList = new Map<string, number>();
+  for (const c of counts) if (c.listId) countByList.set(c.listId, c.n);
+
+  return lists.map((l) => ({
+    id: l.id,
+    name: l.name,
+    count: countByList.get(l.id) ?? 0,
+    createdAt: l.createdAt ? new Date(l.createdAt).toISOString() : null,
   }));
 }
 
