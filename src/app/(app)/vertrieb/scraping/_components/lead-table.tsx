@@ -28,7 +28,9 @@ import { AddColumnPanel, type NewColumnInput } from "./add-column-panel";
 import { CellDetailsDrawer } from "./cell-details-drawer";
 import { ColumnConfigModal } from "./column-config-modal";
 import { AiColumnModal } from "./ai-column-modal";
+import { ManualLeadModal } from "./manual-lead-modal";
 import { BulkRunBar } from "./bulk-run-bar";
+import { CsvImportModal } from "../../_components/csv-import-modal";
 
 function isEmptyVal(v: unknown) {
   return v === null || v === undefined || v === "";
@@ -57,6 +59,7 @@ function matchFilter(row: LeadRow, f: LeadViewFilter): boolean {
 const MAX_RENDER = 300; // DOM-Schutz: nicht mehr als so viele Zeilen gleichzeitig rendern
 
 export function LeadTable({ initial }: { initial: LeadTableData }) {
+  const listId = initial.listId;
   const [columns, setColumns] = useState<LeadColumn[]>(initial.columns);
   const [rows, setRows] = useState<LeadRow[]>(initial.rows);
   const [total, setTotal] = useState(initial.total);
@@ -81,6 +84,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   } | null>(null);
   const [configColumn, setConfigColumn] = useState<LeadColumn | null>(null);
   const [aiColumn, setAiColumn] = useState<LeadColumn | null>(null);
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const refreshing = useRef(false);
 
@@ -99,7 +104,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     if (refreshing.current) return;
     refreshing.current = true;
     try {
-      const data = await listLeadTableAction();
+      const data = await listLeadTableAction({ listId });
       setColumns(data.columns);
       setRows(data.rows);
       setTotal(data.total);
@@ -108,9 +113,10 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     } finally {
       refreshing.current = false;
     }
-  }, []);
+  }, [listId]);
 
   const runner = useBatchRunner({
+    listId,
     onBatch: refresh,
     onBeforeRows: (ids) =>
       setRunningCells((prev) => {
@@ -276,6 +282,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         total={total}
         shown={visibleRows.length}
         onOpenSource={() => setSourceOpen(true)}
+        onOpenCsv={() => setCsvOpen(true)}
+        onAddManual={() => setManualOpen(true)}
         onAddColumn={() => setAddColumnOpen(true)}
         onUpdateCells={updateCells}
         exportHref="/api/crm/export?status=lead"
@@ -423,7 +431,22 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       <SourcePanel
         open={sourceOpen}
         onClose={() => setSourceOpen(false)}
+        listId={listId}
         onImported={() => refresh()}
+      />
+      <CsvImportModal
+        listId={listId}
+        open={csvOpen}
+        onClose={() => {
+          setCsvOpen(false);
+          refresh();
+        }}
+      />
+      <ManualLeadModal
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        listId={listId}
+        onAdded={() => refresh()}
       />
       <AddColumnPanel
         open={addColumnOpen}
@@ -478,8 +501,8 @@ function EmptyState({ onOpenSource }: { onOpenSource: () => void }) {
         Diese Tabelle hat noch keine Zeilen
       </h3>
       <p className="mx-auto mt-1 max-w-sm text-xs text-sub">
-        Starte mit einer Source: durchsuche Google Maps nach Branche + Ort. Danach
-        reicherst du die Leads mit „Geschäftsführer finden" an.
+        Füll diese Liste: per Google-Maps-Scrape, CSV-Import oder manuell (Buttons
+        oben). Danach reicherst du die Leads mit „Geschäftsführer finden" an.
       </p>
       <div className="mt-4 flex items-center justify-center gap-2">
         <button
@@ -489,12 +512,6 @@ function EmptyState({ onOpenSource }: { onOpenSource: () => void }) {
           <MapPin className="h-4 w-4" />
           Google Maps durchsuchen
         </button>
-        <a
-          href="/vertrieb"
-          className="h-9 px-4 inline-flex items-center rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
-        >
-          CSV importieren
-        </a>
       </div>
     </div>
   );

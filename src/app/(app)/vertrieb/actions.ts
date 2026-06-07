@@ -27,6 +27,7 @@ export type ImportResult = {
  */
 export async function importLeadsAction(
   rows: ImportRow[],
+  listId?: string,
 ): Promise<ImportResult> {
   const org = await requireActiveOrg();
   const result: ImportResult = { imported: 0, duplicates: 0, errors: [] };
@@ -71,7 +72,13 @@ export async function importLeadsAction(
     if (missing.length > 0) {
       const newCompanies = await db
         .insert(companies)
-        .values(missing.map((name) => ({ orgId: org.id, name })))
+        .values(
+          missing.map((name) => ({
+            orgId: org.id,
+            leadListId: listId ?? null,
+            name,
+          })),
+        )
         .returning({ id: companies.id, name: companies.name });
       for (const c of newCompanies) companyMap.set(c.name, c.id);
     }
@@ -89,6 +96,7 @@ export async function importLeadsAction(
 
     toInsert.push({
       orgId: org.id,
+      leadListId: listId ?? null,
       firstName: row.firstName?.trim() || null,
       lastName: row.lastName?.trim() || null,
       email,
@@ -107,6 +115,7 @@ export async function importLeadsAction(
   }
 
   revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
   revalidatePath("/crm");
   return result;
 }

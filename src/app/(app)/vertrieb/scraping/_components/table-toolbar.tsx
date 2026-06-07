@@ -11,6 +11,8 @@ import {
   X,
   Loader2,
   Square,
+  Upload,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -44,6 +46,8 @@ type Props = {
   total: number;
   shown: number;
   onOpenSource: () => void;
+  onOpenCsv: () => void;
+  onAddManual: () => void;
   onAddColumn: () => void;
   onUpdateCells: () => void;
   exportHref: string;
@@ -65,6 +69,8 @@ export function TableToolbar(props: Props) {
     total,
     shown,
     onOpenSource,
+    onOpenCsv,
+    onAddManual,
     onAddColumn,
     onUpdateCells,
     exportHref,
@@ -102,7 +108,23 @@ export function TableToolbar(props: Props) {
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
           >
             <MapPin className="h-3.5 w-3.5 text-info" />
-            <span className="hidden sm:inline">Source</span>
+            <span className="hidden sm:inline">Scrapen</span>
+          </button>
+          <button
+            onClick={onOpenCsv}
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            title="CSV importieren"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Import</span>
+          </button>
+          <button
+            onClick={onAddManual}
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            title="Lead manuell hinzufügen"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Manuell</span>
           </button>
           <button
             onClick={onUpdateCells}

@@ -7,10 +7,11 @@ import { runSourceAction, type ScrapeResult } from "../actions";
 type Props = {
   open: boolean;
   onClose: () => void;
+  listId: string;
   onImported: (r: ScrapeResult) => void;
 };
 
-export function SourcePanel({ open, onClose, onImported }: Props) {
+export function SourcePanel({ open, onClose, listId, onImported }: Props) {
   const [niche, setNiche] = useState("");
   const [city, setCity] = useState("");
   const [result, setResult] = useState<ScrapeResult | null>(null);
@@ -24,7 +25,7 @@ export function SourcePanel({ open, onClose, onImported }: Props) {
     setResult(null);
     startTransition(async () => {
       try {
-        const r = await runSourceAction({ niche, city });
+        const r = await runSourceAction({ niche, city, listId });
         if (r.error) {
           setError(r.error);
           return;
