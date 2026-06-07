@@ -108,10 +108,11 @@ export async function searchPlaces(
   city: string,
   opts?: { maxPages?: number },
 ): Promise<ScrapedPlace[]> {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
   if (!apiKey) {
+    const raw = process.env.GOOGLE_PLACES_API_KEY;
     throw new Error(
-      "GOOGLE_PLACES_API_KEY fehlt in .env.local — Lead-Scraping nicht möglich.",
+      `GOOGLE_PLACES_API_KEY fehlt zur Laufzeit (defined=${raw !== undefined}, len=${(raw ?? "").length}) — in der Vercel-Env prüfen.`,
     );
   }
 
