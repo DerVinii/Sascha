@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchPlaces } from "@/lib/server/scraping/places";
+import { enrichLead } from "@/lib/server/scraping/enrich";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,11 +31,26 @@ export async function GET(req: Request) {
     query: `${niche} ${city}`,
   };
 
+  const mode = url.searchParams.get("mode") ?? "scrape";
+
   try {
     const places = await searchPlaces(niche, city);
-    out.ok = true;
     out.count = places.length;
     out.sample = places.slice(0, 3).map((p) => p.name);
+
+    if (mode === "enrich" && places[0]) {
+      // testet den Gemini-Pfad end-to-end (nur Booleans zurück, keine PII).
+      const r = await enrichLead({
+        firmenname: places[0].name,
+        webseite: places[0].websiteUri,
+        gmapsUrl: places[0].googleMapsUri,
+      });
+      out.enrich = {
+        found: r.found,
+        hasEmail: r.email !== "NF" && r.email.includes("@"),
+      };
+    }
+    out.ok = true;
   } catch (e) {
     out.ok = false;
     out.error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
