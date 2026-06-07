@@ -105,6 +105,8 @@ export const leadLists = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // 1:1-Verknüpfung zur Instantly-Kampagne (lazy beim "Kampagne einrichten" angelegt).
+    instantlyCampaignId: text("instantly_campaign_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

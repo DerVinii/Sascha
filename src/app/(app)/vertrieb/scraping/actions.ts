@@ -15,9 +15,14 @@ import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
 import { runProvider } from "@/lib/server/scraping/providers";
 import { runAiColumn } from "@/lib/server/scraping/ai-column";
 import {
-  listCampaigns,
   bulkAddLeads,
+  listAccounts,
+  getCampaign,
+  createCampaign,
+  updateCampaign,
+  activateCampaign,
   type InstantlyLead,
+  type InstantlySequence,
 } from "@/lib/server/instantly/client";
 import {
   ensureDefaultColumns,
@@ -41,10 +46,13 @@ import type {
   LeadView,
   RunBatchResult,
   RunScope,
-  InstantlyCampaign,
   InstantlySendFilter,
   InstantlySendPreview,
   InstantlySendResult,
+  CampaignStep,
+  CampaignSenderAccount,
+  CampaignSetupInfo,
+  SaveCampaignResult,
 } from "@/lib/scraping-types";
 
 const SOURCE = "Google Maps";
@@ -176,7 +184,7 @@ export async function runSourceAction(input: {
       imported: 0,
       duplicates: 0,
       query,
-      error: "Keine Liste ausgewählt.",
+      error: "Keine Kampagne ausgewählt.",
     };
   }
 
@@ -287,7 +295,7 @@ export async function listLeadTableAction(input: {
     .from(leadLists)
     .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, org.id)))
     .limit(1);
-  if (!listRow) throw new Error("Liste nicht gefunden.");
+  if (!listRow) throw new Error("Kampagne nicht gefunden.");
 
   const [totalRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -731,7 +739,7 @@ export async function createListAction(input: {
   name: string;
 }): Promise<{ id: string }> {
   const org = await requireActiveOrg();
-  const name = input.name?.trim() || "Neue Liste";
+  const name = input.name?.trim() || "Neue Kampagne";
   const [row] = await db
     .insert(leadLists)
     .values({ orgId: org.id, name })
@@ -807,7 +815,8 @@ export async function addManualLeadAction(input: {
 }): Promise<void> {
   const org = await requireActiveOrg();
   const firma = input.firma?.trim();
-  if (!firma || !input.listId) throw new Error("Firma und Liste erforderlich.");
+  if (!firma || !input.listId)
+    throw new Error("Firma und Kampagne erforderlich.");
   const webseite = input.webseite?.trim() || null;
 
   const [company] = await db
@@ -836,8 +845,10 @@ export async function addManualLeadAction(input: {
 }
 
 // ============================================================================
-// INSTANTLY (Phase 2): Liste → Cold-Email-Kampagne
+// INSTANTLY (Phase 2): Kampagne einrichten (Copy + Leads senden)
 // ============================================================================
+// Modell: jede Liste IST eine Kampagne (1:1-Link lead_lists.instantly_campaign_id).
+// Die Instantly-Kampagne wird beim ersten Einrichten lazy angelegt.
 
 const INSTANTLY_BATCH = 100; // Leads pro Server-Action-Aufruf (Free-Tier-freundlich)
 
@@ -886,36 +897,85 @@ function sentPatch(campaignId: string, iso: string) {
   return sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('instantly', coalesce(${contacts.customFields} -> 'instantly', '{}'::jsonb) || jsonb_build_object('campaigns', coalesce(${contacts.customFields} -> 'instantly' -> 'campaigns', '{}'::jsonb) || ${camp}::jsonb))`;
 }
 
-export async function listInstantlyCampaignsAction(): Promise<{
-  campaigns: InstantlyCampaign[];
-  error: string | null;
-}> {
-  await requireActiveOrg();
-  try {
-    const campaigns = await listCampaigns();
-    return { campaigns, error: null };
-  } catch (e) {
-    return {
-      campaigns: [],
-      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-    };
-  }
+async function getListCampaign(
+  orgId: string,
+  listId: string,
+): Promise<{ name: string; campaignId: string | null } | null> {
+  const [row] = await db
+    .select({ name: leadLists.name, cid: leadLists.instantlyCampaignId })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, orgId)))
+    .limit(1);
+  return row ? { name: row.name, campaignId: row.cid ?? null } : null;
 }
 
-export async function previewInstantlySendAction(input: {
-  listId: string;
-  campaignId: string;
-  filter: InstantlySendFilter;
-}): Promise<InstantlySendPreview> {
-  const org = await requireActiveOrg();
-  const all = await loadLeadRows(org.id, input.listId);
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
+/** Plaintext (mit {{variablen}}) → einfaches HTML, das Instantly erwartet. */
+function textToHtml(text: string): string {
+  const lines = (text ?? "").replace(/\r\n/g, "\n").split("\n");
+  return lines
+    .map((l) =>
+      l.trim() === "" ? "<div><br></div>" : `<div>${escapeHtml(l)}</div>`,
+    )
+    .join("");
+}
+
+/** HTML → Plaintext für das Prefill des Editors. */
+function htmlToText(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<div><br\s*\/?><\/div>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/div>\s*<div>/gi, "\n")
+    .replace(/<\/?div[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
+function buildSequences(steps: CampaignStep[]): InstantlySequence[] {
+  const valid = steps.filter((s) => s.subject.trim() || s.body.trim());
+  return [
+    {
+      steps: valid.map((s) => ({
+        type: "email" as const,
+        delay: Math.max(0, Math.floor(Number(s.delayDays) || 0)),
+        variants: [{ subject: s.subject, body: textToHtml(s.body) }],
+      })),
+    },
+  ];
+}
+
+function parseSteps(sequences: InstantlySequence[]): CampaignStep[] {
+  const steps = sequences?.[0]?.steps ?? [];
+  const out = steps.map((st) => {
+    const v = st.variants?.[0] ?? { subject: "", body: "" };
+    return {
+      subject: v.subject ?? "",
+      body: htmlToText(v.body ?? ""),
+      delayDays: typeof st.delay === "number" ? st.delay : 0,
+    };
+  });
+  return out.length ? out : [{ subject: "", body: "", delayDays: 0 }];
+}
+
+async function computePreview(
+  orgId: string,
+  listId: string,
+  campaignId: string | null,
+  filter: InstantlySendFilter,
+): Promise<InstantlySendPreview> {
+  const all = await loadLeadRows(orgId, listId);
   let withEmail = 0;
   let noEmail = 0;
   let enriched = 0;
   let alreadySent = 0;
   let eligible = 0;
-
   for (const src of all) {
     if (!rowHasEmail(src)) {
       noEmail++;
@@ -924,20 +984,134 @@ export async function previewInstantlySendAction(input: {
     withEmail++;
     const isEnriched = rowEnriched(src);
     if (isEnriched) enriched++;
-    const sent = input.campaignId ? rowSentTo(src, input.campaignId) : false;
+    const sent = campaignId ? rowSentTo(src, campaignId) : false;
     if (sent) alreadySent++;
-
-    if (input.filter.onlyEnriched && !isEnriched) continue;
-    if (input.filter.skipAlreadySent && sent) continue;
+    if (filter.onlyEnriched && !isEnriched) continue;
+    if (filter.skipAlreadySent && sent) continue;
     eligible++;
   }
-
   return { total: all.length, withEmail, noEmail, enriched, alreadySent, eligible };
+}
+
+/** Vorbefüllung für den Assistenten: Copy, Absender, Vorschau. */
+export async function getCampaignSetupAction(input: {
+  listId: string;
+}): Promise<CampaignSetupInfo> {
+  const org = await requireActiveOrg();
+  const list = await getListCampaign(org.id, input.listId);
+  if (!list) throw new Error("Kampagne nicht gefunden.");
+
+  let accounts: CampaignSenderAccount[] = [];
+  try {
+    const accs = await listAccounts();
+    accounts = accs.map((a) => ({
+      email: a.email,
+      active: a.status === 1,
+      warmupScore: a.warmupScore,
+    }));
+  } catch {
+    accounts = [];
+  }
+
+  let steps: CampaignStep[] = [{ subject: "", body: "", delayDays: 0 }];
+  let status: number | null = null;
+  if (list.campaignId) {
+    try {
+      const c = await getCampaign(list.campaignId);
+      status = c.status;
+      steps = parseSteps(c.sequences);
+    } catch {
+      // Kampagne evtl. in Instantly gelöscht → wie neu behandeln.
+    }
+  }
+
+  const preview = await computePreview(org.id, input.listId, list.campaignId, {
+    onlyEnriched: false,
+    skipAlreadySent: true,
+  });
+
+  return { campaignId: list.campaignId, status, steps, accounts, preview };
+}
+
+export async function previewInstantlySendAction(input: {
+  listId: string;
+  filter: InstantlySendFilter;
+}): Promise<InstantlySendPreview> {
+  const org = await requireActiveOrg();
+  const list = await getListCampaign(org.id, input.listId);
+  return computePreview(
+    org.id,
+    input.listId,
+    list?.campaignId ?? null,
+    input.filter,
+  );
+}
+
+/** Copy als Sequenz speichern (create/update), Absender setzen, optional aktivieren. */
+export async function saveCampaignAction(input: {
+  listId: string;
+  steps: CampaignStep[];
+  senders: string[];
+  activate: boolean;
+}): Promise<SaveCampaignResult> {
+  const org = await requireActiveOrg();
+  const list = await getListCampaign(org.id, input.listId);
+  if (!list)
+    return {
+      campaignId: null,
+      activated: false,
+      error: "Kampagne nicht gefunden.",
+    };
+
+  const sequences = buildSequences(input.steps);
+  if (!sequences[0].steps.length) {
+    return {
+      campaignId: list.campaignId,
+      activated: false,
+      error: "Bitte mindestens Betreff oder Text der ersten Mail ausfüllen.",
+    };
+  }
+
+  try {
+    let campaignId = list.campaignId;
+    if (campaignId) {
+      await updateCampaign(campaignId, {
+        sequences,
+        emailList: input.senders,
+      });
+    } else {
+      const created = await createCampaign({
+        name: list.name,
+        sequences,
+        emailList: input.senders,
+      });
+      campaignId = created.id;
+      await db
+        .update(leadLists)
+        .set({ instantlyCampaignId: campaignId })
+        .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+    }
+
+    let activated = false;
+    if (input.activate && campaignId) {
+      await activateCampaign(campaignId);
+      activated = true;
+    }
+
+    revalidatePath("/vertrieb");
+    revalidatePath("/vertrieb/scraping");
+    return { campaignId, activated, error: null };
+  } catch (e) {
+    return {
+      campaignId: list.campaignId,
+      activated: false,
+      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
 }
 
 export async function sendListToInstantlyAction(input: {
   listId: string;
-  campaignId: string;
   filter: InstantlySendFilter;
   offset?: number;
 }): Promise<InstantlySendResult> {
@@ -952,8 +1126,13 @@ export async function sendListToInstantlyAction(input: {
     remaining: 0,
     error: null,
   };
-  if (!input.campaignId) return { ...base, error: "Keine Kampagne ausgewählt." };
-  if (!input.listId) return { ...base, error: "Keine Liste ausgewählt." };
+  if (!input.listId) return { ...base, error: "Keine Kampagne ausgewählt." };
+
+  const list = await getListCampaign(org.id, input.listId);
+  if (!list?.campaignId) {
+    return { ...base, error: "Kampagne in Instantly noch nicht eingerichtet." };
+  }
+  const campaignId = list.campaignId;
 
   try {
     // offset läuft stabil über ALLE Zeilen (Markieren verschiebt das Slicing nicht).
@@ -974,7 +1153,7 @@ export async function sendListToInstantlyAction(input: {
         skippedNotEnriched++;
         continue;
       }
-      if (input.filter.skipAlreadySent && rowSentTo(src, input.campaignId)) {
+      if (input.filter.skipAlreadySent && rowSentTo(src, campaignId)) {
         skippedAlreadySent++;
         continue;
       }
@@ -987,14 +1166,14 @@ export async function sendListToInstantlyAction(input: {
 
     if (toSend.length > 0) {
       try {
-        await bulkAddLeads(input.campaignId, toSend.map(buildInstantlyLead), {
+        await bulkAddLeads(campaignId, toSend.map(buildInstantlyLead), {
           skipIfInCampaign: input.filter.skipAlreadySent,
         });
         sent = toSend.length;
         const iso = new Date().toISOString();
         await db
           .update(contacts)
-          .set({ customFields: sentPatch(input.campaignId, iso) })
+          .set({ customFields: sentPatch(campaignId, iso) })
           .where(
             and(
               eq(contacts.orgId, org.id),

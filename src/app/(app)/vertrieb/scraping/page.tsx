@@ -27,14 +27,14 @@ export default async function ScrapingPage({
           className="inline-flex items-center gap-1.5 text-xs text-sub hover:text-ink transition"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Zurück zu den Listen
+          Zurück zu den Kampagnen
         </Link>
         <h2 className="text-base font-semibold text-ink mt-2">
           {data.listName}
         </h2>
         <p className="text-xs text-sub mt-0.5">
           Scrapen, importieren oder manuell hinzufügen — pro Zeile mit Gemini
-          anreichern. Spreadsheet-Stil wie Clay.
+          anreichern, dann „Kampagne einrichten" für den Mailversand.
         </p>
       </div>
 

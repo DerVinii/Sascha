@@ -51,7 +51,7 @@ type Props = {
   onAddManual: () => void;
   onAddColumn: () => void;
   onUpdateCells: () => void;
-  onSendInstantly: () => void;
+  onSetupCampaign: () => void;
   exportHref: string;
   progress: RunnerProgress;
   onStop: () => void;
@@ -75,7 +75,7 @@ export function TableToolbar(props: Props) {
     onAddManual,
     onAddColumn,
     onUpdateCells,
-    onSendInstantly,
+    onSetupCampaign,
     exportHref,
     progress,
     onStop,
@@ -138,12 +138,12 @@ export function TableToolbar(props: Props) {
             <span className="hidden sm:inline">Update cells</span>
           </button>
           <button
-            onClick={onSendInstantly}
+            onClick={onSetupCampaign}
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
-            title="Leads in eine Instantly-Kampagne senden"
+            title="Kampagne einrichten: Copy schreiben & Leads an Instantly senden"
           >
             <Send className="h-3.5 w-3.5 text-info" />
-            <span className="hidden sm:inline">An Instantly</span>
+            <span className="hidden sm:inline">Kampagne einrichten</span>
           </button>
           <a
             href={exportHref}

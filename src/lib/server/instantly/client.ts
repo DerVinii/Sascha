@@ -60,10 +60,108 @@ export async function listCampaigns(): Promise<InstantlyCampaign[]> {
         status: typeof c.status === "number" ? c.status : null,
       });
     }
-    if (!data.next_starting_after || items.length === 0) break;
+    if (items.length < 100 || !data.next_starting_after) break;
     cursor = data.next_starting_after;
   }
   return out;
+}
+
+export type InstantlyAccount = {
+  email: string;
+  status: number | null;
+  warmupScore: number | null;
+};
+
+/** Verbundene Absender-Postfächer (paginiert). */
+export async function listAccounts(): Promise<InstantlyAccount[]> {
+  const out: InstantlyAccount[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (cursor) qs.set("starting_after", cursor);
+    const data = await call<{
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items?: any[];
+      next_starting_after?: string;
+    }>(`/accounts?${qs.toString()}`);
+    const items = data.items ?? [];
+    for (const a of items) {
+      out.push({
+        email: a.email,
+        status: typeof a.status === "number" ? a.status : null,
+        warmupScore:
+          typeof a.stat_warmup_score === "number" ? a.stat_warmup_score : null,
+      });
+    }
+    if (items.length < 100 || !data.next_starting_after) break;
+    cursor = data.next_starting_after;
+  }
+  return out;
+}
+
+// --- Kampagnen-Sequenz (Copy) ----------------------------------------------
+
+export type InstantlyStepVariant = { subject: string; body: string };
+export type InstantlyStep = {
+  type: "email";
+  delay: number; // Tage vor diesem Schritt (0 = sofort, Follow-up = N Tage)
+  variants: InstantlyStepVariant[];
+};
+export type InstantlySequence = { steps: InstantlyStep[] };
+
+/** Eine Kampagne inkl. Sequenz/Status holen (für Prefill im Assistenten). */
+export async function getCampaign(id: string): Promise<{
+  id: string;
+  name: string;
+  status: number | null;
+  sequences: InstantlySequence[];
+}> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = await call<any>(`/campaigns/${id}`);
+  return {
+    id: c.id,
+    name: c.name ?? "",
+    status: typeof c.status === "number" ? c.status : null,
+    sequences: Array.isArray(c.sequences) ? c.sequences : [],
+  };
+}
+
+export async function createCampaign(input: {
+  name: string;
+  sequences: InstantlySequence[];
+  emailList?: string[];
+}): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    name: input.name,
+    sequences: input.sequences,
+  };
+  if (input.emailList?.length) body.email_list = input.emailList;
+  const data = await call<{ id: string }>("/campaigns", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return { id: data.id };
+}
+
+export async function updateCampaign(
+  id: string,
+  input: { name?: string; sequences?: InstantlySequence[]; emailList?: string[] },
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (input.name !== undefined) body.name = input.name;
+  if (input.sequences !== undefined) body.sequences = input.sequences;
+  if (input.emailList?.length) body.email_list = input.emailList;
+  await call(`/campaigns/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function activateCampaign(id: string): Promise<void> {
+  await call(`/campaigns/${id}/activate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export type InstantlyLead = {
@@ -85,7 +183,8 @@ export async function bulkAddLeads(
   leads: InstantlyLead[],
   opts?: { skipIfInCampaign?: boolean; skipIfInWorkspace?: boolean },
 ): Promise<unknown> {
-  return call("/leads/bulk-add", {
+  // Endpoint der v2-CLI für "leads bulk-add" ist POST /leads/add (nicht /leads/bulk-add).
+  return call("/leads/add", {
     method: "POST",
     body: JSON.stringify({
       campaign_id: campaignId,

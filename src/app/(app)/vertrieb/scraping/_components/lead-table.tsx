@@ -29,7 +29,7 @@ import { CellDetailsDrawer } from "./cell-details-drawer";
 import { ColumnConfigModal } from "./column-config-modal";
 import { AiColumnModal } from "./ai-column-modal";
 import { ManualLeadModal } from "./manual-lead-modal";
-import { InstantlySendModal } from "./instantly-send-modal";
+import { CampaignSetupModal } from "./campaign-setup-modal";
 import { BulkRunBar } from "./bulk-run-bar";
 import { CsvImportModal } from "../../_components/csv-import-modal";
 
@@ -87,7 +87,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [aiColumn, setAiColumn] = useState<LeadColumn | null>(null);
   const [csvOpen, setCsvOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
-  const [instantlyOpen, setInstantlyOpen] = useState(false);
+  const [campaignOpen, setCampaignOpen] = useState(false);
 
   const refreshing = useRef(false);
 
@@ -288,7 +288,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onAddManual={() => setManualOpen(true)}
         onAddColumn={() => setAddColumnOpen(true)}
         onUpdateCells={updateCells}
-        onSendInstantly={() => setInstantlyOpen(true)}
+        onSetupCampaign={() => setCampaignOpen(true)}
         exportHref="/api/crm/export?status=lead"
         progress={runner.progress}
         onStop={runner.stop}
@@ -451,10 +451,12 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         listId={listId}
         onAdded={() => refresh()}
       />
-      <InstantlySendModal
-        open={instantlyOpen}
-        onClose={() => setInstantlyOpen(false)}
+      <CampaignSetupModal
+        open={campaignOpen}
+        onClose={() => setCampaignOpen(false)}
         listId={listId}
+        listName={initial.listName}
+        onDone={refresh}
       />
       <AddColumnPanel
         open={addColumnOpen}
@@ -506,11 +508,12 @@ function EmptyState({ onOpenSource }: { onOpenSource: () => void }) {
         <Radar className="h-6 w-6 text-info" />
       </div>
       <h3 className="text-sm font-semibold text-ink">
-        Diese Tabelle hat noch keine Zeilen
+        Diese Kampagne hat noch keine Leads
       </h3>
       <p className="mx-auto mt-1 max-w-sm text-xs text-sub">
-        Füll diese Liste: per Google-Maps-Scrape, CSV-Import oder manuell (Buttons
-        oben). Danach reicherst du die Leads mit „Geschäftsführer finden" an.
+        Füll diese Kampagne: per Google-Maps-Scrape, CSV-Import oder manuell
+        (Buttons oben). Danach reicherst du die Leads mit „Geschäftsführer finden"
+        an.
       </p>
       <div className="mt-4 flex items-center justify-center gap-2">
         <button
