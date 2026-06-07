@@ -51,7 +51,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
 
   function rename(list: LeadList) {
     setMenuId(null);
-    const n = window.prompt("Liste umbenennen:", list.name);
+    const n = window.prompt("Kampagne umbenennen:", list.name);
     if (!n || n.trim() === list.name) return;
     startTransition(async () => {
       await renameListAction({ id: list.id, name: n.trim() });
@@ -63,7 +63,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
     setMenuId(null);
     if (
       !window.confirm(
-        `Liste „${list.name}" inkl. ${list.count} Lead${list.count !== 1 ? "s" : ""} endgültig löschen?`,
+        `Kampagne „${list.name}" inkl. ${list.count} Lead${list.count !== 1 ? "s" : ""} endgültig löschen?`,
       )
     )
       return;
@@ -82,7 +82,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
             className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition"
           >
             <Plus className="h-4 w-4" />
-            Liste erstellen
+            Kampagne erstellen
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -97,7 +97,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
                   setName("");
                 }
               }}
-              placeholder="Name der Liste, z. B. Dachdecker München"
+              placeholder="Name der Kampagne, z. B. Dachdecker München"
               className="h-9 w-72 px-3 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
             />
             <button
@@ -130,10 +130,10 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
           <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-bg">
             <FolderOpen className="h-6 w-6 text-info" />
           </div>
-          <h3 className="text-sm font-semibold text-ink">Noch keine Listen</h3>
+          <h3 className="text-sm font-semibold text-ink">Noch keine Kampagnen</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs text-sub">
-            Erstelle deine erste Liste — danach kannst du darin Leads scrapen, per
-            CSV importieren oder manuell hinzufügen.
+            Erstelle deine erste Kampagne — danach kannst du darin Leads scrapen,
+            per CSV importieren oder manuell hinzufügen.
           </p>
         </div>
       ) : (

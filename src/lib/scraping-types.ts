@@ -159,6 +159,37 @@ export type InstantlySendResult = {
   error?: string | null;
 };
 
+/** Ein Schritt der E-Mail-Sequenz. Schritt 0 = erste Mail, weitere = Follow-ups. */
+export type CampaignStep = {
+  subject: string;
+  body: string;
+  /** Tage Verzögerung vor diesem Schritt (erste Mail = 0; Follow-up = N Tage). */
+  delayDays: number;
+};
+
+export type CampaignSenderAccount = {
+  email: string;
+  active: boolean;
+  warmupScore: number | null;
+};
+
+/** Vorbefüllung für den „Kampagne einrichten"-Assistenten (pro Liste/Kampagne). */
+export type CampaignSetupInfo = {
+  /** verknüpfte Instantly-Kampagne (null = noch nicht eingerichtet). */
+  campaignId: string | null;
+  status: number | null;
+  /** bestehende Copy (falls schon eingerichtet), sonst ein leerer Schritt. */
+  steps: CampaignStep[];
+  accounts: CampaignSenderAccount[];
+  preview: InstantlySendPreview;
+};
+
+export type SaveCampaignResult = {
+  campaignId: string | null;
+  activated: boolean;
+  error?: string | null;
+};
+
 export type LeadTableData = {
   columns: LeadColumn[];
   rows: LeadRow[];
