@@ -97,7 +97,7 @@ export type LeadView = {
 /** Ausführungs-Scope für einen Enrichment-Run. */
 export type RunScope =
   | { rowIds: string[] } // einzelne Zelle / Auswahl
-  | { mode: "missing" | "force"; limit?: number }; // Spalte / alle
+  | { mode: "missing" | "force"; limit?: number; offset?: number }; // Spalte / alle
 
 export type RunBatchResult = {
   processed: number;
