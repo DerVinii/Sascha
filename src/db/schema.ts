@@ -42,6 +42,13 @@ export const activityTypeEnum = pgEnum("activity_type", [
 
 export const emailDirEnum = pgEnum("email_dir", ["in", "out"]);
 
+export const leadColumnKindEnum = pgEnum("lead_column_kind", [
+  "source", // Rohdaten aus der Source (read-only), z. B. Firmenname aus Google Maps
+  "data", // manuell/abgeleitet editierbares Feld
+  "enrichment", // läuft pro Zeile (Provider/AI), z. B. Geschäftsführer finden
+  "action", // Write-back, z. B. Instantly (Phase 2)
+]);
+
 // ============================================================================
 // SHARED / MULTI-TENANT
 // ============================================================================
@@ -148,6 +155,40 @@ export const tags = pgTable("tags", {
   color: text("color"),
   scope: text("scope").default("contact").notNull(),
 });
+
+// ============================================================================
+// LEAD-TABLE (Clay-artige Scraping-/Enrichment-Sektion)
+// ============================================================================
+
+/**
+ * Spaltendefinitionen der Clay-artigen Lead-Table. Die Zeilen selbst sind ein
+ * Join aus `contacts` + `companies`; hier liegen nur die Spalten-Configs
+ * (Position, Typ, Provider/Prompt, Run-Settings). Zell-Status/Provenienz leben
+ * in `contacts.customFields.cells`, Views in `organizations.settings.leadViews`.
+ */
+export const leadColumns = pgTable(
+  "lead_columns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(), // stabiler Schlüssel, z. B. "find_dm", "email"
+    label: text("label").notNull(),
+    kind: leadColumnKindEnum("kind").notNull(),
+    dataType: text("data_type").default("text").notNull(), // text|email|url|number|checkbox|select
+    position: integer("position").notNull(),
+    width: integer("width").default(180).notNull(),
+    pinned: boolean("pinned").default(false).notNull(),
+    color: text("color"),
+    config: jsonb("config").default({}).notNull(), // provider, inputs, outputs, runSettings, derivedFrom, source, options
+    hidden: boolean("hidden").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("lead_columns_org_idx").on(t.orgId)],
+);
 
 // ============================================================================
 // VERTRIEBS-CRM (Sub-System A)
