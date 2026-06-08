@@ -126,6 +126,19 @@ export async function getCampaign(id: string): Promise<{
   };
 }
 
+// Die v2-API verlangt campaign_schedule zwingend (Mo–Fr 9–17 Uhr; identisch
+// zum Default, den die Instantly-CLI sonst clientseitig ergänzt).
+const DEFAULT_SCHEDULE = {
+  schedules: [
+    {
+      name: "Default schedule",
+      timing: { from: "09:00", to: "17:00" },
+      days: { 0: false, 1: true, 2: true, 3: true, 4: true, 5: true, 6: false },
+      timezone: "Europe/Berlin",
+    },
+  ],
+};
+
 export async function createCampaign(input: {
   name: string;
   sequences: InstantlySequence[];
@@ -134,6 +147,7 @@ export async function createCampaign(input: {
   const body: Record<string, unknown> = {
     name: input.name,
     sequences: input.sequences,
+    campaign_schedule: DEFAULT_SCHEDULE,
   };
   if (input.emailList?.length) body.email_list = input.emailList;
   const data = await call<{ id: string }>("/campaigns", {
