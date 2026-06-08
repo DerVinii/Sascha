@@ -190,6 +190,22 @@ export type SaveCampaignResult = {
   error?: string | null;
 };
 
+/** Default-Spalten, die auf native Instantly-Lead-Felder mappen. */
+export const NATIVE_INSTANTLY_TOKENS: Record<string, string> = {
+  company: "company_name",
+  firstName: "first_name",
+  lastName: "last_name",
+  email: "email",
+  phone: "phone",
+  website: "website",
+};
+
+/** Variablen-Token (für {{…}}) zu einer Spalte. Native Felder werden gemappt,
+ *  alle übrigen Spalten laufen als custom_variables unter ihrem Spalten-Key. */
+export function instantlyVarToken(columnKey: string): string {
+  return NATIVE_INSTANTLY_TOKENS[columnKey] ?? columnKey;
+}
+
 export type LeadTableData = {
   columns: LeadColumn[];
   rows: LeadRow[];

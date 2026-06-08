@@ -36,6 +36,10 @@ import {
   ENRICHMENT_KEY,
   type RowSources,
 } from "@/lib/server/scraping/lead-columns";
+import {
+  instantlyVarToken,
+  NATIVE_INSTANTLY_TOKENS,
+} from "@/lib/scraping-types";
 import type {
   LeadColumn,
   LeadColumnConfig,
@@ -871,7 +875,10 @@ function rowSentTo(src: RowSources, campaignId: string): boolean {
   return !!camps[campaignId];
 }
 
-function buildInstantlyLead(src: RowSources): InstantlyLead {
+function buildInstantlyLead(
+  src: RowSources,
+  columns: LeadColumn[],
+): InstantlyLead {
   const c = src.contact;
   const co = src.company;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -879,7 +886,16 @@ function buildInstantlyLead(src: RowSources): InstantlyLead {
   const custom: Record<string, string> = {};
   if (cf.niche) custom.niche = String(cf.niche);
   if (cf.city) custom.city = String(cf.city);
-  if (c.phone) custom.telefon = String(c.phone);
+  // Alle Nicht-Native-Spalten als custom_variables (unter ihrem Key), damit im
+  // Editor eingefügte {{spalte}}-Platzhalter in Instantly aufgelöst werden.
+  const cells = buildCells(columns, src);
+  for (const col of columns) {
+    if (NATIVE_INSTANTLY_TOKENS[col.key]) continue; // native Felder via Top-Level
+    const v = cells[col.key]?.value;
+    if (v !== null && v !== undefined && v !== "") {
+      custom[instantlyVarToken(col.key)] = String(v);
+    }
+  }
   return {
     email: String(c.email),
     first_name: c.firstName || undefined,
@@ -1137,6 +1153,7 @@ export async function sendListToInstantlyAction(input: {
   try {
     // offset läuft stabil über ALLE Zeilen (Markieren verschiebt das Slicing nicht).
     const all = await loadLeadRows(org.id, input.listId);
+    const columns = await getColumns(org.id);
     const offset = Math.max(0, input.offset ?? 0);
     const slice = all.slice(offset, offset + INSTANTLY_BATCH);
 
@@ -1166,9 +1183,11 @@ export async function sendListToInstantlyAction(input: {
 
     if (toSend.length > 0) {
       try {
-        await bulkAddLeads(campaignId, toSend.map(buildInstantlyLead), {
-          skipIfInCampaign: input.filter.skipAlreadySent,
-        });
+        await bulkAddLeads(
+          campaignId,
+          toSend.map((s) => buildInstantlyLead(s, columns)),
+          { skipIfInCampaign: input.filter.skipAlreadySent },
+        );
         sent = toSend.length;
         const iso = new Date().toISOString();
         await db

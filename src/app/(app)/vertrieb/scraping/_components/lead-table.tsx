@@ -456,6 +456,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onClose={() => setCampaignOpen(false)}
         listId={listId}
         listName={initial.listName}
+        columns={columns}
         onDone={refresh}
       />
       <AddColumnPanel
