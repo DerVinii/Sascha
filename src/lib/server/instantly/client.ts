@@ -126,15 +126,17 @@ export async function getCampaign(id: string): Promise<{
   };
 }
 
-// Die v2-API verlangt campaign_schedule zwingend (Mo–Fr 9–17 Uhr; identisch
-// zum Default, den die Instantly-CLI sonst clientseitig ergänzt).
+// Die v2-API verlangt campaign_schedule zwingend (Mo–Fr 9–17 Uhr).
+// Instantlys Zeitzonen-Enum akzeptiert "Europe/Berlin" NICHT — für CET/CEST
+// nutzen wir "Europe/Belgrade": identische Uhrzeit + EU-Sommerzeit wie Berlin
+// (gegen die echte API verifiziert; Berlin/Paris/Amsterdam u. v. m. werden abgelehnt).
 const DEFAULT_SCHEDULE = {
   schedules: [
     {
       name: "Default schedule",
       timing: { from: "09:00", to: "17:00" },
       days: { 0: false, 1: true, 2: true, 3: true, 4: true, 5: true, 6: false },
-      timezone: "Europe/Berlin",
+      timezone: "Europe/Belgrade",
     },
   ],
 };
