@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import type {
   CampaignStep,
-  CampaignSenderAccount,
   InstantlySendPreview,
 } from "@/lib/scraping-types";
 import {
@@ -56,7 +55,7 @@ export function CampaignSetupModal({
   const [steps, setSteps] = useState<CampaignStep[]>([
     { subject: "", body: "", delayDays: 0 },
   ]);
-  const [accounts, setAccounts] = useState<CampaignSenderAccount[]>([]);
+  // Absender werden ohne UI automatisch gesetzt: alle aktiven Postfächer.
   const [senders, setSenders] = useState<string[]>([]);
   const [activate, setActivate] = useState(false);
 
@@ -74,7 +73,6 @@ export function CampaignSetupModal({
       setSteps(
         info.steps.length ? info.steps : [{ subject: "", body: "", delayDays: 0 }],
       );
-      setAccounts(info.accounts);
       setSenders(info.accounts.filter((a) => a.active).map((a) => a.email));
       setPreview(info.preview);
     } catch (e) {
@@ -119,11 +117,6 @@ export function CampaignSetupModal({
   }
   function removeStep(i: number) {
     setSteps((prev) => prev.filter((_, idx) => idx !== i));
-  }
-  function toggleSender(email: string) {
-    setSenders((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
-    );
   }
 
   async function handleSubmit() {
@@ -178,7 +171,6 @@ export function CampaignSetupModal({
   const eligible = preview?.eligible ?? 0;
   const firstMailFilled =
     steps[0] && (steps[0].subject.trim() || steps[0].body.trim());
-  const activeSenders = accounts.filter((a) => a.active);
 
   return (
     <div
@@ -347,36 +339,6 @@ export function CampaignSetupModal({
                   <code>{"{{last_name}}"}</code>,{" "}
                   <code>{"{{company_name}}"}</code> werden pro Lead ersetzt.
                 </p>
-              </div>
-
-              {/* Absender */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-medium text-sub">
-                  Absender-Postfächer
-                </span>
-                {activeSenders.length === 0 ? (
-                  <p className="text-[11px] text-warn">
-                    Keine aktiven Absender im Workspace — die Kampagne kann ohne
-                    Absender (noch) nicht versenden.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeSenders.map((a) => (
-                      <label
-                        key={a.email}
-                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-line bg-bg text-xs text-ink cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={senders.includes(a.email)}
-                          onChange={() => toggleSender(a.email)}
-                          className="h-3 w-3 rounded border-line"
-                        />
-                        {a.email}
-                      </label>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Aktivieren */}
