@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   X,
   Send,
@@ -12,10 +12,13 @@ import {
   ChevronRight,
   ChevronLeft,
   Mail,
+  Braces,
 } from "lucide-react";
+import { instantlyVarToken } from "@/lib/scraping-types";
 import type {
   CampaignStep,
   InstantlySendPreview,
+  LeadColumn,
 } from "@/lib/scraping-types";
 import {
   getCampaignSetupAction,
@@ -29,6 +32,7 @@ type Props = {
   onClose: () => void;
   listId: string;
   listName: string;
+  columns: LeadColumn[];
   onDone?: () => void;
 };
 
@@ -39,6 +43,7 @@ export function CampaignSetupModal({
   onClose,
   listId,
   listName,
+  columns,
   onDone,
 }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -63,6 +68,20 @@ export function CampaignSetupModal({
   const [progress, setProgress] = useState<RunProgress | null>(null);
   const [done, setDone] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  // Variablen-Einfügen: zuletzt fokussiertes Copy-Feld merken + Refs auf alle Felder.
+  const fieldRefs = useRef<
+    Record<string, HTMLInputElement | HTMLTextAreaElement | null>
+  >({});
+  const lastFocused = useRef<{ i: number; field: "subject" | "body" } | null>(
+    null,
+  );
+  const varBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [varMenuOpen, setVarMenuOpen] = useState(false);
+  const [varMenuPos, setVarMenuPos] = useState<{ left: number; top: number }>({
+    left: 0,
+    top: 0,
+  });
 
   const loadSetup = useCallback(async () => {
     setLoading(true);
@@ -119,6 +138,41 @@ export function CampaignSetupModal({
     setSteps((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  function openVarMenu() {
+    const r = varBtnRef.current?.getBoundingClientRect();
+    if (r) setVarMenuPos({ left: r.left, top: r.bottom + 4 });
+    setVarMenuOpen((v) => !v);
+  }
+
+  /** Fügt {{token}} an der Cursor-Position des zuletzt fokussierten Felds ein. */
+  function insertVariable(token: string) {
+    const lf = lastFocused.current;
+    let i = lf ? lf.i : 0;
+    const field: "subject" | "body" = lf ? lf.field : "body";
+    if (!steps[i]) i = 0;
+    const key = `${i}:${field}`;
+    const el = fieldRefs.current[key];
+    const variable = `{{${token}}}`;
+    const cur = steps[i]?.[field] ?? "";
+    const start = el?.selectionStart ?? cur.length;
+    const end = el?.selectionEnd ?? start;
+    const next = cur.slice(0, start) + variable + cur.slice(end);
+    updateStep(i, field === "subject" ? { subject: next } : { body: next });
+    const pos = start + variable.length;
+    requestAnimationFrame(() => {
+      const e2 = fieldRefs.current[key];
+      if (e2) {
+        e2.focus();
+        try {
+          e2.setSelectionRange(pos, pos);
+        } catch {
+          /* number/range nicht setzbar – ignorieren */
+        }
+      }
+    });
+    setVarMenuOpen(false);
+  }
+
   async function handleSubmit() {
     if (busy) return;
     setBusy(true);
@@ -171,6 +225,9 @@ export function CampaignSetupModal({
   const eligible = preview?.eligible ?? 0;
   const firstMailFilled =
     steps[0] && (steps[0].subject.trim() || steps[0].body.trim());
+  const variables = columns
+    .filter((c) => !c.hidden)
+    .map((c) => ({ label: c.label, token: instantlyVarToken(c.key) }));
 
   return (
     <div
@@ -311,12 +368,24 @@ export function CampaignSetupModal({
                       </div>
                     </div>
                     <input
+                      ref={(el) => {
+                        fieldRefs.current[`${i}:subject`] = el;
+                      }}
+                      onFocus={() => {
+                        lastFocused.current = { i, field: "subject" };
+                      }}
                       value={s.subject}
                       onChange={(e) => updateStep(i, { subject: e.target.value })}
                       placeholder="Betreff"
                       className="w-full h-9 px-3 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
                     />
                     <textarea
+                      ref={(el) => {
+                        fieldRefs.current[`${i}:body`] = el;
+                      }}
+                      onFocus={() => {
+                        lastFocused.current = { i, field: "body" };
+                      }}
                       value={s.body}
                       onChange={(e) => updateStep(i, { body: e.target.value })}
                       placeholder="Text der E-Mail …"
@@ -326,19 +395,27 @@ export function CampaignSetupModal({
                   </div>
                 ))}
 
-                <button
-                  onClick={addFollowup}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Follow-up hinzufügen
-                </button>
-
-                <p className="text-[11px] text-sub">
-                  Platzhalter: <code>{"{{first_name}}"}</code>,{" "}
-                  <code>{"{{last_name}}"}</code>,{" "}
-                  <code>{"{{company_name}}"}</code> werden pro Lead ersetzt.
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={addFollowup}
+                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Follow-up hinzufügen
+                  </button>
+                  <button
+                    ref={varBtnRef}
+                    type="button"
+                    onClick={openVarMenu}
+                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+                  >
+                    <Braces className="h-3.5 w-3.5 text-info" />
+                    Variable einfügen
+                  </button>
+                  <span className="text-[11px] text-sub">
+                    Wird pro Lead automatisch ersetzt.
+                  </span>
+                </div>
               </div>
 
               {/* Aktivieren */}
@@ -450,6 +527,38 @@ export function CampaignSetupModal({
           </div>
         </div>
       </div>
+
+      {varMenuOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setVarMenuOpen(false)}
+          />
+          <div
+            style={{ left: varMenuPos.left, top: varMenuPos.top }}
+            className="fixed z-[61] w-64 max-h-60 overflow-y-auto rounded-lg border border-line bg-surface shadow-xl py-1"
+          >
+            {variables.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-sub">
+                Keine Spalten vorhanden.
+              </div>
+            ) : (
+              variables.map((v) => (
+                <button
+                  key={v.token}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertVariable(v.token)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg"
+                >
+                  <span className="truncate">{v.label}</span>
+                  <code className="text-[10px] text-sub shrink-0">{`{{${v.token}}}`}</code>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
