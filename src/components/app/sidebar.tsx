@@ -8,6 +8,8 @@ import {
   Users,
   Settings,
   ListTodo,
+  CalendarDays,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +24,8 @@ const NAV: NavItem[] = [
   { href: "/vertrieb", label: "Vertrieb", icon: Megaphone },
   { href: "/crm", label: "CRM", icon: Users },
   { href: "/aufgaben", label: "Aufgaben", icon: ListTodo },
+  { href: "/kalender", label: "Kalender", icon: CalendarDays },
+  { href: "/postfach", label: "Postfach", icon: Inbox },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
 ];
 
