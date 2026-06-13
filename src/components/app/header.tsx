@@ -20,6 +20,14 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "Aufgaben",
     desc: "Aufgaben, Anrufe, Termine und Follow-ups.",
   },
+  "/kalender": {
+    title: "Kalender",
+    desc: "Termine, Meetings und gebuchte Calls im Überblick.",
+  },
+  "/postfach": {
+    title: "Postfach",
+    desc: "Antworten aus dem Cold-Outreach zentral beantworten.",
+  },
   "/einstellungen": {
     title: "Einstellungen",
     desc: "Organisation, Team und externe Integrationen.",
