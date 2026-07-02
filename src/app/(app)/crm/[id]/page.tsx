@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { db } from "@/db";
 import {
@@ -9,16 +9,21 @@ import {
   emailMessages,
   notes,
   activities,
+  pipelines,
+  pipelineStages,
+  deals,
 } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { StatusPill, STATUS_LABELS } from "@/components/crm/status-pill";
 import { updateContactStatusAction, deleteContactAction } from "../actions";
+import { formatEur } from "@/lib/pipeline-templates";
 
 export const dynamic = "force-dynamic";
 import type { ContactStatus } from "../actions";
 import { StatusSelect } from "./_components/status-select";
 import { NewNoteForm } from "./_components/new-note-form";
+import { NewDealModal } from "../_components/new-deal-modal";
 
 function formatDateTime(d: Date | null) {
   if (!d) return "—";
@@ -113,6 +118,55 @@ export default async function ContactDetailPage({
     .where(eq(activities.contactId, id))
     .orderBy(desc(activities.createdAt))
     .limit(50);
+
+  // Deals dieses Kontakts (mit Pipeline + Phase)
+  const contactDeals = await db
+    .select({
+      id: deals.id,
+      title: deals.title,
+      valueEur: deals.valueEur,
+      expectedClose: deals.expectedClose,
+      pipelineId: deals.pipelineId,
+      pipelineName: pipelines.name,
+      stageName: pipelineStages.name,
+      stageColor: pipelineStages.color,
+    })
+    .from(deals)
+    .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
+    .innerJoin(pipelineStages, eq(deals.stageId, pipelineStages.id))
+    .where(and(eq(deals.contactId, id), eq(deals.orgId, org.id)))
+    .orderBy(desc(deals.createdAt));
+
+  // Pipelines + Phasen für das "Deal anlegen"-Modal
+  const orgPipelines = await db
+    .select({
+      id: pipelines.id,
+      name: pipelines.name,
+      isDefault: pipelines.isDefault,
+    })
+    .from(pipelines)
+    .where(eq(pipelines.orgId, org.id))
+    .orderBy(desc(pipelines.isDefault), asc(pipelines.createdAt));
+
+  const orgStages = await db
+    .select({
+      id: pipelineStages.id,
+      name: pipelineStages.name,
+      pipelineId: pipelineStages.pipelineId,
+    })
+    .from(pipelineStages)
+    .innerJoin(pipelines, eq(pipelineStages.pipelineId, pipelines.id))
+    .where(eq(pipelines.orgId, org.id))
+    .orderBy(asc(pipelineStages.position));
+
+  const pipelinesWithStages = orgPipelines.map((p) => ({
+    id: p.id,
+    name: p.name,
+    stages: orgStages
+      .filter((s) => s.pipelineId === p.id)
+      .map((s) => ({ id: s.id, name: s.name })),
+  }));
+  const defaultPipeline = pipelinesWithStages[0];
 
   async function deleteAction() {
     "use server";
@@ -213,6 +267,79 @@ export default async function ContactDetailPage({
             </div>
           )}
         </dl>
+      </div>
+
+      {/* Deals */}
+      <div className="rounded-xl border border-line bg-surface p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Deals</h2>
+          {defaultPipeline ? (
+            <NewDealModal
+              pipelines={pipelinesWithStages}
+              lockedContact={{
+                id: contact.id,
+                name: fullName,
+                companyName: contact.companyName,
+              }}
+              defaultPipelineId={defaultPipeline.id}
+              defaultStageId={defaultPipeline.stages[0]?.id}
+            />
+          ) : (
+            <Link
+              href="/pipelines"
+              className="text-xs text-info hover:underline"
+            >
+              Erst Pipeline anlegen
+            </Link>
+          )}
+        </div>
+        {contactDeals.length === 0 ? (
+          <p className="text-sm text-sub py-4">
+            Noch keine Deals für diesen Kontakt.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {contactDeals.map((d) => (
+              <li key={d.id}>
+                <Link
+                  href={`/pipelines/${d.pipelineId}`}
+                  className="flex items-center justify-between gap-3 border border-line rounded-lg p-3 hover:bg-bg transition"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink truncate">
+                      {d.title}
+                    </div>
+                    <div className="text-[11px] text-sub mt-0.5 flex items-center gap-1.5">
+                      <span
+                        className="pill"
+                        style={{
+                          background: d.stageColor ?? "#e2e8f0",
+                          color: "#0f172a",
+                        }}
+                      >
+                        {d.stageName}
+                      </span>
+                      <span>· {d.pipelineName}</span>
+                      {d.expectedClose && (
+                        <span>
+                          · Abschluss{" "}
+                          {new Intl.DateTimeFormat("de-DE", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          }).format(d.expectedClose)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-ink whitespace-nowrap">
+                    {formatEur(d.valueEur)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Mail-Historie */}

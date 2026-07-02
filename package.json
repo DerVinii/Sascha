@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed-org.ts",
+    "import:salessuite": "tsx scripts/import-salessuite.ts",
     "instantly": "INSTANTLY_API_KEY=$(grep '^INSTANTLY_API_KEY=' .env.local | cut -d= -f2-) instantly"
   },
   "dependencies": {

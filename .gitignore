@@ -30,6 +30,9 @@ Vercel_token
 *.n8n.json
 TRW Lead generierung.json
 
+# CSV-Exporte (enthalten echte personenbezogene Kontaktdaten) — nie committen
+*.csv
+
 # Next.js
 next-env.d.ts
 

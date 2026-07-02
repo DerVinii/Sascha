@@ -3,7 +3,9 @@
 > **Lebendige Dokumentation.** Quelle: [`CRM_Bildungsoperationssystem_Uebersicht.pdf`](CRM_Bildungsoperationssystem_Uebersicht.pdf) (Saschas PDF mit 12 Kategorien).
 > Diese Datei wird bei jedem Feature-Push aktualisiert.
 
-**Stand:** 2026-06-05 · **Aktuelle Phase:** 1 · **Branch:** `implementation` (= `main`)
+**Stand:** 2026-06-28 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
+
+> 🔧 **CRM-Nachbau gestartet (2026-06-28):** Die CRM-Sektion wird an Saschas aktuelles Tool **SalesSuite** angeglichen. Feature-Spec + Gap-Analyse: [`SALESSUITE_REFERENCE.md`](SALESSUITE_REFERENCE.md). **Fundament fertig:** Deals als eigene Ebene, Multi-Pipeline-Verwaltung, Deal-Kanban (Drag-Drop), Deals an Kontakten.
 
 > ⚠️ **Anmeldung entfernt (2026-06-05):** Die App läuft jetzt **ohne Login** auf einer festen Organisation und ist öffentlich live unter https://sascha-wyvernai.vercel.app. Auth (Magic-Link/Passwort) wurde komplett ausgebaut, die Vercel-Protection deaktiviert. Details unter „Tech-Debt → Sicherheit".
 
@@ -56,10 +58,10 @@
 
 | # | PDF-Punkt | Status | Wo / Anmerkung |
 |---|---|---|---|
-| 2.1 | Visuelle Vertriebspipeline | ✅ | `/crm?view=pipeline` Kanban mit 6 Spalten |
-| 2.2 | Drag-and-Drop Deals | ⚠️ | Drag-Drop ja, aber für **Kontakte** (Status-Update), nicht Deals. **Bewusste Entscheidung:** Sascha als Coach denkt eher in „Kontakten in Pipeline" als in separaten Deal-Records |
-| 2.3 | Mehrere Pipelines | ❌ 🔮 | Phase 2. Schema da, UI fehlt |
-| 2.4 | Deal-Tracking | ❌ 🔮 | Phase 2. `deals`-Tabelle mit `value_eur`, `probability`, `expected_close` existiert, aber kein UI |
+| 2.1 | Visuelle Vertriebspipeline | ✅ | `/crm?view=pipeline` Deal-Kanban, Spalten = Phasen der gewählten Pipeline |
+| 2.2 | Drag-and-Drop Deals | ✅ | Echte **Deals** werden per Drag-Drop zwischen Phasen bewegt (optimistisch + Rollback) |
+| 2.3 | Mehrere Pipelines | ✅ | Pipeline-Selector + „Neue Pipeline" (5 Vorlagen) + Phasen-Verwaltung (Name/Farbe/%/Reihenfolge) |
+| 2.4 | Deal-Tracking | ✅ | Deals mit `value_eur` + `expected_close`; Phasen-Wahrscheinlichkeit; Summen pro Phase/Pipeline. Verlust-Grund/Close-Datum-Automatik = später |
 | 2.5 | Aufgabenverwaltung | ✅ | `/aufgaben` mit 5 Typen (Aufgabe, Anruf, Termin, Follow-up, Notiz) |
 | 2.6 | Follow-Up-Management | ✅ | Activity-Typ `follow_up` + `due_date` |
 | 2.7 | Wiedervorlagen | ✅ | „Heute fällig" / „Überfällig" auf Aufgaben + Dashboard |
