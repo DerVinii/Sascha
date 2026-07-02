@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { db } from "@/db";
 import {
   contacts,
@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 import type { ContactStatus } from "../actions";
 import { StatusSelect } from "./_components/status-select";
 import { NewNoteForm } from "./_components/new-note-form";
+import { DeleteContactButton } from "./_components/delete-contact-button";
 import { NewDealModal } from "../_components/new-deal-modal";
 
 function formatDateTime(d: Date | null) {
@@ -205,15 +206,10 @@ export default async function ContactDetailPage({
               current={contact.status}
               onChange={changeStatus}
             />
-            <form action={deleteAction}>
-              <button
-                type="submit"
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition"
-                title="Kontakt löschen"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </form>
+            <DeleteContactButton
+              contactName={fullName}
+              deleteAction={deleteAction}
+            />
           </div>
         </div>
       </div>
