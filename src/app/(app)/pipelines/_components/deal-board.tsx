@@ -1,0 +1,206 @@
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  useDroppable,
+  useDraggable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { formatEur } from "@/lib/pipeline-templates";
+import { moveDealToStage } from "@/app/(app)/crm/pipeline-actions";
+
+export type BoardStage = {
+  id: string;
+  name: string;
+  position: number;
+  probability: number;
+  color: string | null;
+};
+
+export type BoardDeal = {
+  id: string;
+  title: string;
+  valueEur: number | null;
+  stageId: string;
+  contactId: string | null;
+  contactName: string | null;
+  companyName: string | null;
+};
+
+export function DealBoard({
+  stages,
+  deals,
+}: {
+  stages: BoardStage[];
+  deals: BoardDeal[];
+}) {
+  const router = useRouter();
+  const [items, setItems] = useState(deals);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    setItems(deals);
+  }, [deals]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const ordered = useMemo(
+    () => [...stages].sort((a, b) => a.position - b.position),
+    [stages],
+  );
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveId(String(e.active.id));
+  }
+
+  function handleDragEnd(e: DragEndEvent) {
+    setActiveId(null);
+    if (!e.over) return;
+    const dealId = String(e.active.id);
+    const newStageId = String(e.over.id);
+    const deal = items.find((d) => d.id === dealId);
+    if (!deal || deal.stageId === newStageId) return;
+    const prevStageId = deal.stageId;
+
+    setItems((prev) =>
+      prev.map((d) => (d.id === dealId ? { ...d, stageId: newStageId } : d)),
+    );
+    startTransition(async () => {
+      try {
+        await moveDealToStage(dealId, newStageId);
+      } catch {
+        setItems((prev) =>
+          prev.map((d) =>
+            d.id === dealId ? { ...d, stageId: prevStageId } : d,
+          ),
+        );
+        router.refresh();
+      }
+    });
+  }
+
+  const activeDeal = activeId ? items.find((d) => d.id === activeId) : null;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {ordered.map((stage) => (
+          <Column
+            key={stage.id}
+            stage={stage}
+            deals={items.filter((d) => d.stageId === stage.id)}
+          />
+        ))}
+      </div>
+      <DragOverlay>
+        {activeDeal ? <Card deal={activeDeal} dragging /> : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+function Column({ stage, deals }: { stage: BoardStage; deals: BoardDeal[] }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  const sum = deals.reduce((s, d) => s + (d.valueEur ?? 0), 0);
+
+  return (
+    <div className="flex flex-col w-72 shrink-0">
+      <div
+        className="px-3 py-2 rounded-t-lg border-b-2 border-line flex items-center justify-between"
+        style={{ background: stage.color ?? "#e2e8f0" }}
+      >
+        <div className="min-w-0">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink truncate">
+            {stage.name}
+          </div>
+          <div className="text-[10px] text-ink/60">
+            {formatEur(sum)} · {stage.probability}%
+          </div>
+        </div>
+        <span className="text-[10px] bg-white/60 rounded-full px-1.5 py-0.5 shrink-0">
+          {deals.length}
+        </span>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={`flex-1 min-h-[55vh] p-2 space-y-2 bg-bg/60 rounded-b-lg border border-t-0 border-line ${
+          isOver ? "bg-sidebar/5 ring-1 ring-inset ring-sidebar/20" : ""
+        }`}
+      >
+        {deals.map((d) => (
+          <Card key={d.id} deal={d} />
+        ))}
+        {deals.length === 0 && (
+          <p className="text-[11px] text-sub text-center py-4">(leer)</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Card({
+  deal,
+  dragging = false,
+}: {
+  deal: BoardDeal;
+  dragging?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: deal.id });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`bg-surface border border-line rounded-lg p-3 cursor-grab active:cursor-grabbing ${
+        isDragging && !dragging ? "opacity-30" : ""
+      } ${dragging ? "shadow-lg rotate-2" : "hover:border-sub"}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-medium text-ink truncate">
+          {deal.title}
+        </span>
+        {deal.valueEur != null && (
+          <span className="text-[11px] font-semibold text-ink whitespace-nowrap">
+            {formatEur(deal.valueEur)}
+          </span>
+        )}
+      </div>
+      {deal.contactId ? (
+        <Link
+          href={`/crm/${deal.contactId}`}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="text-xs text-sub mt-1 block truncate hover:text-ink hover:underline"
+        >
+          {deal.contactName || "(ohne Namen)"}
+          {deal.companyName ? ` · ${deal.companyName}` : ""}
+        </Link>
+      ) : (
+        <span className="text-xs text-sub mt-1 block">(kein Kontakt)</span>
+      )}
+    </div>
+  );
+}

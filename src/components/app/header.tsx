@@ -12,13 +12,13 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "Vertrieb",
     desc: "Lead-Recherche, Akquise und Cold-Outreach.",
   },
-  "/crm": {
-    title: "CRM",
-    desc: "Kontakte, Pipeline und Kommunikationshistorie.",
+  "/pipelines": {
+    title: "Pipelines",
+    desc: "Deals nach Pipelines und Phasen verwalten.",
   },
-  "/aufgaben": {
-    title: "Aufgaben",
-    desc: "Aufgaben, Anrufe, Termine und Follow-ups.",
+  "/crm": {
+    title: "Kontakte",
+    desc: "Alle Kontakte und ihre Kommunikationshistorie.",
   },
   "/kalender": {
     title: "Kalender",

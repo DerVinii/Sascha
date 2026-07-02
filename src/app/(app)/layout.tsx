@@ -1,6 +1,9 @@
 import { getActiveOrg } from "@/lib/server/active-org";
 import { Sidebar } from "@/components/app/sidebar";
 import { Header } from "@/components/app/header";
+import { db } from "@/db";
+import { pipelines } from "@/db/schema";
+import { eq, asc } from "drizzle-orm";
 
 // DB-gebundene App-Routes zur Laufzeit rendern (Live-Daten), nicht beim Build
 // statisch prerendern. Greift für das gesamte (app)-Segment.
@@ -12,6 +15,14 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const org = await getActiveOrg();
+
+  const sidebarPipelines = org
+    ? await db
+        .select({ id: pipelines.id, name: pipelines.name })
+        .from(pipelines)
+        .where(eq(pipelines.orgId, org.id))
+        .orderBy(asc(pipelines.position), asc(pipelines.createdAt))
+    : [];
 
   if (!org) {
     return (
@@ -37,7 +48,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
-      <Sidebar orgName={org.name} />
+      <Sidebar orgName={org.name} pipelines={sidebarPipelines} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header />
         <main className="flex-1 overflow-y-auto">{children}</main>

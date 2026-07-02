@@ -133,7 +133,7 @@ export default async function DashboardPage() {
     {
       label: "Termine gebucht",
       value: meetingsBooked.count,
-      href: "/crm?status=meeting_booked",
+      href: "/pipelines",
     },
     {
       label: "Offene Aufgaben",
@@ -143,7 +143,6 @@ export default async function DashboardPage() {
           ? `${overdueTasks.count} überfällig`
           : undefined,
       subAccent: overdueTasks.count > 0 ? "err" : undefined,
-      href: "/aufgaben",
     },
     {
       label: "Aktive Kontakte",
@@ -170,27 +169,41 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
-        {kpis.map((kpi) => (
-          <Link
-            key={kpi.label}
-            href={kpi.href}
-            className="rounded-xl border border-line bg-surface p-4 md:p-5 hover:border-sub transition group"
-          >
-            <div className="text-[11px] md:text-xs font-medium text-sub">
-              {kpi.label}
-            </div>
-            <div className="mt-1.5 md:mt-2 text-xl md:text-2xl font-semibold text-ink">
-              {kpi.value}
-            </div>
-            <div
-              className={`mt-1.5 md:mt-2 text-[10px] md:text-xs ${
-                kpi.subAccent === "err" ? "text-err" : "text-sub"
-              }`}
+        {kpis.map((kpi) => {
+          const content = (
+            <>
+              <div className="text-[11px] md:text-xs font-medium text-sub">
+                {kpi.label}
+              </div>
+              <div className="mt-1.5 md:mt-2 text-xl md:text-2xl font-semibold text-ink">
+                {kpi.value}
+              </div>
+              <div
+                className={`mt-1.5 md:mt-2 text-[10px] md:text-xs ${
+                  kpi.subAccent === "err" ? "text-err" : "text-sub"
+                }`}
+              >
+                {kpi.sub ?? (kpi.href ? "Details ansehen" : " ")}
+              </div>
+            </>
+          );
+          return kpi.href ? (
+            <Link
+              key={kpi.label}
+              href={kpi.href}
+              className="rounded-xl border border-line bg-surface p-4 md:p-5 hover:border-sub transition group"
             >
-              {kpi.sub ?? "Details ansehen"}
+              {content}
+            </Link>
+          ) : (
+            <div
+              key={kpi.label}
+              className="rounded-xl border border-line bg-surface p-4 md:p-5"
+            >
+              {content}
             </div>
-          </Link>
-        ))}
+          );
+        })}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -248,12 +261,6 @@ export default async function DashboardPage() {
                 Aufgaben mit Fälligkeit ≤ heute
               </div>
             </div>
-            <Link
-              href="/aufgaben"
-              className="text-xs text-sub hover:text-ink inline-flex items-center gap-1"
-            >
-              Alle <ArrowRight className="h-3 w-3" />
-            </Link>
           </div>
           {todayTasks.length === 0 ? (
             <p className="px-5 py-8 text-sm text-sub text-center">
@@ -277,12 +284,9 @@ export default async function DashboardPage() {
                       }`}
                     />
                     <div className="flex-1 min-w-0">
-                      <Link
-                        href="/aufgaben"
-                        className="text-sm font-medium text-ink hover:underline truncate block"
-                      >
+                      <div className="text-sm font-medium text-ink truncate">
                         {t.title}
-                      </Link>
+                      </div>
                       <div className="text-xs text-sub">
                         {t.dueDate ? formatDate(t.dueDate) : "ohne Datum"}
                         {contactName && t.contactId && (

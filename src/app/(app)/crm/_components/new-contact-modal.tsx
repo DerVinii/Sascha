@@ -5,7 +5,11 @@ import { X } from "lucide-react";
 import { createContactAction } from "../actions";
 import { STATUS_LABELS } from "@/components/crm/status-pill";
 
-export function NewContactModal() {
+export function NewContactModal({
+  trigger,
+}: {
+  trigger?: (open: () => void) => React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -18,12 +22,16 @@ export function NewContactModal() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition shrink-0"
-      >
-        + Neuer Kontakt
-      </button>
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="h-9 px-4 inline-flex items-center justify-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition shrink-0"
+        >
+          + Neuer Kontakt
+        </button>
+      )}
 
       {open && (
         <div
