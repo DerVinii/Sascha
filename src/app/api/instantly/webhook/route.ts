@@ -18,6 +18,7 @@ import {
   syncInstantlyEmails,
   upsertInstantlyEmails,
 } from "@/lib/server/instantly/sync";
+import { sendPushToOrg } from "@/lib/server/push";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,28 @@ export async function POST(req: NextRequest) {
       payload?.event_type,
       err,
     );
+  }
+
+  // Push-Benachrichtigung bei eingehenden Antworten (Lead reagiert).
+  try {
+    const eventType =
+      typeof payload?.event_type === "string" ? payload.event_type : "";
+    if (eventType.includes("reply")) {
+      const leadEmail =
+        typeof payload?.lead_email === "string" ? payload.lead_email : null;
+      const campaign =
+        typeof payload?.campaign_name === "string"
+          ? payload.campaign_name
+          : null;
+      await sendPushToOrg(org.id, {
+        title: "Neue Antwort von einem Lead",
+        body: [leadEmail, campaign].filter(Boolean).join(" · ") || "Im Postfach ansehen",
+        url: "/postfach/unibox",
+        tag: "instantly-reply",
+      });
+    }
+  } catch (err) {
+    console.error("instantly-webhook: Push fehlgeschlagen", err);
   }
 
   revalidatePath("/postfach/unibox");

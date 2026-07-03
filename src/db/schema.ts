@@ -546,3 +546,22 @@ export const auditLog = pgTable(
     index("audit_log_entity_idx").on(t.entity, t.entityId),
   ],
 );
+
+// Web-Push-Abos pro Gerät/Browser (Benachrichtigungen z. B. bei neuem Lead).
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("push_subscriptions_org_idx").on(t.orgId)],
+);

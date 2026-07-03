@@ -7,6 +7,7 @@ import {
   Tags,
   Database,
   SunMoon,
+  Bell,
 } from "lucide-react";
 
 const ITEMS = [
@@ -16,6 +17,11 @@ const ITEMS = [
     icon: TextCursorInput,
   },
   { href: "/einstellungen/tags", label: "Tags", icon: Tags },
+  {
+    href: "/einstellungen/benachrichtigungen",
+    label: "Benachrichtigungen",
+    icon: Bell,
+  },
   { href: "/einstellungen/daten", label: "Daten", icon: Database },
   { href: "/einstellungen/darstellung", label: "Darstellung", icon: SunMoon },
 ];

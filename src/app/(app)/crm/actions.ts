@@ -7,6 +7,7 @@ import { contacts, companies, tags } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
 import { getOrgSettings } from "@/lib/server/org-settings";
+import { sendPushToOrg } from "@/lib/server/push";
 import {
   parseContactFieldDefs,
   type ContactFieldValue,
@@ -90,6 +91,19 @@ export async function createContactAction(formData: FormData) {
       tags,
     })
     .returning({ id: contacts.id });
+
+  // Push-Benachrichtigung „Neuer Lead" (best-effort, bricht nie ab).
+  const leadName =
+    [firstName, lastName].filter(Boolean).join(" ") ||
+    companyName ||
+    email ||
+    "Neuer Kontakt";
+  await sendPushToOrg(org.id, {
+    title: "Neuer Lead",
+    body: companyName ? `${leadName} · ${companyName}` : leadName,
+    url: `/crm/${inserted.id}`,
+    tag: `lead-${inserted.id}`,
+  });
 
   revalidatePath("/crm");
   redirect(`/crm/${inserted.id}`);
