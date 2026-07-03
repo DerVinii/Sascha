@@ -238,7 +238,7 @@ export default async function ContactDetailPage({
       {/* Stammdaten */}
       <div className="rounded-xl border border-line bg-surface p-5">
         <h2 className="text-sm font-semibold mb-3">Stammdaten</h2>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <Detail label="Status">
             <StatusPill status={contact.status} />
           </Detail>
@@ -246,7 +246,7 @@ export default async function ContactDetailPage({
             {contact.email ? (
               <a
                 href={`mailto:${contact.email}`}
-                className="text-info hover:underline"
+                className="text-info hover:underline break-all"
               >
                 {contact.email}
               </a>
@@ -268,7 +268,7 @@ export default async function ContactDetailPage({
             {formatDateTime(contact.lastContactAt)}
           </Detail>
           <Detail label="Angelegt">{formatDateTime(contact.createdAt)}</Detail>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <dt className="text-[11px] text-sub mb-1">Tags</dt>
             <dd>
               <TagsEditor
@@ -333,7 +333,7 @@ export default async function ContactDetailPage({
                     <div className="text-sm font-medium text-ink truncate">
                       {d.title}
                     </div>
-                    <div className="text-[11px] text-sub mt-0.5 flex items-center gap-1.5">
+                    <div className="text-[11px] text-sub mt-0.5 flex flex-wrap items-center gap-1.5">
                       <span
                         className="pill"
                         style={{

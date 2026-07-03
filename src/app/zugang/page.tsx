@@ -10,7 +10,7 @@ export default async function ZugangPage({
   const { fehler, next } = await searchParams;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-bg px-4">
+    <main className="min-h-dvh flex items-center justify-center bg-bg px-4">
       <div className="max-w-sm w-full bg-surface border border-line rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand text-white font-bold text-sm">

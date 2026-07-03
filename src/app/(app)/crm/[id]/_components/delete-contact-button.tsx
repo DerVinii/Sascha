@@ -17,7 +17,7 @@ export function DeleteContactButton({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="h-8 w-8 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition"
+        className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition"
         title="Lead löschen"
       >
         <Trash2 className="h-4 w-4" />

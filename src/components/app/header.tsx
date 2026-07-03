@@ -38,7 +38,7 @@ const TITLES: Record<string, { title: string; desc: string }> = {
   },
   "/einstellungen": {
     title: "Einstellungen",
-    desc: "Organisation, Team und externe Integrationen.",
+    desc: "Kontaktfelder, Tags, Daten und Darstellung.",
   },
 };
 
@@ -49,15 +49,18 @@ function matchTitle(pathname: string) {
   return { title: "", desc: "" };
 }
 
-export function Header() {
+export function Header({ mobileNav }: { mobileNav?: React.ReactNode }) {
   const pathname = usePathname();
   const { title, desc } = matchTitle(pathname);
 
   return (
     <header className="h-14 bg-surface border-b border-line flex items-center justify-between px-4 md:px-6 shrink-0">
-      <div className="min-w-0">
-        <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
-        <p className="text-[11px] text-sub hidden sm:block truncate">{desc}</p>
+      <div className="flex items-center gap-1.5 min-w-0">
+        {mobileNav}
+        <div className="min-w-0">
+          <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
+          <p className="text-[11px] text-sub hidden sm:block truncate">{desc}</p>
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <button

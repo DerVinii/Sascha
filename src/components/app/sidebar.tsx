@@ -40,12 +40,33 @@ const POSTFACH_SUB: { href: string; label: string }[] = [
 
 export type SidebarPipeline = { id: string; name: string };
 
+/** Desktop-Seitenleiste; auf Mobile übernimmt der Drawer (MobileNav) denselben Inhalt. */
 export function Sidebar({
   orgName,
   pipelines = [],
 }: {
   orgName: string;
   pipelines?: SidebarPipeline[];
+}) {
+  return (
+    <aside className="hidden md:flex md:w-60 flex-col bg-sidebar text-slate-300">
+      <SidebarContent orgName={orgName} pipelines={pipelines} />
+    </aside>
+  );
+}
+
+/**
+ * Kompletter Sidebar-Inhalt (Logo + Navigation) — geteilt zwischen
+ * Desktop-Aside und Mobile-Drawer. `onNavigate` schließt den Drawer.
+ */
+export function SidebarContent({
+  orgName,
+  pipelines = [],
+  onNavigate,
+}: {
+  orgName: string;
+  pipelines?: SidebarPipeline[];
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
@@ -54,8 +75,8 @@ export function Sidebar({
   }
 
   return (
-    <aside className="hidden md:flex md:w-60 flex-col bg-sidebar text-slate-300">
-      <div className="h-14 flex items-center px-4 border-b border-slate-800">
+    <>
+      <div className="h-14 shrink-0 flex items-center px-4 border-b border-slate-800">
         <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-700 text-white font-bold text-sm">
           SK
         </div>
@@ -71,12 +92,18 @@ export function Sidebar({
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         {TOP.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            onNavigate={onNavigate}
+          />
         ))}
 
         {/* Pipelines mit Unterpunkten (wie SalesSuite) */}
         <Link
           href="/pipelines"
+          onClick={onNavigate}
           className={cn(
             "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition",
             pathname === "/pipelines"
@@ -95,6 +122,7 @@ export function Sidebar({
                 <Link
                   key={p.id}
                   href={`/pipelines/${p.id}`}
+                  onClick={onNavigate}
                   className={cn(
                     "block px-3 py-1.5 rounded-md text-[13px] truncate transition",
                     active
@@ -111,19 +139,26 @@ export function Sidebar({
         )}
 
         {BOTTOM.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            onNavigate={onNavigate}
+          />
         ))}
 
         {/* Postfach mit Unterpunkten (Unibox + Sending-Accounts) */}
         <NavLink
           item={{ href: "/postfach", label: "Postfach", icon: Inbox }}
           active={isActive("/postfach")}
+          onNavigate={onNavigate}
         />
         <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-0.5">
           {POSTFACH_SUB.map((s) => (
             <Link
               key={s.href}
               href={s.href}
+              onClick={onNavigate}
               className={cn(
                 "block px-3 py-1.5 rounded-md text-[13px] truncate transition",
                 pathname === s.href
@@ -137,18 +172,32 @@ export function Sidebar({
         </div>
 
         {BOTTOM_AFTER_POSTFACH.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            onNavigate={onNavigate}
+          />
         ))}
       </nav>
-    </aside>
+    </>
   );
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition",
         active

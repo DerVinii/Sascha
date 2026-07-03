@@ -29,7 +29,7 @@ export function NewNoteForm({ contactId }: { contactId: string }) {
         <button
           type="submit"
           disabled={pending || !body.trim()}
-          className="h-7 px-3 text-xs bg-brand text-white rounded-md hover:bg-sidebar-soft transition disabled:opacity-50"
+          className="h-9 md:h-7 px-4 md:px-3 text-xs bg-brand text-white rounded-md hover:bg-sidebar-soft transition disabled:opacity-50"
         >
           {pending ? "Speichert …" : "Speichern"}
         </button>

@@ -1,5 +1,6 @@
 import { getActiveOrg } from "@/lib/server/active-org";
 import { Sidebar } from "@/components/app/sidebar";
+import { MobileNav } from "@/components/app/mobile-nav";
 import { Header } from "@/components/app/header";
 import { db } from "@/db";
 import { pipelines } from "@/db/schema";
@@ -26,7 +27,7 @@ export default async function AppLayout({
 
   if (!org) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <main className="min-h-dvh flex items-center justify-center bg-bg px-4">
         <div className="max-w-md w-full bg-surface border border-line rounded-xl p-6 text-center space-y-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-err/10 text-err font-bold text-lg mx-auto">
             !
@@ -47,10 +48,16 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
+    // h-dvh statt h-screen: berücksichtigt ein-/ausblendende Browser-Leisten
+    // auf dem Handy (100vh wäre dort höher als der sichtbare Bereich).
+    <div className="flex h-dvh overflow-hidden bg-bg">
       <Sidebar orgName={org.name} pipelines={sidebarPipelines} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
+        <Header
+          mobileNav={
+            <MobileNav orgName={org.name} pipelines={sidebarPipelines} />
+          }
+        />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

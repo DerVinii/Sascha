@@ -38,7 +38,7 @@ export function TagsEditor({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="relative flex flex-wrap items-center gap-1">
       {tags.map((t) => (
         <span
           key={t}
@@ -49,7 +49,7 @@ export function TagsEditor({
           <button
             onClick={() => save(tags.filter((x) => x !== t))}
             disabled={pending}
-            className="hover:opacity-60 disabled:opacity-40"
+            className="p-1.5 -m-1 inline-flex items-center justify-center hover:opacity-60 disabled:opacity-40"
             aria-label={`Tag ${t} entfernen`}
           >
             <X className="h-3 w-3" />
@@ -57,17 +57,17 @@ export function TagsEditor({
         </span>
       ))}
 
-      <div className="relative">
+      <div>
         <button
           onClick={() => setOpen((v) => !v)}
           disabled={pending}
-          className="pill bg-bg text-sub border border-line hover:text-ink hover:border-sub transition disabled:opacity-50"
+          className="pill min-h-[32px] px-2 bg-bg text-sub border border-line hover:text-ink hover:border-sub transition disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
           Tag
         </button>
         {open && (
-          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg w-48">
+          <div className="absolute z-10 top-full mt-1 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg w-48">
             {available.length === 0 ? (
               <p className="px-2 py-1.5 text-[11px] text-sub">
                 {orgTags.length === 0

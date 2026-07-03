@@ -159,7 +159,7 @@ export function ContactsTable({
 
       <div className="rounded-xl border border-line bg-surface">
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 p-3 border-b border-line">
+        <div className="relative flex flex-wrap items-center gap-2 p-3 border-b border-line">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-sub" />
             <input
@@ -179,7 +179,7 @@ export function ContactsTable({
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
 
-          <div className="relative">
+          <div>
             <button
               onClick={() => setColsOpen((v) => !v)}
               className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
@@ -188,10 +188,12 @@ export function ContactsTable({
               Spalten
             </button>
             {colsOpen && (
-              <div
-                className="absolute right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5"
-                onMouseLeave={() => setColsOpen(false)}
-              >
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setColsOpen(false)}
+                />
+                <div className="absolute right-2 top-full mt-1 z-20 w-48 max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-md shadow-lg p-1.5">
                 {allColumns.map((c) => (
                   <label
                     key={c.key}
@@ -207,11 +209,12 @@ export function ContactsTable({
                     {c.label}
                   </label>
                 ))}
-              </div>
+                </div>
+              </>
             )}
           </div>
 
-          <div className="relative">
+          <div>
             <button
               onClick={() => setMoreOpen((v) => !v)}
               className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
@@ -220,10 +223,12 @@ export function ContactsTable({
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {moreOpen && (
-              <div
-                className="absolute right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5"
-                onMouseLeave={() => setMoreOpen(false)}
-              >
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setMoreOpen(false)}
+                />
+                <div className="absolute right-2 top-full mt-1 z-20 w-48 max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-md shadow-lg p-1.5">
                 <a
                   href="/api/crm/export"
                   className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg"
@@ -231,7 +236,8 @@ export function ContactsTable({
                   <Download className="h-4 w-4" />
                   Als CSV exportieren
                 </a>
-              </div>
+                </div>
+              </>
             )}
           </div>
 
@@ -257,6 +263,7 @@ export function ContactsTable({
                     type="checkbox"
                     checked={rows.length > 0 && rows.every((r) => selected.has(r.id))}
                     onChange={toggleAll}
+                    className="h-5 w-5 md:h-4 md:w-4 accent-accent"
                     aria-label="Alle auswählen"
                   />
                 </th>
@@ -290,6 +297,7 @@ export function ContactsTable({
                           else next.delete(c.id);
                           setSelected(next);
                         }}
+                        className="h-5 w-5 md:h-4 md:w-4 accent-accent"
                         aria-label="Auswählen"
                       />
                     </td>
@@ -316,7 +324,7 @@ export function ContactsTable({
             <button
               disabled={safePage <= 1}
               onClick={() => setPage(safePage - 1)}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
+              className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -324,7 +332,7 @@ export function ContactsTable({
             <button
               disabled={safePage >= totalPages}
               onClick={() => setPage(safePage + 1)}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
+              className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

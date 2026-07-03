@@ -60,6 +60,17 @@
   body {
     @apply bg-bg text-ink font-sans;
   }
+
+  /* iOS zoomt beim Fokussieren in Inputs mit font-size < 16px in die Seite —
+     auf Touch-Breiten deshalb alle Formularfelder auf 16px anheben.
+     !important nötig: Utility-Klassen (text-sm/text-xs) hätten sonst Vorrang. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @layer components {

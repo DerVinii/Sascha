@@ -85,7 +85,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
             Kampagne erstellen
           </button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               autoFocus
               value={name}
@@ -98,7 +98,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
                 }
               }}
               placeholder="Name der Kampagne, z. B. Dachdecker München"
-              className="h-9 w-72 px-3 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
+              className="h-9 w-full sm:w-72 px-3 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
             />
             <button
               onClick={create}

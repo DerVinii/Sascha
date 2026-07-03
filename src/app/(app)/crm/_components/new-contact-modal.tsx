@@ -41,25 +41,28 @@ export function NewContactModal({
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+          <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl max-h-[calc(100dvh-2rem)] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
               <h3 className="text-sm font-semibold">Neuer Kontakt</h3>
               <button
                 onClick={() => setOpen(false)}
-                className="text-sub hover:text-ink"
+                className="h-9 w-9 -mr-2 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form action={handleSubmit} className="p-5 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+            <form
+              action={handleSubmit}
+              className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0 overscroll-contain"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field name="firstName" label="Vorname" />
                 <Field name="lastName" label="Nachname" />
               </div>
               <Field name="companyName" label="Firma" />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field name="email" label="E-Mail" type="email" />
                 <Field name="phone" label="Telefon" />
               </div>

@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCorners,
@@ -51,8 +52,14 @@ export function DealBoard({
     setItems(deals);
   }, [deals]);
 
+  // Getrennte Sensoren statt PointerSensor: Auf Touch startet der Drag erst
+  // nach kurzem Halten (delay), sonst bricht die native Scroll-Geste ihn ab —
+  // und Scrollen durch die Spalten bleibt möglich.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
   );
 
   const ordered = useMemo(
@@ -175,7 +182,7 @@ function Card({
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-surface border border-line rounded-lg p-3 cursor-grab active:cursor-grabbing ${
+      className={`bg-surface border border-line rounded-lg p-3 cursor-grab active:cursor-grabbing touch-manipulation ${
         isDragging && !dragging ? "opacity-30" : ""
       } ${dragging ? "shadow-lg rotate-2" : "hover:border-sub"}`}
     >

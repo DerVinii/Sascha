@@ -85,11 +85,11 @@ export function FieldsManager({ fields }: { fields: ContactFieldDef[] }) {
               key={`${f.key}:${f.label}:${(f.options ?? []).join("|")}:${f.showInTable}`}
               className="flex flex-wrap items-center gap-1.5 rounded-md border border-line bg-bg/40 px-2 py-1.5"
             >
-              <div className="flex flex-col">
+              <div className="flex md:flex-col">
                 <button
                   onClick={() => run(() => moveContactFieldAction(f.key, "up"))}
                   disabled={pending || idx === 0}
-                  className="text-sub hover:text-ink disabled:opacity-20"
+                  className="h-8 w-8 md:h-4 md:w-4 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-20"
                   aria-label="Nach oben"
                 >
                   <ArrowUp className="h-3 w-3" />
@@ -99,7 +99,7 @@ export function FieldsManager({ fields }: { fields: ContactFieldDef[] }) {
                     run(() => moveContactFieldAction(f.key, "down"))
                   }
                   disabled={pending || idx === fields.length - 1}
-                  className="text-sub hover:text-ink disabled:opacity-20"
+                  className="h-8 w-8 md:h-4 md:w-4 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-20"
                   aria-label="Nach unten"
                 >
                   <ArrowDown className="h-3 w-3" />
@@ -149,7 +149,7 @@ export function FieldsManager({ fields }: { fields: ContactFieldDef[] }) {
               )}
 
               <label
-                className="flex items-center gap-1.5 text-[11px] text-sub shrink-0 cursor-pointer"
+                className="flex min-h-9 items-center gap-1.5 text-[11px] text-sub shrink-0 cursor-pointer"
                 title="Als Spalte in der Kontakte-Tabelle anzeigen"
               >
                 <input
@@ -170,7 +170,7 @@ export function FieldsManager({ fields }: { fields: ContactFieldDef[] }) {
               <button
                 onClick={() => setConfirmDelete(f)}
                 disabled={pending}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
+                className="h-9 w-9 md:h-7 md:w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
                 aria-label={`Feld ${f.label} löschen`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -205,7 +205,7 @@ export function FieldsManager({ fields }: { fields: ContactFieldDef[] }) {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-1.5 text-[11px] text-sub shrink-0 cursor-pointer">
+          <label className="flex min-h-9 items-center gap-1.5 text-[11px] text-sub shrink-0 cursor-pointer">
             <input
               type="checkbox"
               checked={showInTable}

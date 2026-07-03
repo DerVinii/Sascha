@@ -16,6 +16,7 @@ import {
   Send,
   User,
   ChevronDown,
+  ChevronLeft,
 } from "lucide-react";
 import {
   INTEREST_OPTIONS,
@@ -247,8 +248,10 @@ export function UniboxView({
       )}
 
       <div className="flex-1 min-h-0 flex rounded-xl border border-line bg-surface overflow-hidden">
-        {/* Thread-Liste */}
-        <div className="w-full sm:w-80 md:w-96 shrink-0 border-r border-line flex flex-col">
+        {/* Thread-Liste — auf Mobile Master-Detail: Liste ODER Konversation */}
+        <div
+          className={`${selected ? "hidden sm:flex" : "flex"} w-full sm:w-80 md:w-96 shrink-0 border-r border-line flex-col`}
+        >
           <div className="p-3 border-b border-line space-y-2">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -257,14 +260,14 @@ export function UniboxView({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Suchen …"
-                  className="w-full h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
+                  className="w-full h-10 sm:h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
                 />
               </div>
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
                 title="Aktualisieren"
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
+                className="h-10 w-10 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
               >
                 <RefreshCw
                   className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
@@ -274,7 +277,7 @@ export function UniboxView({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setUnreadOnly((v) => !v)}
-                className={`h-7 px-2.5 rounded-md text-xs font-medium border transition ${
+                className={`h-10 sm:h-7 px-3 sm:px-2.5 rounded-md text-xs font-medium border transition ${
                   unreadOnly
                     ? "border-accent bg-accent-soft text-accent-ink"
                     : "border-line text-sub hover:text-ink"
@@ -286,7 +289,7 @@ export function UniboxView({
                 <select
                   value={campaignFilter}
                   onChange={(e) => setCampaignFilter(e.target.value)}
-                  className="h-7 flex-1 min-w-0 rounded-md border border-line bg-bg px-1.5 text-xs text-ink focus:outline-none"
+                  className="h-10 sm:h-7 flex-1 min-w-0 rounded-md border border-line bg-bg px-1.5 text-xs text-ink focus:outline-none"
                 >
                   <option value="">Alle Kampagnen</option>
                   {campaigns.map(([id, name]) => (
@@ -358,7 +361,9 @@ export function UniboxView({
         </div>
 
         {/* Konversation */}
-        <div className="hidden sm:flex flex-1 min-w-0 flex-col">
+        <div
+          className={`${selected ? "flex" : "hidden"} sm:flex flex-1 min-w-0 flex-col`}
+        >
           {!selected ? (
             <div className="flex-1 flex items-center justify-center text-sub text-sm">
               <div className="text-center">
@@ -368,8 +373,15 @@ export function UniboxView({
             </div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-3">
-                <div className="min-w-0">
+              <div className="px-3 sm:px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <button
+                  onClick={() => setSelectedKey(null)}
+                  className="sm:hidden h-9 w-9 -ml-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+                  aria-label="Zurück zur Liste"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-ink truncate">
                     {selected.latest.contactName ||
                       selected.latest.leadEmail ||
@@ -397,7 +409,7 @@ export function UniboxView({
                               : Number(e.target.value),
                           )
                         }
-                        className="h-8 appearance-none rounded-md border border-line bg-bg pl-2.5 pr-7 text-xs font-medium text-ink focus:outline-none"
+                        className="h-10 sm:h-8 appearance-none rounded-md border border-line bg-bg pl-2.5 pr-7 text-xs font-medium text-ink focus:outline-none"
                         title={interestLabel(
                           (selected.latestIncoming ?? selected.latest).iStatus,
                         )}
@@ -414,10 +426,10 @@ export function UniboxView({
                   {selected.latest.contactId && (
                     <Link
                       href={`/crm/${selected.latest.contactId}`}
-                      className="h-8 inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
+                      className="h-10 sm:h-8 inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
                     >
                       <User className="h-3.5 w-3.5" />
-                      Im CRM öffnen
+                      <span className="hidden md:inline">Im CRM öffnen</span><span className="md:hidden">CRM</span>
                     </Link>
                   )}
                 </div>
@@ -583,7 +595,7 @@ function MessageBody({
         <button
           type="button"
           onClick={() => setRemoteContent(true)}
-          className="mb-1.5 text-[11px] text-sub underline hover:text-ink"
+          className="mb-1.5 inline-flex items-center min-h-[36px] py-1.5 -my-1.5 text-[11px] text-sub underline hover:text-ink"
         >
           Externe Bilder laden
         </button>

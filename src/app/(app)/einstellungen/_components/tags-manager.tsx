@@ -94,16 +94,16 @@ export function TagsManager({
                   run(() => renameTagAction(t.id, v));
                 }}
                 disabled={pending}
-                className="flex-1 h-8 px-2 border border-line rounded-md text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="flex-1 min-w-0 h-8 px-2 border border-line rounded-md text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                 aria-label="Tag-Name"
               />
-              <span className="text-[11px] text-sub tabular-nums shrink-0 w-20 text-right">
-                {t.count} Kontakt{t.count === 1 ? "" : "e"}
+              <span className="text-[11px] text-sub tabular-nums shrink-0 whitespace-nowrap text-right">
+                {t.count}<span className="hidden sm:inline"> Kontakt{t.count === 1 ? "" : "e"}</span>
               </span>
               <button
                 onClick={() => setConfirmDelete(t)}
                 disabled={pending}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
+                className="h-9 w-9 md:h-7 md:w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
                 aria-label={`Tag ${t.name} löschen`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -128,7 +128,7 @@ export function TagsManager({
             onChange={(e) => setName(e.target.value)}
             placeholder="Tag-Name, z. B. Warm"
             maxLength={40}
-            className="flex-1 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            className="flex-1 min-w-0 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
           <button
             type="submit"
@@ -240,26 +240,29 @@ function ColorSwatch({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        className="h-6 w-6 rounded-full border border-line"
+        className="h-8 w-8 md:h-6 md:w-6 rounded-full border border-line"
         style={{ background: color ?? "#e2e8f0" }}
         aria-label="Farbe wählen"
       />
       {open && (
-        <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg grid grid-cols-5 gap-1 w-[140px]">
-          {STAGE_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                onSelect(c);
-                setOpen(false);
-              }}
-              className="h-5 w-5 rounded-full border border-line"
-              style={{ background: c }}
-              aria-label={c}
-            />
-          ))}
-        </div>
+        <>
+          <div className="fixed inset-0 z-[5]" onClick={() => setOpen(false)} />
+          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg grid grid-cols-5 gap-1.5 w-[170px] md:w-[140px]">
+            {STAGE_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  onSelect(c);
+                  setOpen(false);
+                }}
+                className="h-7 w-7 md:h-5 md:w-5 rounded-full border border-line"
+                style={{ background: c }}
+                aria-label={c}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
