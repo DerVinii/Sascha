@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { contacts, companies } from "@/db/schema";
+import { contacts, companies, tags } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
 import { getOrgSettings } from "@/lib/server/org-settings";
@@ -163,9 +163,24 @@ export async function updateContactTagsAction(
   tagNames: string[],
 ) {
   const org = await requireActiveOrg();
+  // Nur Namen zulassen, die verwaltet sind ODER bereits auf dem Kontakt
+  // stehen — ein veralteter Client-Snapshot (zweiter Tab) kann so keine
+  // umbenannten/gelöschten Tags wiederbeleben.
+  const [orgTags, [current]] = await Promise.all([
+    db.select({ name: tags.name }).from(tags).where(eq(tags.orgId, org.id)),
+    db
+      .select({ tags: contacts.tags })
+      .from(contacts)
+      .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)))
+      .limit(1),
+  ]);
+  if (!current) throw new Error("Kontakt nicht gefunden.");
+  const allowed = new Set([...orgTags.map((t) => t.name), ...current.tags]);
   const clean = [
     ...new Set(tagNames.map((t) => t.trim()).filter(Boolean)),
-  ].slice(0, 50);
+  ]
+    .filter((t) => allowed.has(t))
+    .slice(0, 50);
   await db
     .update(contacts)
     .set({ tags: clean })

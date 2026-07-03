@@ -249,13 +249,24 @@ async function orgTag(tagId: string, orgId: string) {
   return row ?? null;
 }
 
-async function tagNameExists(orgId: string, name: string): Promise<boolean> {
+async function tagNameExists(
+  orgId: string,
+  name: string,
+  exceptTagId?: string,
+): Promise<boolean> {
   const rows = await db
-    .select({ name: tags.name })
+    .select({ id: tags.id, name: tags.name })
     .from(tags)
     .where(eq(tags.orgId, orgId));
   const lower = name.toLowerCase();
-  return rows.some((r) => r.name.toLowerCase() === lower);
+  return rows.some(
+    (r) => r.id !== exceptTagId && r.name.toLowerCase() === lower,
+  );
+}
+
+/** array_replace + Dedupe (Reihenfolge nicht signifikant) für contacts.tags. */
+function replacedDedupedTags(oldName: string, newName: string) {
+  return sql`(SELECT coalesce(array_agg(DISTINCT t), '{}'::text[]) FROM unnest(array_replace(${contacts.tags}, ${oldName}::text, ${newName}::text)) AS u(t))`;
 }
 
 function revalidateTagViews() {
@@ -285,7 +296,8 @@ export async function renameTagAction(tagId: string, name: string) {
   if (!tag) throw new Error("Tag nicht gefunden.");
   const trimmed = name.trim();
   if (!trimmed || trimmed === tag.name) return;
-  if (await tagNameExists(org.id, trimmed)) {
+  // exceptTagId: reine Groß-/Kleinschreibungs-Korrekturen zulassen.
+  if (await tagNameExists(org.id, trimmed, tagId)) {
     throw new Error(`Tag "${trimmed}" existiert bereits.`);
   }
   await db.transaction(async (tx) => {
@@ -293,12 +305,11 @@ export async function renameTagAction(tagId: string, name: string) {
       .update(tags)
       .set({ name: trimmed })
       .where(and(eq(tags.id, tagId), eq(tags.orgId, org.id)));
-    // Tag-Namen stehen denormalisiert in contacts.tags (text[]).
+    // Tag-Namen stehen denormalisiert in contacts.tags (text[]). Dedupe,
+    // falls der neue Name dort bereits (unverwaltet) vorkommt.
     await tx
       .update(contacts)
-      .set({
-        tags: sql`array_replace(${contacts.tags}, ${tag.name}::text, ${trimmed}::text)`,
-      })
+      .set({ tags: replacedDedupedTags(tag.name, trimmed) })
       .where(
         and(
           eq(contacts.orgId, org.id),
@@ -306,6 +317,44 @@ export async function renameTagAction(tagId: string, name: string) {
         ),
       );
   });
+  revalidateTagViews();
+}
+
+/**
+ * Übernimmt einen auf Kontakten gefundenen, unverwalteten Tag in die
+ * Verwaltung. Existiert bereits ein Tag mit anderer Groß-/Kleinschreibung,
+ * werden die Kontakte auf die verwaltete Schreibweise migriert.
+ */
+export async function adoptUnmanagedTagAction(name: string, color: string) {
+  const org = await requireActiveOrg();
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const rows = await db
+    .select({ id: tags.id, name: tags.name })
+    .from(tags)
+    .where(eq(tags.orgId, org.id));
+  const existing = rows.find(
+    (r) => r.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (!existing) {
+    await db.insert(tags).values({
+      orgId: org.id,
+      name: trimmed,
+      color: color || null,
+      scope: "contact",
+    });
+  } else if (existing.name !== trimmed) {
+    // Case-Variante: Kontakte auf die verwaltete Schreibweise umziehen.
+    await db
+      .update(contacts)
+      .set({ tags: replacedDedupedTags(trimmed, existing.name) })
+      .where(
+        and(
+          eq(contacts.orgId, org.id),
+          sql`${trimmed}::text = ANY(${contacts.tags})`,
+        ),
+      );
+  }
   revalidateTagViews();
 }
 

@@ -13,6 +13,11 @@ import {
   Settings,
 } from "lucide-react";
 import { NewContactModal } from "./new-contact-modal";
+import {
+  formatFieldDate,
+  type ContactFieldType,
+  type ContactFieldValue,
+} from "@/lib/contact-fields";
 
 export type ContactRow = {
   id: string;
@@ -22,53 +27,102 @@ export type ContactRow = {
   email: string | null;
   companyName: string | null;
   domain: string | null;
+  tags: string[];
+  /** Werte der individuellen Felder (custom_fields.fields). */
+  custom: Record<string, ContactFieldValue>;
 };
 
-const ALL_COLUMNS = [
+export type CustomColumn = {
+  key: string;
+  label: string;
+  type: ContactFieldType;
+};
+
+const STANDARD_COLUMNS = [
   { key: "firstName", label: "Vorname" },
   { key: "lastName", label: "Nachname" },
   { key: "phone", label: "Telefon" },
   { key: "email", label: "E-Mail" },
   { key: "companyName", label: "Firmenname" },
   { key: "domain", label: "Webseite" },
-] as const;
+  { key: "tags", label: "Tags" },
+];
 
-type ColKey = (typeof ALL_COLUMNS)[number]["key"];
+/** Custom-Field-Spalten bekommen ein Präfix, damit sie nie mit Standard-Keys kollidieren. */
+const CF_PREFIX = "cf_";
 
 const BLUE =
-  "bg-[#2563eb] hover:bg-[#1d4ed8] text-white";
+  "bg-accent hover:bg-accent-hover text-white";
 
-export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
+export function ContactsTable({
+  contacts,
+  customColumns,
+  tagColors,
+}: {
+  contacts: ContactRow[];
+  customColumns: CustomColumn[];
+  tagColors: Record<string, string | null>;
+}) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
-  const [visible, setVisible] = useState<Record<ColKey, boolean>>({
-    firstName: true,
-    lastName: true,
-    phone: true,
-    email: true,
-    companyName: true,
-    domain: true,
-  });
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [colsOpen, setColsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const allColumns = useMemo(
+    () => [
+      ...STANDARD_COLUMNS,
+      ...customColumns.map((c) => ({
+        key: `${CF_PREFIX}${c.key}`,
+        label: c.label,
+      })),
+    ],
+    [customColumns],
+  );
+
+  const customTypes = useMemo(
+    () =>
+      Object.fromEntries(customColumns.map((c) => [c.key, c.type])) as Record<
+        string,
+        ContactFieldType
+      >,
+    [customColumns],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return contacts;
     return contacts.filter((c) =>
-      [c.firstName, c.lastName, c.email, c.phone, c.companyName]
+      [
+        c.firstName,
+        c.lastName,
+        c.email,
+        c.phone,
+        c.companyName,
+        c.tags.join(" "),
+        // Custom-Werte typbewusst: Checkboxen nicht durchsuchen ("false"
+        // wäre ein Falsch-Treffer), Datumsfelder auch im Anzeigeformat.
+        ...customColumns.map((col) => {
+          const v = c.custom[col.key];
+          if (v == null || col.type === "checkbox") return "";
+          if (col.type === "date")
+            return `${String(v)} ${formatFieldDate(String(v))}`;
+          return String(v);
+        }),
+      ]
         .filter(Boolean)
         .some((v) => (v as string).toLowerCase().includes(q)),
     );
-  }, [contacts, query]);
+  }, [contacts, query, customColumns]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
   const rows = filtered.slice(start, start + perPage);
-  const cols = ALL_COLUMNS.filter((c) => visible[c.key]);
+  // Neue Spalten (z. B. frisch angelegte Custom Fields) sind standardmäßig sichtbar.
+  const cols = allColumns.filter((c) => visible[c.key] ?? true);
 
   function toggleAll() {
     if (rows.every((r) => selected.has(r.id))) {
@@ -95,7 +149,7 @@ export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
           </h2>
         </div>
         <Link
-          href="/einstellungen"
+          href="/einstellungen/kontaktfelder"
           className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
         >
           <Settings className="h-4 w-4" />
@@ -115,7 +169,7 @@ export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
                 setPage(1);
               }}
               placeholder="Suche"
-              className="w-full h-9 pl-8 pr-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+              className="w-full h-9 pl-8 pr-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             />
           </div>
 
@@ -138,14 +192,14 @@ export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
                 className="absolute right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5"
                 onMouseLeave={() => setColsOpen(false)}
               >
-                {ALL_COLUMNS.map((c) => (
+                {allColumns.map((c) => (
                   <label
                     key={c.key}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer"
                   >
                     <input
                       type="checkbox"
-                      checked={visible[c.key]}
+                      checked={visible[c.key] ?? true}
                       onChange={(e) =>
                         setVisible((v) => ({ ...v, [c.key]: e.target.checked }))
                       }
@@ -241,7 +295,12 @@ export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
                     </td>
                     {cols.map((col) => (
                       <td key={col.key} className="px-4 py-3 whitespace-nowrap">
-                        <CellValue contact={c} col={col.key} />
+                        <CellValue
+                          contact={c}
+                          col={col.key}
+                          customTypes={customTypes}
+                          tagColors={tagColors}
+                        />
                       </td>
                     ))}
                   </tr>
@@ -300,7 +359,26 @@ export function ContactsTable({ contacts }: { contacts: ContactRow[] }) {
   );
 }
 
-function CellValue({ contact, col }: { contact: ContactRow; col: ColKey }) {
+function CellValue({
+  contact,
+  col,
+  customTypes,
+  tagColors,
+}: {
+  contact: ContactRow;
+  col: string;
+  customTypes: Record<string, ContactFieldType>;
+  tagColors: Record<string, string | null>;
+}) {
+  if (col.startsWith(CF_PREFIX)) {
+    return (
+      <CustomCellValue
+        value={contact.custom[col.slice(CF_PREFIX.length)] ?? null}
+        type={customTypes[col.slice(CF_PREFIX.length)]}
+      />
+    );
+  }
+
   switch (col) {
     case "firstName":
       return (
@@ -315,7 +393,7 @@ function CellValue({ contact, col }: { contact: ContactRow; col: ColKey }) {
       return <span className="text-ink">{contact.lastName || "—"}</span>;
     case "phone":
       return contact.phone ? (
-        <a href={`tel:${contact.phone}`} className="text-[#2563eb] hover:underline">
+        <a href={`tel:${contact.phone}`} className="text-accent-ink hover:underline">
           {contact.phone}
         </a>
       ) : (
@@ -348,5 +426,75 @@ function CellValue({ contact, col }: { contact: ContactRow; col: ColKey }) {
       ) : (
         <span className="text-sub">—</span>
       );
+    case "tags":
+      return contact.tags.length > 0 ? (
+        <span className="inline-flex flex-wrap gap-1 max-w-[260px]">
+          {contact.tags.map((t) => (
+            <span
+              key={t}
+              className="pill"
+              style={{
+                background: tagColors[t] ?? "#e2e8f0",
+                color: "#0f172a",
+              }}
+            >
+              {t}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="text-sub">—</span>
+      );
+    default:
+      return <span className="text-sub">—</span>;
+  }
+}
+
+function CustomCellValue({
+  value,
+  type,
+}: {
+  value: ContactFieldValue;
+  type: ContactFieldType | undefined;
+}) {
+  if (type === "checkbox") {
+    return value === true ? (
+      <span className="text-ok font-medium">✓</span>
+    ) : (
+      <span className="text-sub">—</span>
+    );
+  }
+  if (value == null || value === "") {
+    return <span className="text-sub">—</span>;
+  }
+  switch (type) {
+    case "url": {
+      const href = String(value);
+      return (
+        <a
+          href={href.startsWith("http") ? href : `https://${href}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sub hover:text-ink hover:underline"
+        >
+          {href}
+        </a>
+      );
+    }
+    case "phone":
+      return (
+        <a
+          href={`tel:${String(value)}`}
+          className="text-accent-ink hover:underline"
+        >
+          {String(value)}
+        </a>
+      );
+    case "date":
+      return <span className="text-ink">{formatFieldDate(String(value))}</span>;
+    case "number":
+      return <span className="text-ink tabular-nums">{String(value)}</span>;
+    default:
+      return <span className="text-ink">{String(value)}</span>;
   }
 }

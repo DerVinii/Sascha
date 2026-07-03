@@ -12,9 +12,15 @@ import {
   pipelines,
   pipelineStages,
   deals,
+  tags,
 } from "@/db/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
+import { getOrgSettings } from "@/lib/server/org-settings";
+import {
+  parseContactFieldDefs,
+  parseContactFieldValues,
+} from "@/lib/contact-fields";
 import { StatusPill, STATUS_LABELS } from "@/components/crm/status-pill";
 import { updateContactStatusAction, deleteContactAction } from "../actions";
 import { formatEur } from "@/lib/pipeline-templates";
@@ -24,6 +30,8 @@ import type { ContactStatus } from "../actions";
 import { StatusSelect } from "./_components/status-select";
 import { NewNoteForm } from "./_components/new-note-form";
 import { DeleteContactButton } from "./_components/delete-contact-button";
+import { CustomFieldsEditor } from "./_components/custom-fields-editor";
+import { TagsEditor } from "./_components/tags-editor";
 import { NewDealModal } from "../_components/new-deal-modal";
 
 function formatDateTime(d: Date | null) {
@@ -55,6 +63,7 @@ export default async function ContactDetailPage({
       status: contacts.status,
       source: contacts.source,
       tags: contacts.tags,
+      customFields: contacts.customFields,
       lastContactAt: contacts.lastContactAt,
       createdAt: contacts.createdAt,
       companyId: contacts.companyId,
@@ -66,6 +75,18 @@ export default async function ContactDetailPage({
     .limit(1);
 
   if (!contact) notFound();
+
+  // Individuelle Felder (Definitionen der Org + Werte dieses Kontakts) & Tags
+  const [orgSettings, orgTags] = await Promise.all([
+    getOrgSettings(org.id),
+    db
+      .select({ name: tags.name, color: tags.color })
+      .from(tags)
+      .where(eq(tags.orgId, org.id))
+      .orderBy(asc(tags.name)),
+  ]);
+  const fieldDefs = parseContactFieldDefs(orgSettings);
+  const fieldValues = parseContactFieldValues(contact.customFields);
 
   const fullName =
     [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
@@ -247,23 +268,30 @@ export default async function ContactDetailPage({
             {formatDateTime(contact.lastContactAt)}
           </Detail>
           <Detail label="Angelegt">{formatDateTime(contact.createdAt)}</Detail>
-          {contact.tags.length > 0 && (
-            <div className="col-span-2">
-              <dt className="text-[11px] text-sub mb-1">Tags</dt>
-              <dd className="flex flex-wrap gap-1">
-                {contact.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-bg text-sub"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          )}
+          <div className="col-span-2">
+            <dt className="text-[11px] text-sub mb-1">Tags</dt>
+            <dd>
+              <TagsEditor
+                contactId={id}
+                tags={contact.tags}
+                orgTags={orgTags}
+              />
+            </dd>
+          </div>
         </dl>
       </div>
+
+      {/* Individuelle Felder */}
+      {fieldDefs.length > 0 && (
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <h2 className="text-sm font-semibold mb-3">Individuelle Felder</h2>
+          <CustomFieldsEditor
+            contactId={id}
+            defs={fieldDefs}
+            values={fieldValues}
+          />
+        </div>
+      )}
 
       {/* Deals */}
       <div className="rounded-xl border border-line bg-surface p-5">
