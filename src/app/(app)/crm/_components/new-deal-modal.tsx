@@ -140,7 +140,7 @@ export function NewDealModal({
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line sticky top-0 bg-surface">
               <h3 className="text-sm font-semibold">Neuer Deal</h3>
               <button

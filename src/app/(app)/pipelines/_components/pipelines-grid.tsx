@@ -39,7 +39,7 @@ export function PipelinesGrid({ pipelines }: { pipelines: GridPipeline[] }) {
 
   return (
     <div className="p-4 md:p-6 space-y-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-semibold text-ink">Pipelines</h2>
         <div className="flex items-center gap-2">
           <span className="h-9 px-3 inline-flex items-center rounded-md border border-warn/40 bg-warn/10 text-[13px] font-medium text-warn">
@@ -111,7 +111,7 @@ function PipelineCard({
           <Filter className="h-5 w-5" />
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           {reordering ? (
             <>
               <button
@@ -120,7 +120,7 @@ function PipelineCard({
                   onMove("up");
                 }}
                 disabled={disabled || isFirst}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-30"
+                className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-30"
                 aria-label="Nach oben"
               >
                 <ArrowUp className="h-4 w-4" />
@@ -131,7 +131,7 @@ function PipelineCard({
                   onMove("down");
                 }}
                 disabled={disabled || isLast}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-30"
+                className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-30"
                 aria-label="Nach unten"
               >
                 <ArrowDown className="h-4 w-4" />
@@ -149,7 +149,7 @@ function PipelineCard({
                     e.stopPropagation();
                     open();
                   }}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink transition"
+                  className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink transition"
                   aria-label="Pipeline-Einstellungen"
                 >
                   <Settings className="h-4 w-4" />
@@ -205,12 +205,12 @@ function NewPipelineCard() {
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-md shadow-xl">
+          <div className="bg-surface rounded-xl w-full max-w-md shadow-xl max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="text-sm font-semibold">Neue Pipeline</h3>
               <button
                 onClick={() => setOpen(false)}
-                className="text-sub hover:text-ink"
+                className="h-9 w-9 -mr-2 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />

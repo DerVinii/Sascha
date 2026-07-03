@@ -201,26 +201,29 @@ export function PipelineDetail({
               Spalten
             </button>
             {colsOpen && (
-              <div
-                className="absolute right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5"
-                onMouseLeave={() => setColsOpen(false)}
-              >
-                {COLS.map((c) => (
-                  <label
-                    key={c.key}
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={visible[c.key]}
-                      onChange={(e) =>
-                        setVisible((v) => ({ ...v, [c.key]: e.target.checked }))
-                      }
-                    />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setColsOpen(false)}
+                />
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5">
+                  {COLS.map((c) => (
+                    <label
+                      key={c.key}
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visible[c.key]}
+                        onChange={(e) =>
+                          setVisible((v) => ({ ...v, [c.key]: e.target.checked }))
+                        }
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
@@ -291,7 +294,7 @@ export function PipelineDetail({
                       setActiveStageId(s.id);
                       setPage(1);
                     }}
-                    className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition inline-flex items-center gap-2 ${
+                    className={`shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition inline-flex items-center gap-2 ${
                       active
                         ? "border-accent text-ink"
                         : "border-transparent text-sub hover:text-ink"
@@ -363,7 +366,7 @@ export function PipelineDetail({
                 <button
                   disabled={safePage <= 1}
                   onClick={() => setPage(safePage - 1)}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
+                  className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -371,7 +374,7 @@ export function PipelineDetail({
                 <button
                   disabled={safePage >= totalPages}
                   onClick={() => setPage(safePage + 1)}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
+                  className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md border border-line hover:bg-bg disabled:opacity-40"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>

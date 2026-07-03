@@ -71,7 +71,7 @@ export function PipelineManagerModal({
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-xl shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface rounded-xl w-full max-w-xl shadow-xl max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line sticky top-0 bg-surface">
               <h3 className="text-sm font-semibold">Pipeline verwalten</h3>
               <button
@@ -216,11 +216,11 @@ function StageRow({
 
   return (
     <li className="flex items-center gap-1.5 rounded-md border border-line bg-bg/40 px-2 py-1.5">
-      <div className="flex flex-col">
+      <div className="flex md:flex-col">
         <button
           onClick={() => onMove("up")}
           disabled={disabled || isFirst}
-          className="text-sub hover:text-ink disabled:opacity-20"
+          className="h-8 w-8 md:h-4 md:w-4 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-20"
           aria-label="Nach oben"
         >
           <ArrowUp className="h-3 w-3" />
@@ -228,7 +228,7 @@ function StageRow({
         <button
           onClick={() => onMove("down")}
           disabled={disabled || isLast}
-          className="text-sub hover:text-ink disabled:opacity-20"
+          className="h-8 w-8 md:h-4 md:w-4 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-20"
           aria-label="Nach unten"
         >
           <ArrowDown className="h-3 w-3" />
@@ -279,7 +279,7 @@ function StageRow({
             ? `${stage.dealCount} Deal(s) – erst verschieben`
             : "Phase löschen"
         }
-        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
+        className="h-9 w-9 md:h-7 md:w-7 inline-flex items-center justify-center rounded-md text-err hover:bg-err/10 transition disabled:opacity-40"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
