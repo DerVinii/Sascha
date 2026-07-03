@@ -7,6 +7,8 @@
 
 > 🔧 **CRM-Nachbau gestartet (2026-06-28):** Die CRM-Sektion wird an Saschas aktuelles Tool **SalesSuite** angeglichen. Feature-Spec + Gap-Analyse: [`SALESSUITE_REFERENCE.md`](SALESSUITE_REFERENCE.md). **Fundament fertig:** Deals als eigene Ebene, Multi-Pipeline-Verwaltung, Deal-Kanban (Drag-Drop), Deals an Kontakten.
 
+> 📬 **Postfach live (2026-07-03):** Der Reiter Postfach ist an Instantly angebunden — **Unibox** (`/postfach/unibox`: Antworten aus Kampagnen lesen/beantworten, Gelesen-Status, Lead-Interest, Kontakt-Match ins CRM; gefüllt per `reply_received`-Webhook + Poll-Backfill) und **Sending-Accounts** (`/postfach/accounts`: Status/Warmup/Health, Pause/Resume). Plan & Architektur: [`POSTFACH_PLAN.md`](POSTFACH_PLAN.md). Outlook-Anbindung wartet auf Klärung des Postfach-Typs (Fall a/b/c, Plan §9). Watch-Item: Instantlys *Test*-Deliveries senden den `x-webhook-secret`-Header nicht mit (→ 401, erwartet); echte Deliveries laut Doku schon — beim ersten echten Reply in den Vercel-Logs gegenprüfen.
+
 > ⚠️ **Anmeldung entfernt (2026-06-05):** Die App läuft jetzt **ohne Login** auf einer festen Organisation und ist öffentlich live unter https://sascha-wyvernai.vercel.app. Auth (Magic-Link/Passwort) wurde komplett ausgebaut, die Vercel-Protection deaktiviert. Details unter „Tech-Debt → Sicherheit".
 
 ---

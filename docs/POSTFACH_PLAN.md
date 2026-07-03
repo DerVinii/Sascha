@@ -1,6 +1,6 @@
 # Postfach-Reiter: Implementierungsplan
 
-> Stand: 2026-07-03 · Status: **Plan fertig, wartet auf Credentials/Entscheidungen (siehe §9)**
+> Stand: 2026-07-03 · Status: **Instantly-Teil (Phasen 1+2) LIVE** — Unibox + Sending-Accounts deployed, `reply_received`-Webhook registriert (Header-Secret), Backfill-Pipeline in Prod verifiziert. **Outlook-Teil (Phasen 3–5) wartet auf §9** (Postfach-Typ + Credentials). Zugangsschutz (§7) weiterhin offen.
 > Recherche: 10 Agenten (Instantly-API, Microsoft Graph, Codebase, 4 gezielte Nachrecherchen), Quellen: developer.instantly.ai, learn.microsoft.com, vercel.com/docs + empirische API-Probes.
 
 ## 1. Ziel
