@@ -1,21 +1,148 @@
-import { CalendarDays } from "lucide-react";
+import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { db } from "@/db";
+import { activities, calendarEvents, contacts } from "@/db/schema";
+import { requireActiveOrg } from "@/lib/server/active-org";
+import {
+  addMonths,
+  parseMonthParam,
+  type CalendarEventType,
+  type CalendarItem,
+} from "@/lib/kalender";
+import { CalendarView } from "./_components/calendar-view";
 
 export const dynamic = "force-dynamic";
 
-export default function KalenderPage() {
+// CRM-Aktivitätstypen → Kalender-Typen (activity_type kennt follow_up/note).
+const ACTIVITY_TYPE_MAP: Record<string, CalendarEventType> = {
+  meeting: "meeting",
+  call: "call",
+  task: "task",
+  follow_up: "reminder",
+  note: "other",
+};
+
+function contactName(first: string | null, last: string | null): string | null {
+  const n = [first, last].filter(Boolean).join(" ").trim();
+  return n || null;
+}
+
+export default async function KalenderPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
+  const org = await requireActiveOrg();
+  const sp = await searchParams;
+  const today = new Date();
+  const { year, month } = parseMonthParam(sp.m, today);
+  const anchor = new Date(year, month, 1);
+
+  // Lade-Fenster: Ankermonat ±2 Monate (5 Monate) — der Client navigiert darin
+  // ohne Reload; außerhalb wird ?m= neu gesetzt und neu geladen.
+  const windowStart = addMonths(anchor, -2);
+  const windowEnd = addMonths(anchor, 3); // exklusiv: erster Tag Anker+3
+
+  const [eventRows, activityRows, contactRows] = await Promise.all([
+    db
+      .select({
+        id: calendarEvents.id,
+        title: calendarEvents.title,
+        type: calendarEvents.type,
+        startAt: calendarEvents.startAt,
+        endAt: calendarEvents.endAt,
+        allDay: calendarEvents.allDay,
+        location: calendarEvents.location,
+        description: calendarEvents.description,
+        contactId: calendarEvents.contactId,
+        contactFirst: contacts.firstName,
+        contactLast: contacts.lastName,
+      })
+      .from(calendarEvents)
+      .leftJoin(contacts, eq(calendarEvents.contactId, contacts.id))
+      .where(
+        and(
+          eq(calendarEvents.orgId, org.id),
+          gte(calendarEvents.startAt, windowStart),
+          lt(calendarEvents.startAt, windowEnd),
+        ),
+      ),
+    db
+      .select({
+        id: activities.id,
+        title: activities.title,
+        type: activities.type,
+        dueDate: activities.dueDate,
+        body: activities.body,
+        contactId: activities.contactId,
+        contactFirst: contacts.firstName,
+        contactLast: contacts.lastName,
+      })
+      .from(activities)
+      .leftJoin(contacts, eq(activities.contactId, contacts.id))
+      .where(
+        and(
+          eq(activities.orgId, org.id),
+          isNull(activities.completedAt),
+          gte(activities.dueDate, windowStart),
+          lt(activities.dueDate, windowEnd),
+        ),
+      ),
+    db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+      })
+      .from(contacts)
+      .where(eq(contacts.orgId, org.id))
+      .orderBy(desc(contacts.createdAt))
+      .limit(400),
+  ]);
+
+  const eventItems: CalendarItem[] = eventRows.map((r) => ({
+    id: r.id,
+    source: "event",
+    title: r.title,
+    type: r.type,
+    start: r.startAt.toISOString(),
+    end: r.endAt ? r.endAt.toISOString() : null,
+    allDay: r.allDay,
+    location: r.location,
+    description: r.description,
+    contactId: r.contactId,
+    contactName: contactName(r.contactFirst, r.contactLast),
+  }));
+
+  const activityItems: CalendarItem[] = activityRows
+    .filter((r) => r.dueDate)
+    .map((r) => ({
+      id: r.id,
+      source: "activity",
+      title: r.title,
+      type: ACTIVITY_TYPE_MAP[r.type] ?? "other",
+      // Aufgaben als Tagesmarker (ohne Uhrzeit) — Fälligkeit ist oft datumsgenau.
+      start: (r.dueDate as Date).toISOString(),
+      end: null,
+      allDay: true,
+      location: null,
+      description: r.body,
+      contactId: r.contactId,
+      contactName: contactName(r.contactFirst, r.contactLast),
+    }));
+
+  const items = [...eventItems, ...activityItems];
+
+  const contactOptions = contactRows.map((c) => ({
+    id: c.id,
+    name: contactName(c.firstName, c.lastName) ?? "(ohne Namen)",
+  }));
+
   return (
-    <div className="p-4 md:p-6">
-      <div className="rounded-xl border border-line bg-surface p-12 text-center">
-        <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-xl bg-bg text-sub">
-          <CalendarDays className="h-6 w-6" />
-        </div>
-        <h2 className="mt-4 text-base font-semibold text-ink">Kalender</h2>
-        <p className="mx-auto mt-1 max-w-md text-sm text-sub">
-          Termine, Meetings und gebuchte Calls im Überblick — bald an dieser
-          Stelle. Hier laufen künftig die Termine aus den Aufgaben und den
-          gebuchten Erstgesprächen zusammen.
-        </p>
-      </div>
-    </div>
+    <CalendarView
+      items={items}
+      contactOptions={contactOptions}
+      anchorMonth={`${year}-${String(month + 1).padStart(2, "0")}`}
+      todayIso={today.toISOString()}
+    />
   );
 }

@@ -440,6 +440,51 @@ export const notes = pgTable(
 );
 
 // ============================================================================
+// KALENDER (Termine — eigenständig, plus Overlay der CRM-Aktivitäten)
+// ============================================================================
+
+export const calendarEventTypeEnum = pgEnum("calendar_event_type", [
+  "meeting",
+  "call",
+  "task",
+  "reminder",
+  "other",
+]);
+
+/**
+ * Eigenständige Kalender-Termine (Meetings, Calls, Erinnerungen …). Ergänzt
+ * im Kalender-Reiter die read-only eingeblendeten CRM-Aktivitäten mit Fälligkeit.
+ * Zeiten liegen als timestamptz; die Tages-Zuordnung passiert im Client in der
+ * lokalen Zeitzone (Europe/Berlin).
+ */
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    type: calendarEventTypeEnum("type").default("meeting").notNull(),
+    location: text("location"),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }),
+    allDay: boolean("all_day").default(false).notNull(),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("calendar_events_org_idx").on(t.orgId),
+    index("calendar_events_start_idx").on(t.startAt),
+  ],
+);
+
+// ============================================================================
 // HOOKS für spätere Phasen (Schema angelegt, in Phase 1 ungenutzt)
 // ============================================================================
 
