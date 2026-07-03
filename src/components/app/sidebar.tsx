@@ -84,9 +84,6 @@ export function SidebarContent({
           <div className="text-sm font-semibold text-white leading-tight truncate">
             Kommandozentrale
           </div>
-          <div className="text-[10px] text-slate-400 leading-tight truncate">
-            {orgName}
-          </div>
         </div>
       </div>
 
