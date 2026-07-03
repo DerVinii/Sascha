@@ -168,7 +168,7 @@
 
 | # | PDF-Punkt | Status | Anmerkung |
 |---|---|---|---|
-| 9.1 | Mobile Optimierung | ✅ | Tailwind responsive überall (`md:` breakpoints) |
+| 9.1 | Mobile Optimierung | ✅ | Voll-Audit 2026-07-03: Burger-Menü + Nav-Drawer (vorher keine Navigation <768px), Unibox Master-Detail, Touch-Drag im Deal-Board (TouchSensor), iOS-Zoom-Fix (16px-Inputs), dvh statt vh, Touch-Ziele ≥36px, Modals mit Scroll |
 | 9.2 | Dunkelmodus | ✅ | `/einstellungen/darstellung` — Hell/Dunkel/System, Cookie-basiert ohne Flash; Token laufen über CSS-Variablen |
 | 9.3 | Globale Suche | ❌ 🔮 | Phase 4 — braucht Postgres Full-Text Search oder Typesense |
 | 9.4 | Favoriten & Schnellzugriffe | ❌ 🔮 | Phase 4 |
