@@ -43,19 +43,51 @@ const NOT_FOUND: EnrichmentResult = {
   found: false,
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function hasName(x: any): boolean {
+  return (
+    !!x &&
+    (String(x.Vorname ?? x.vorname ?? "NF").toUpperCase() !== "NF" ||
+      String(x.Nachname ?? x.nachname ?? "NF").toUpperCase() !== "NF")
+  );
+}
+
 function parseResult(raw: string): EnrichmentResult {
   try {
     const cleaned = raw
       .replace(/```json/gi, "")
       .replace(/```/g, "")
       .trim();
-    // Robust: erstes JSON-Objekt aus dem Text ziehen.
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(match ? match[0] : cleaned);
 
-    const vorname = String(parsed.Vorname ?? parsed.vorname ?? "NF").trim();
-    const nachname = String(parsed.Nachname ?? parsed.nachname ?? "NF").trim();
-    const email = String(parsed.email ?? parsed.Email ?? "NF").trim();
+    // Bei mehreren Geschäftsführer-Kandidaten liefert das Modell (trotz Prompt)
+    // manchmal ein JSON-Array statt eines Einzelobjekts. Erst Array probieren,
+    // dann Einzelobjekt — sonst würde ein greedy {…}-Match das Array zerreißen
+    // und ein echter Treffer fälschlich als "nicht gefunden" gewertet.
+    let parsed: unknown = null;
+    const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      try {
+        parsed = JSON.parse(arrMatch[0]);
+      } catch {
+        parsed = null;
+      }
+    }
+    if (parsed == null) {
+      const objMatch = cleaned.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(objMatch ? objMatch[0] : cleaned);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let person: any = parsed;
+    if (Array.isArray(parsed)) {
+      // erste Person mit echtem Namen, sonst das erste Element
+      person = parsed.find(hasName) ?? parsed[0] ?? {};
+    }
+    if (!person || typeof person !== "object") return NOT_FOUND;
+
+    const vorname = String(person.Vorname ?? person.vorname ?? "NF").trim();
+    const nachname = String(person.Nachname ?? person.nachname ?? "NF").trim();
+    const email = String(person.email ?? person.Email ?? "NF").trim();
 
     const found =
       vorname.toUpperCase() !== "NF" ||
