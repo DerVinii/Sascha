@@ -3,7 +3,9 @@
 > **Lebendige Dokumentation.** Quelle: [`CRM_Bildungsoperationssystem_Uebersicht.pdf`](CRM_Bildungsoperationssystem_Uebersicht.pdf) (Saschas PDF mit 12 Kategorien).
 > Diese Datei wird bei jedem Feature-Push aktualisiert.
 
-**Stand:** 2026-06-28 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
+**Stand:** 2026-07-03 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
+
+> ⚙️ **Einstellungen-Reiter ausgebaut (2026-07-03):** `/einstellungen` mit Unternavigation — **Organisation** (Name, Datenbestand), **Kontaktfelder** (Custom Fields, 7 Typen, Detail-Seite + Tabellen-Spalten), **Tags** (Verwaltung + Zuweisung + Migration unverwalteter Tags), **Integrationen** (Status + Verbindungstest Instantly/Places/Gemini), **Daten** (CSV-Exporte Kontakte/Firmen/Deals), **Darstellung** (Dunkelmodus Hell/Dunkel/System) und **Sicherheit** (Passwort-Gate, aktiv sobald Env `APP_PASSWORD` gesetzt ist). Plan: [`EINSTELLUNGEN_PLAN.md`](EINSTELLUNGEN_PLAN.md).
 
 > 🔧 **CRM-Nachbau gestartet (2026-06-28):** Die CRM-Sektion wird an Saschas aktuelles Tool **SalesSuite** angeglichen. Feature-Spec + Gap-Analyse: [`SALESSUITE_REFERENCE.md`](SALESSUITE_REFERENCE.md). **Fundament fertig:** Deals als eigene Ebene, Multi-Pipeline-Verwaltung, Deal-Kanban (Drag-Drop), Deals an Kontakten.
 
@@ -52,7 +54,7 @@
 | 1.8 | CSV-Import | ✅ | `/vertrieb` mit PapaParse, flexible Spaltennamen |
 | 1.9 | CSV-Export | ✅ | `/api/crm/export` mit optionalem `?status=`-Filter, UTF-8-BOM für Excel |
 | 1.10 | Dublettenerkennung | ✅ | E-Mail-basiert beim Import, case-insensitive |
-| 1.11 | Individuelle Kontaktfelder | ⚠️ | `custom_fields` JSONB-Spalte auf `contacts` + `companies` angelegt, **kein UI**. Schätzung: 8–12 h Aufwand |
+| 1.11 | Individuelle Kontaktfelder | ✅ | `/einstellungen/kontaktfelder` — Felddefinitionen (Text/Zahl/Datum/Auswahl/Checkbox/URL/Telefon), editierbar auf `/crm/[id]`, optional als Spalte in der Kontakte-Tabelle. Werte in `custom_fields.fields` |
 
 ---
 
@@ -64,7 +66,7 @@
 | 2.2 | Drag-and-Drop Deals | ✅ | Echte **Deals** werden per Drag-Drop zwischen Phasen bewegt (optimistisch + Rollback) |
 | 2.3 | Mehrere Pipelines | ✅ | Pipeline-Selector + „Neue Pipeline" (5 Vorlagen) + Phasen-Verwaltung (Name/Farbe/%/Reihenfolge) |
 | 2.4 | Deal-Tracking | ✅ | Deals mit `value_eur` + `expected_close`; Phasen-Wahrscheinlichkeit; Summen pro Phase/Pipeline. Verlust-Grund/Close-Datum-Automatik = später |
-| 2.5 | Aufgabenverwaltung | ✅ | `/aufgaben` mit 5 Typen (Aufgabe, Anruf, Termin, Follow-up, Notiz) |
+| 2.5 | Aufgabenverwaltung | ⚠️ | Reiter `/aufgaben` bewusst entfernt (2026-07-03). Activities-Schema bleibt; „Heute fällig" auf dem Dashboard |
 | 2.6 | Follow-Up-Management | ✅ | Activity-Typ `follow_up` + `due_date` |
 | 2.7 | Wiedervorlagen | ✅ | „Heute fällig" / „Überfällig" auf Aufgaben + Dashboard |
 | 2.8 | Abschlusswahrscheinlichkeiten | ⚠️ | `pipeline_stages.probability` + `deals.probability` in DB, **nicht im UI** sichtbar |
@@ -167,7 +169,7 @@
 | # | PDF-Punkt | Status | Anmerkung |
 |---|---|---|---|
 | 9.1 | Mobile Optimierung | ✅ | Tailwind responsive überall (`md:` breakpoints) |
-| 9.2 | Dunkelmodus | ❌ | Aufwand ~6 h, außerhalb Phase-1-Scope |
+| 9.2 | Dunkelmodus | ✅ | `/einstellungen/darstellung` — Hell/Dunkel/System, Cookie-basiert ohne Flash; Token laufen über CSS-Variablen |
 | 9.3 | Globale Suche | ❌ 🔮 | Phase 4 — braucht Postgres Full-Text Search oder Typesense |
 | 9.4 | Favoriten & Schnellzugriffe | ❌ 🔮 | Phase 4 |
 | 9.5 | Schnellstatus per Klick | ✅ | Inline Status-Select auf Detail-Page + Drag im Kanban |
@@ -219,7 +221,7 @@
 ## Tech-Debt & bekannte Verbesserungen
 
 ### 🐛 Sicherheit
-- **KEINE Anmeldung mehr — App ist komplett öffentlich.** Login/Auth wurde am 2026-06-05 entfernt; zusätzlich ist die Vercel Deployment Protection deaktiviert. Jeder mit der URL sieht und ändert alle CRM-/Kontaktdaten. Vor echtem Betrieb mit Sascha-Daten zwingend ein Zugriffsschutz nötig (Auth wieder rein, Vercel-Protection oder Passwortschutz).
+- **Passwort-Gate verfügbar, aber noch NICHT aktiv.** Seit 2026-07-03 existiert eine Middleware (`src/middleware.ts` + `/zugang`), die die gesamte App hinter ein Passwort legt — sie greift, sobald in Vercel die Env-Variable `APP_PASSWORD` gesetzt und redeployt wird (Anleitung: `/einstellungen/sicherheit`). Bis dahin ist die App weiterhin komplett öffentlich (Login wurde 2026-06-05 entfernt, Vercel-Protection deaktiviert). Webhook- und Selftest-Endpunkte sind vom Gate ausgenommen (eigene Tokens).
 - **Org-Auflösung ohne User:** `getActiveOrg()` nimmt die erste Org in der DB (optional `ACTIVE_ORG_ID`). Kein Request-bezogener Multi-Tenant-Schutz mehr; `assignee`/`author` werden nicht mehr gesetzt (null).
 - **Drizzle nutzt Direct-Connection (postgres role) → RLS wird BYPASSED.** Server-Actions filtern manuell via `requireActiveOrg()`. Vor Production-Launch: separate Application-Role mit aktiver RLS, oder Supabase-JS-Client für Read-Operations
 - **AV-Vertrag mit Sascha noch offen** — wer ist DSGVO-Verantwortlicher?

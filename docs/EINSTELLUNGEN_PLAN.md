@@ -1,8 +1,11 @@
 # Einstellungen — Ausbauplan
 
-> **Stand:** 2026-07-03 · Ersetzt den verlorenen Plan aus der gelöschten Vorsession.
-> Der Reiter existiert bisher nur als Platzhalter ([src/app/(app)/einstellungen/page.tsx](../src/app/(app)/einstellungen/page.tsx), „Phase 1 — kommt: Organisation, Team, Integrationen").
-> Der „Einstellungen"-Button oben in **Kontakte** verlinkt bereits hierher.
+> **Stand:** 2026-07-03 · **Phase A ist vollständig umgesetzt** (alle 5 Pakete, gleicher Tag).
+> Abweichungen von diesem Plan bei der Umsetzung:
+> - Tags: zusätzlich Nutzungszähler + Übernahme/Case-Migration unverwalteter Tags (aus Importen).
+> - Dunkelmodus: alle hartkodierten Blau-Werte wurden zu `accent`-Tokens; Fokus-Ringe app-weit von `ring-sidebar` auf `ring-accent` umgestellt (im Dunkelmodus sonst unsichtbar).
+> - Zugriffsschutz: aktiviert sich über die Vercel-Env-Variable `APP_PASSWORD` (Anleitung unter `/einstellungen/sicherheit`); Instantly-Webhook + Scrape-Selftest sind ausgenommen.
+> - Qualitätsprozess: adversarielles Review (5 Dimensionen, 3-fach-Verifikation je Finding) fand 12 echte Bugs, alle vor dem Push gefixt.
 
 ---
 
@@ -98,12 +101,10 @@ Größter offener Tech-Debt-Punkt: **Die App ist komplett öffentlich** (echte K
 
 ## Umsetzungsreihenfolge (Phase A)
 
-| # | Paket | Inhalt | Aufwand |
+| # | Paket | Inhalt | Status |
 |---|---|---|---|
-| 1 | **Shell + Organisation + Integrationen + Daten** | Unternav-Layout, Org-Name-Edit, Statuskarten mit Test-Buttons, Export-Bereich | ~4–6 h |
-| 2 | **Kontaktfelder** | Definitions-UI + Anzeige in Kontakt-Detail + Tabellen-Spalten | ~8–12 h |
-| 3 | **Tags** | CRUD + Zuweisung am Kontakt | ~3–4 h |
-| 4 | **Zugriffsschutz** | Middleware + Passwortseite + Sicherheits-Bereich | ~3–4 h |
-| 5 | **Dunkelmodus** | Token-Umbau auf CSS-Variablen + Toggle | ~6 h |
-
-Jedes Paket ist eigenständig deploybar (ein Push pro Paket). Reihenfolge 2↔4 tauschbar — Zugriffsschutz zuerst, wenn die öffentlichen Echtdaten drängen.
+| 1 | **Shell + Organisation + Integrationen + Daten** | Unternav-Layout, Org-Name-Edit, Statuskarten mit Test-Buttons, Export-Bereich | ✅ 2026-07-03 |
+| 2 | **Kontaktfelder** | Definitions-UI + Anzeige in Kontakt-Detail + Tabellen-Spalten | ✅ 2026-07-03 |
+| 3 | **Tags** | CRUD + Zuweisung am Kontakt + Migration unverwalteter Tags | ✅ 2026-07-03 |
+| 4 | **Zugriffsschutz** | Middleware + Passwortseite + Sicherheits-Bereich (`APP_PASSWORD` setzen!) | ✅ 2026-07-03 |
+| 5 | **Dunkelmodus** | Token-Umbau auf CSS-Variablen + Umschalter (Hell/Dunkel/System) | ✅ 2026-07-03 |
