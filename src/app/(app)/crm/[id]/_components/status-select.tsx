@@ -23,7 +23,7 @@ export function StatusSelect({
           await onChange(next);
         });
       }}
-      className="h-8 px-2 text-xs border border-line rounded-md bg-surface focus:outline-none focus:ring-2 focus:ring-sidebar/20"
+      className="h-8 px-2 text-xs border border-line rounded-md bg-surface focus:outline-none focus:ring-2 focus:ring-accent/30"
     >
       {Object.entries(STATUS_LABELS).map(([k, label]) => (
         <option key={k} value={k}>

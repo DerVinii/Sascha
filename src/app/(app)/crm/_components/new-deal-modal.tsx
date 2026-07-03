@@ -161,7 +161,7 @@ export function NewDealModal({
                   name="title"
                   autoFocus
                   placeholder={lockedContact?.name ?? "z. B. Coaching-Paket"}
-                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                 />
               </div>
 
@@ -187,7 +187,7 @@ export function NewDealModal({
                     value={contactSearch}
                     onChange={(e) => setContactSearch(e.target.value)}
                     placeholder="Kontakt suchen …"
-                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg mb-1 focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg mb-1 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   />
                   <select
                     value={contactId}
@@ -254,7 +254,7 @@ export function NewDealModal({
                     min="0"
                     step="100"
                     placeholder="0"
-                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   />
                 </div>
                 <div>
@@ -264,7 +264,7 @@ export function NewDealModal({
                   <input
                     name="expectedClose"
                     type="date"
-                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                    className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   />
                 </div>
               </div>

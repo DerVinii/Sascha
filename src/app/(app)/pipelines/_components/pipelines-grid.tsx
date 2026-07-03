@@ -107,7 +107,7 @@ function PipelineCard({
       }`}
     >
       <div className="flex items-start justify-between">
-        <div className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#dbeafe] text-[#2563eb]">
+        <div className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent-ink">
           <Filter className="h-5 w-5" />
         </div>
 
@@ -226,7 +226,7 @@ function NewPipelineCard() {
                   autoFocus
                   onChange={(e) => setName(e.target.value)}
                   placeholder="z. B. Kaltakquise Q3"
-                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                 />
               </div>
               <div>
@@ -258,7 +258,7 @@ function NewPipelineCard() {
                 <button
                   onClick={submit}
                   disabled={pending}
-                  className="h-9 px-4 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-md transition disabled:opacity-50"
+                  className="h-9 px-4 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition disabled:opacity-50"
                 >
                   {pending ? "Wird erstellt …" : "Anlegen"}
                 </button>

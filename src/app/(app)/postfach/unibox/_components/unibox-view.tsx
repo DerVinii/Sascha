@@ -257,7 +257,7 @@ export function UniboxView({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Suchen …"
-                  className="w-full h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-sidebar/40"
+                  className="w-full h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
                 />
               </div>
               <button
@@ -276,7 +276,7 @@ export function UniboxView({
                 onClick={() => setUnreadOnly((v) => !v)}
                 className={`h-7 px-2.5 rounded-md text-xs font-medium border transition ${
                   unreadOnly
-                    ? "border-[#2563eb] bg-[#dbeafe] text-[#1d4ed8]"
+                    ? "border-accent bg-accent-soft text-accent-ink"
                     : "border-line text-sub hover:text-ink"
                 }`}
               >
@@ -313,7 +313,7 @@ export function UniboxView({
                   onClick={() => selectThread(t)}
                   className={`w-full text-left px-3 py-2.5 border-b border-line/60 transition ${
                     selectedKey === t.key
-                      ? "bg-[#eff6ff]"
+                      ? "bg-accent-faint"
                       : "hover:bg-bg"
                   }`}
                 >
@@ -335,7 +335,7 @@ export function UniboxView({
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {t.unreadCount > 0 && (
-                      <span className="h-2 w-2 rounded-full bg-[#2563eb] shrink-0" />
+                      <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
                     )}
                     <span className="text-xs text-sub truncate">
                       {t.latest.subject || "(kein Betreff)"}
@@ -442,12 +442,12 @@ export function UniboxView({
                         selected.latestIncoming.eaccount ?? "…"
                       }`}
                       rows={3}
-                      className="flex-1 rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink placeholder:text-sub resize-none focus:outline-none focus:ring-1 focus:ring-sidebar/40"
+                      className="flex-1 rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink placeholder:text-sub resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
                     />
                     <button
                       onClick={handleSend}
                       disabled={isSending || !replyText.trim()}
-                      className="h-9 px-4 inline-flex items-center gap-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-md transition disabled:opacity-50"
+                      className="h-9 px-4 inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition disabled:opacity-50"
                     >
                       <Send className="h-3.5 w-3.5" />
                       {isSending ? "Sendet …" : "Senden"}
@@ -512,7 +512,7 @@ function MessageBubble({ message }: { message: UniboxMessage }) {
         className={`max-w-[85%] rounded-xl border px-3.5 py-2.5 ${
           incoming
             ? "bg-surface border-line"
-            : "bg-[#eff6ff] border-[#bfdbfe]"
+            : "bg-accent-faint border-accent-line"
         }`}
       >
         <div className="flex items-center justify-between gap-4 mb-1">

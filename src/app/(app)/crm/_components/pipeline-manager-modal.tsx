@@ -97,7 +97,7 @@ export function PipelineManagerModal({
                     if (v && v !== pipelineName)
                       run(() => renamePipeline(pipelineId, v));
                   }}
-                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                 />
               </div>
 
@@ -140,7 +140,7 @@ export function PipelineManagerModal({
                         setNewStage("");
                       }
                     }}
-                    className="flex-1 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+                    className="flex-1 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                   />
                   <button
                     onClick={() => {
@@ -268,7 +268,7 @@ function StageRow({
           if (v && v !== stage.name) onName(v);
         }}
         disabled={disabled}
-        className="flex-1 h-8 px-2 border border-line rounded-md text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+        className="flex-1 h-8 px-2 border border-line rounded-md text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
       />
 
       <button

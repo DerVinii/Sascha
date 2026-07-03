@@ -42,7 +42,7 @@ export type DetailDeal = {
   companyName: string | null;
 };
 
-const BLUE = "bg-[#2563eb] hover:bg-[#1d4ed8] text-white";
+const BLUE = "bg-accent hover:bg-accent-hover text-white";
 
 function fmtDateTime(iso: string | null) {
   if (!iso) return "—";
@@ -182,7 +182,7 @@ export function PipelineDetail({
                 setPage(1);
               }}
               placeholder="Suche"
-              className="w-full h-9 pl-8 pr-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+              className="w-full h-9 pl-8 pr-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             />
           </div>
 
@@ -293,14 +293,14 @@ export function PipelineDetail({
                     }}
                     className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition inline-flex items-center gap-2 ${
                       active
-                        ? "border-[#2563eb] text-ink"
+                        ? "border-accent text-ink"
                         : "border-transparent text-sub hover:text-ink"
                     }`}
                   >
                     {s.name}
                     <span
                       className={`text-[11px] rounded-full px-1.5 py-0.5 ${
-                        active ? "bg-[#dbeafe] text-[#2563eb]" : "bg-bg text-sub"
+                        active ? "bg-accent-soft text-accent-ink" : "bg-bg text-sub"
                       }`}
                     >
                       {countByStage.get(s.id) ?? 0}
@@ -433,7 +433,7 @@ function DealCell({
       return <span className="text-sub">{fmtDateTime(deal.createdAt)}</span>;
     case "phone":
       return deal.phone ? (
-        <a href={`tel:${deal.phone}`} className="text-[#2563eb] hover:underline">
+        <a href={`tel:${deal.phone}`} className="text-accent-ink hover:underline">
           {deal.phone}
         </a>
       ) : (

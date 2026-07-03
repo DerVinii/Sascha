@@ -3,6 +3,56 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * Farb-Token als RGB-Kanal-Tripel (Pflichtformat für die
+   * rgb(var(--x) / <alpha-value>)-Definitionen in tailwind.config.ts).
+   */
+  :root {
+    color-scheme: light;
+    --c-bg: 248 250 252; /* #f8fafc */
+    --c-surface: 255 255 255; /* #ffffff */
+    --c-ink: 15 23 42; /* #0f172a */
+    --c-sub: 100 116 139; /* #64748b */
+    --c-line: 226 232 240; /* #e2e8f0 */
+    --c-sidebar: 15 23 42; /* #0f172a */
+    --c-sidebar-soft: 30 41 59; /* #1e293b */
+    --c-brand: 15 23 42; /* #0f172a */
+    --c-ok: 16 185 129; /* #10b981 */
+    --c-warn: 245 158 11; /* #f59e0b */
+    --c-err: 225 29 72; /* #e11d48 */
+    --c-info: 14 165 233; /* #0ea5e9 */
+    --c-accent: 37 99 235; /* #2563eb */
+    --c-accent-hover: 29 78 216; /* #1d4ed8 */
+    --c-accent-ink: 37 99 235; /* #2563eb */
+    --c-accent-soft: 219 234 254; /* #dbeafe */
+    --c-accent-faint: 239 246 255; /* #eff6ff */
+    --c-accent-line: 191 219 254; /* #bfdbfe */
+  }
+
+  .dark {
+    color-scheme: dark;
+    --c-bg: 2 6 23; /* #020617 */
+    --c-surface: 15 23 42; /* #0f172a */
+    --c-ink: 241 245 249; /* #f1f5f9 */
+    --c-sub: 148 163 184; /* #94a3b8 */
+    --c-line: 30 41 59; /* #1e293b */
+    --c-sidebar: 2 6 23; /* #020617 */
+    --c-sidebar-soft: 30 41 59; /* #1e293b */
+    /* brand wird im Dunkelmodus blau — dunkles Slate wäre auf dunklen
+       Flächen unsichtbar, und alle brand-Buttons tragen weiße Schrift. */
+    --c-brand: 37 99 235; /* #2563eb */
+    --c-ok: 16 185 129;
+    --c-warn: 245 158 11;
+    --c-err: 225 29 72;
+    --c-info: 14 165 233;
+    --c-accent: 37 99 235; /* #2563eb */
+    --c-accent-hover: 59 130 246; /* #3b82f6 */
+    --c-accent-ink: 96 165 250; /* #60a5fa */
+    --c-accent-soft: 30 58 95; /* dunkles Blau */
+    --c-accent-faint: 23 37 60; /* noch dunkleres Blau */
+    --c-accent-line: 30 64 175; /* #1e40af */
+  }
+
   html,
   body {
     overflow-x: hidden;

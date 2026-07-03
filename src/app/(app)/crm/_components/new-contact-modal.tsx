@@ -136,7 +136,7 @@ function Field({
         type={type}
         name={name}
         placeholder={placeholder}
-        className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+        className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
       />
     </div>
   );

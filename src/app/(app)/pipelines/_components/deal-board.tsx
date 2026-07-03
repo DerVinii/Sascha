@@ -125,22 +125,24 @@ function Column({ stage, deals }: { stage: BoardStage; deals: BoardDeal[] }) {
         className="px-3 py-2 rounded-t-lg border-b-2 border-line flex items-center justify-between"
         style={{ background: stage.color ?? "#e2e8f0" }}
       >
+        {/* Feste dunkle Schrift: Der Hintergrund ist immer eine helle
+            Pastellfarbe aus der DB — text-ink würde im Dunkelmodus hell. */}
         <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wide text-ink truncate">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-900 truncate">
             {stage.name}
           </div>
-          <div className="text-[10px] text-ink/60">
+          <div className="text-[10px] text-slate-900/60">
             {formatEur(sum)}
           </div>
         </div>
-        <span className="text-[10px] bg-white/60 rounded-full px-1.5 py-0.5 shrink-0">
+        <span className="text-[10px] text-slate-900 bg-white/60 rounded-full px-1.5 py-0.5 shrink-0">
           {deals.length}
         </span>
       </div>
       <div
         ref={setNodeRef}
         className={`flex-1 min-h-[55vh] p-2 space-y-2 bg-bg/60 rounded-b-lg border border-t-0 border-line ${
-          isOver ? "bg-sidebar/5 ring-1 ring-inset ring-sidebar/20" : ""
+          isOver ? "bg-accent/10 ring-1 ring-inset ring-accent/40" : ""
         }`}
       >
         {deals.map((d) => (

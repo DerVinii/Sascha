@@ -23,7 +23,7 @@ export function NewNoteForm({ contactId }: { contactId: string }) {
         onChange={(e) => setBody(e.target.value)}
         rows={2}
         placeholder="Notiz hinzufügen …"
-        className="w-full text-sm px-3 py-2 border border-line rounded-md bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar resize-none"
+        className="w-full text-sm px-3 py-2 border border-line rounded-md bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent resize-none"
       />
       <div className="flex justify-end">
         <button

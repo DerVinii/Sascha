@@ -37,7 +37,7 @@ export function OrgNameForm({ initialName }: { initialName: string }) {
           setSaved(false);
         }}
         maxLength={80}
-        className="flex-1 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
+        className="flex-1 h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
         aria-label="Name der Organisation"
       />
       <button
