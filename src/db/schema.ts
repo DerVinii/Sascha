@@ -9,6 +9,7 @@ import {
   pgEnum,
   primaryKey,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 
 // ============================================================================
@@ -347,6 +348,74 @@ export const emailMessages = pgTable(
   (t) => [
     index("email_messages_thread_idx").on(t.threadId),
     index("email_messages_message_id_idx").on(t.messageId),
+  ],
+);
+
+/**
+ * Spiegel der Instantly-Unibox (Postfach-Reiter). Gefüllt per Webhook
+ * (reply_received) + Backfill-Poll; `id` ist die Instantly-Email-UUID.
+ * Empfangene Mails werden komplett gespiegelt, gesendete nur für Threads,
+ * die geöffnet/beantwortet wurden.
+ */
+export const instantlyEmails = pgTable(
+  "instantly_emails",
+  {
+    id: uuid("id").primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    threadId: uuid("thread_id"),
+    campaignId: uuid("campaign_id"),
+    campaignName: text("campaign_name"),
+    eaccount: text("eaccount"),
+    leadEmail: text("lead_email"),
+    direction: emailDirEnum("direction").notNull(),
+    subject: text("subject"),
+    bodyHtml: text("body_html"),
+    bodyText: text("body_text"),
+    contentPreview: text("content_preview"),
+    isUnread: boolean("is_unread").default(false).notNull(),
+    iStatus: integer("i_status"),
+    timestampCreated: timestamp("timestamp_created", {
+      withTimezone: true,
+    }).notNull(),
+    timestampEmail: timestamp("timestamp_email", {
+      withTimezone: true,
+    }).notNull(),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    raw: jsonb("raw").default({}).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("instantly_emails_org_idx").on(t.orgId),
+    index("instantly_emails_thread_idx").on(t.threadId),
+    index("instantly_emails_ts_idx").on(t.timestampEmail),
+    index("instantly_emails_lead_idx").on(t.leadEmail),
+  ],
+);
+
+/** Generische Sync-Cursor/Zustände (z. B. Instantly-Backfill-Cursor) je Org. */
+export const syncState = pgTable(
+  "sync_state",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("sync_state_org_idx").on(t.orgId),
+    // Ziel des ON-CONFLICT-Upserts in setSyncValue — Name wie in der Live-DB.
+    unique("sync_state_org_key_unique").on(t.orgId, t.key),
   ],
 );
 

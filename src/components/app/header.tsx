@@ -24,6 +24,14 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "Kalender",
     desc: "Termine, Meetings und gebuchte Calls im Überblick.",
   },
+  "/postfach/unibox": {
+    title: "Unibox",
+    desc: "Antworten aus den Instantly-Kampagnen lesen und beantworten.",
+  },
+  "/postfach/accounts": {
+    title: "Sending-Accounts",
+    desc: "Status, Warmup und Zustellbarkeit der Instantly-Postfächer.",
+  },
   "/postfach": {
     title: "Postfach",
     desc: "Antworten aus dem Cold-Outreach zentral beantworten.",

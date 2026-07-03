@@ -4,8 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { contacts, companies } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
+import { getOrgSettings } from "@/lib/server/org-settings";
+import {
+  parseContactFieldDefs,
+  type ContactFieldValue,
+} from "@/lib/contact-fields";
 
 export type ContactStatus =
   | "lead"
@@ -98,6 +103,72 @@ export async function updateContactStatusAction(
   await db
     .update(contacts)
     .set({ status })
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
+  revalidatePath("/crm");
+  revalidatePath(`/crm/${contactId}`);
+}
+
+/**
+ * Speichert den Wert EINES individuellen Feldes am Kontakt.
+ * Werte leben in contacts.custom_fields unter dem Namespace "fields" —
+ * atomarer jsonb-Merge, damit die Scraping-Namespaces (cells/enrichment/
+ * instantly) unangetastet bleiben.
+ */
+export async function updateContactFieldValueAction(
+  contactId: string,
+  key: string,
+  value: ContactFieldValue,
+) {
+  const org = await requireActiveOrg();
+  const defs = parseContactFieldDefs(await getOrgSettings(org.id));
+  const def = defs.find((d) => d.key === key);
+  if (!def) throw new Error("Unbekanntes Feld.");
+
+  let v: ContactFieldValue = null;
+  switch (def.type) {
+    case "checkbox":
+      v = value === true;
+      break;
+    case "number": {
+      const n = typeof value === "number" ? value : Number(value);
+      v = Number.isFinite(n) && value !== null && value !== "" ? n : null;
+      break;
+    }
+    case "select": {
+      const s = typeof value === "string" ? value.trim() : "";
+      v = s && (def.options ?? []).includes(s) ? s : null;
+      break;
+    }
+    default: {
+      // text | date | url | phone
+      const s = typeof value === "string" ? value.trim() : String(value ?? "");
+      v = s.slice(0, 500) || null;
+    }
+  }
+
+  const patch = JSON.stringify({ [key]: v });
+  await db
+    .update(contacts)
+    .set({
+      customFields: sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('fields', coalesce(${contacts.customFields} -> 'fields', '{}'::jsonb) || ${patch}::jsonb)`,
+    })
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
+
+  revalidatePath("/crm");
+  revalidatePath(`/crm/${contactId}`);
+}
+
+export async function updateContactTagsAction(
+  contactId: string,
+  tagNames: string[],
+) {
+  const org = await requireActiveOrg();
+  const clean = [
+    ...new Set(tagNames.map((t) => t.trim()).filter(Boolean)),
+  ].slice(0, 50);
+  await db
+    .update(contacts)
+    .set({ tags: clean })
     .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
   revalidatePath("/crm");
   revalidatePath(`/crm/${contactId}`);

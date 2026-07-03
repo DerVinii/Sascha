@@ -27,8 +27,15 @@ const TOP: NavItem[] = [
 
 const BOTTOM: NavItem[] = [
   { href: "/kalender", label: "Kalender", icon: CalendarDays },
-  { href: "/postfach", label: "Postfach", icon: Inbox },
+];
+
+const BOTTOM_AFTER_POSTFACH: NavItem[] = [
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
+];
+
+const POSTFACH_SUB: { href: string; label: string }[] = [
+  { href: "/postfach/unibox", label: "Unibox" },
+  { href: "/postfach/accounts", label: "Sending-Accounts" },
 ];
 
 export type SidebarPipeline = { id: string; name: string };
@@ -104,6 +111,32 @@ export function Sidebar({
         )}
 
         {BOTTOM.map((item) => (
+          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+        ))}
+
+        {/* Postfach mit Unterpunkten (Unibox + Sending-Accounts) */}
+        <NavLink
+          item={{ href: "/postfach", label: "Postfach", icon: Inbox }}
+          active={isActive("/postfach")}
+        />
+        <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-0.5">
+          {POSTFACH_SUB.map((s) => (
+            <Link
+              key={s.href}
+              href={s.href}
+              className={cn(
+                "block px-3 py-1.5 rounded-md text-[13px] truncate transition",
+                pathname === s.href
+                  ? "text-white font-medium"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              {s.label}
+            </Link>
+          ))}
+        </div>
+
+        {BOTTOM_AFTER_POSTFACH.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} />
         ))}
       </nav>

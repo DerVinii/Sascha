@@ -29,6 +29,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       Authorization: `Bearer ${apiKey()}`,
       "Content-Type": "application/json",
+      // Instantlys WAF blockt Requests ohne/mit generischem User-Agent (403).
+      "User-Agent": "sk-kommandozentrale/1.0",
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -178,6 +180,294 @@ export async function activateCampaign(id: string): Promise<void> {
     method: "POST",
     body: JSON.stringify({}),
   });
+}
+
+// --- Postfach: Accounts-Tracking --------------------------------------------
+
+export type InstantlyAccountFull = {
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  /** 1 Aktiv, 2 Pausiert, 3 Wartung, -1 Verbindungsfehler, -2 Soft-Bounce, -3 Sendefehler */
+  status: number | null;
+  statusMessage: string | null;
+  /** 1 Aktiv, 0 Pausiert, -1 Gesperrt, -2 Spam-Ordner, -3 Suspendiert */
+  warmupStatus: number | null;
+  warmupScore: number | null;
+  dailyLimit: number | null;
+  /** 1 IMAP/SMTP, 2 Google, 3 Microsoft, 4 AWS, 8 AirMail */
+  providerCode: number | null;
+  timestampCreated: string | null;
+  timestampLastUsed: string | null;
+};
+
+/** Absender-Postfächer mit allen Tracking-Feldern (paginiert). */
+export async function listAccountsFull(): Promise<InstantlyAccountFull[]> {
+  const out: InstantlyAccountFull[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (cursor) qs.set("starting_after", cursor);
+    const data = await call<{
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items?: any[];
+      next_starting_after?: string;
+    }>(`/accounts?${qs.toString()}`);
+    const items = data.items ?? [];
+    for (const a of items) {
+      out.push({
+        email: a.email,
+        firstName: a.first_name ?? null,
+        lastName: a.last_name ?? null,
+        status: typeof a.status === "number" ? a.status : null,
+        statusMessage: a.status_message?.e_message ?? null,
+        warmupStatus:
+          typeof a.warmup_status === "number" ? a.warmup_status : null,
+        warmupScore:
+          typeof a.stat_warmup_score === "number" ? a.stat_warmup_score : null,
+        dailyLimit: typeof a.daily_limit === "number" ? a.daily_limit : null,
+        providerCode:
+          typeof a.provider_code === "number" ? a.provider_code : null,
+        timestampCreated: a.timestamp_created ?? null,
+        timestampLastUsed: a.timestamp_last_used ?? null,
+      });
+    }
+    if (items.length < 100 || !data.next_starting_after) break;
+    cursor = data.next_starting_after;
+  }
+  return out;
+}
+
+export type WarmupAggregate = {
+  sent: number;
+  received: number;
+  landedInbox: number;
+  landedSpam: number;
+  healthScore: number | null;
+};
+
+export type WarmupDay = { sent: number; landedInbox: number; landedSpam: number };
+
+/** Warmup-Analytics für bis zu 100 Accounts (Aggregat + Tagesdaten). */
+export async function getWarmupAnalytics(emails: string[]): Promise<{
+  aggregate: Record<string, WarmupAggregate>;
+  perDay: Record<string, Record<string, WarmupDay>>;
+}> {
+  if (emails.length === 0) return { aggregate: {}, perDay: {} };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await call<any>("/accounts/warmup-analytics", {
+    method: "POST",
+    body: JSON.stringify({ emails: emails.slice(0, 100) }),
+  });
+  const aggregate: Record<string, WarmupAggregate> = {};
+  for (const [email, v] of Object.entries(data.aggregate_data ?? {})) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = v as any;
+    aggregate[email] = {
+      sent: a?.sent ?? 0,
+      received: a?.received ?? 0,
+      landedInbox: a?.landed_inbox ?? 0,
+      landedSpam: a?.landed_spam ?? 0,
+      healthScore: typeof a?.health_score === "number" ? a.health_score : null,
+    };
+  }
+  const perDay: Record<string, Record<string, WarmupDay>> = {};
+  for (const [email, days] of Object.entries(data.email_date_data ?? {})) {
+    perDay[email] = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const [day, v] of Object.entries((days ?? {}) as any)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = v as any;
+      perDay[email][day] = {
+        sent: d?.sent ?? 0,
+        landedInbox: d?.landed_inbox ?? 0,
+        landedSpam: d?.landed_spam ?? 0,
+      };
+    }
+  }
+  return { aggregate, perDay };
+}
+
+export type AccountDailyStat = {
+  email: string;
+  date: string;
+  sent: number;
+  opened: number;
+  replies: number;
+  bounced: number;
+};
+
+/** Sende-Statistik pro Account & Tag (Kampagnen-Versand, nicht Warmup). */
+export async function getAccountDailyAnalytics(
+  startDate: string,
+  endDate: string,
+): Promise<AccountDailyStat[]> {
+  const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await call<any>(`/accounts/analytics/daily?${qs.toString()}`);
+  const rows = Array.isArray(data) ? data : (data?.items ?? []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return rows.map((r: any) => ({
+    email: r.email ?? r.eaccount ?? r.account ?? "",
+    date: r.date ?? r.day ?? "",
+    sent: r.sent ?? 0,
+    opened: r.opened ?? r.unique_opened ?? 0,
+    replies: r.replies ?? r.reply_count ?? 0,
+    bounced: r.bounced ?? 0,
+  }));
+}
+
+export async function pauseAccount(email: string): Promise<void> {
+  await call(`/accounts/${encodeURIComponent(email)}/pause`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function resumeAccount(email: string): Promise<void> {
+  await call(`/accounts/${encodeURIComponent(email)}/resume`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+// --- Postfach: Unibox (E-Mails) ---------------------------------------------
+
+/** Roh-Form eines Instantly-Email-Objekts (Felder, die wir nutzen). */
+export type InstantlyEmailRaw = {
+  id: string;
+  thread_id: string | null;
+  campaign_id: string | null;
+  eaccount: string | null;
+  lead: string | null;
+  /** 1 Kampagnen-Versand, 2 Empfangen, 3 Gesendet, 4 Geplant */
+  ue_type: number | null;
+  is_unread: number | null;
+  i_status: number | null;
+  subject: string | null;
+  content_preview: string | null;
+  body?: { html?: string | null; text?: string | null } | null;
+  from_address_email: string | null;
+  to_address_email_list: string | null;
+  timestamp_created: string;
+  timestamp_email: string;
+};
+
+export async function listEmails(params: {
+  emailType?: "received" | "sent" | "manual";
+  minTimestampCreated?: string;
+  startingAfter?: string;
+  threadId?: string;
+  limit?: number;
+  sortOrder?: "asc" | "desc";
+}): Promise<{ items: InstantlyEmailRaw[]; nextStartingAfter: string | null }> {
+  const qs = new URLSearchParams({ limit: String(params.limit ?? 100) });
+  if (params.emailType) qs.set("email_type", params.emailType);
+  if (params.minTimestampCreated)
+    qs.set("min_timestamp_created", params.minTimestampCreated);
+  if (params.startingAfter) qs.set("starting_after", params.startingAfter);
+  if (params.threadId) qs.set("search", `thread:${params.threadId}`);
+  if (params.sortOrder) qs.set("sort_order", params.sortOrder);
+  const data = await call<{
+    items?: InstantlyEmailRaw[];
+    next_starting_after?: string;
+  }>(`/emails?${qs.toString()}`);
+  return {
+    items: data.items ?? [],
+    nextStartingAfter: data.next_starting_after ?? null,
+  };
+}
+
+export async function getEmail(id: string): Promise<InstantlyEmailRaw> {
+  return call<InstantlyEmailRaw>(`/emails/${encodeURIComponent(id)}`);
+}
+
+/** Antwort auf eine vorhandene Mail (Instantly kann kein freies Compose). */
+export async function replyToEmail(input: {
+  replyToUuid: string;
+  eaccount: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+}): Promise<InstantlyEmailRaw> {
+  return call<InstantlyEmailRaw>("/emails/reply", {
+    method: "POST",
+    body: JSON.stringify({
+      reply_to_uuid: input.replyToUuid,
+      eaccount: input.eaccount,
+      subject: input.subject,
+      body: { html: input.bodyHtml, text: input.bodyText },
+    }),
+  });
+}
+
+export async function markThreadAsRead(threadId: string): Promise<void> {
+  await call(`/emails/threads/${encodeURIComponent(threadId)}/mark-as-read`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const data = await call<{ count?: number }>("/emails/unread/count");
+  return data.count ?? 0;
+}
+
+/**
+ * Lead-Interesse setzen (läuft bei Instantly als Background-Job, 202).
+ * 1 Interessiert · 2 Meeting gebucht · 4 Gewonnen · 0 Out of Office ·
+ * -1 Nicht interessiert · -2 Falsche Person · -3 Verloren · null = zurücksetzen
+ */
+export async function updateLeadInterestStatus(input: {
+  leadEmail: string;
+  interestValue: number | null;
+  campaignId?: string | null;
+}): Promise<void> {
+  const body: Record<string, unknown> = {
+    lead_email: input.leadEmail,
+    interest_value: input.interestValue,
+  };
+  if (input.campaignId) body.campaign_id = input.campaignId;
+  await call("/leads/update-interest-status", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// --- Postfach: Webhooks -------------------------------------------------------
+
+export type InstantlyWebhook = {
+  id: string;
+  target_hook_url: string;
+  event_type: string | null;
+  /** 1 aktiv, -1 wegen Zustellfehlern deaktiviert */
+  status: number | null;
+};
+
+export async function listWebhooks(): Promise<InstantlyWebhook[]> {
+  const data = await call<{ items?: InstantlyWebhook[] }>("/webhooks");
+  return data.items ?? [];
+}
+
+export async function createWebhook(input: {
+  targetHookUrl: string;
+  eventType: string;
+  name?: string;
+  headers?: Record<string, string>;
+}): Promise<InstantlyWebhook> {
+  return call<InstantlyWebhook>("/webhooks", {
+    method: "POST",
+    body: JSON.stringify({
+      target_hook_url: input.targetHookUrl,
+      event_type: input.eventType,
+      name: input.name ?? null,
+      headers: input.headers ?? null,
+    }),
+  });
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  await call(`/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export type InstantlyLead = {
