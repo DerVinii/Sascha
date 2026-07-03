@@ -115,7 +115,7 @@ export function ColumnHeader({
       {sortDir === "desc" && <ArrowDown className="h-3 w-3 text-sub" />}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded text-sub hover:bg-bg hover:text-ink"
+        className="shrink-0 inline-flex h-8 w-8 md:h-5 md:w-5 items-center justify-center rounded text-sub hover:bg-bg hover:text-ink"
       >
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
@@ -209,7 +209,7 @@ export function ColumnHeader({
                       close();
                     }}
                     className={cn(
-                      "h-4 w-4 rounded-full ring-1 ring-line flex items-center justify-center",
+                      "h-6 w-6 md:h-4 md:w-4 rounded-full ring-1 ring-line flex items-center justify-center",
                       s.cls,
                     )}
                   >

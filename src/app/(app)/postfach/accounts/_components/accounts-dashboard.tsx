@@ -141,7 +141,7 @@ export function AccountsDashboard({
           </h2>
           <button
             onClick={() => router.refresh()}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
+            className="h-10 sm:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Aktualisieren
@@ -232,7 +232,7 @@ export function AccountsDashboard({
                             ? "Versand pausieren"
                             : "Versand fortsetzen"
                         }
-                        className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-line text-[11px] font-medium text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
+                        className="h-9 sm:h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-line text-[11px] font-medium text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
                       >
                         {a.status === 1 ? (
                           <>

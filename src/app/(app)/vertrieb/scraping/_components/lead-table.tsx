@@ -311,12 +311,14 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
             <thead className="sticky top-0 z-10 bg-bg">
               <tr className="border-b border-line">
                 <th className="w-11 px-0 py-2">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleAll}
-                    className="h-3.5 w-3.5 rounded border-line"
-                  />
+                  <label className="mx-auto flex h-9 w-10 -my-2 items-center justify-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAll}
+                      className="h-3.5 w-3.5 rounded border-line"
+                    />
+                  </label>
                 </th>
                 {visibleColumns.map((col) => (
                   <th
@@ -363,12 +365,14 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
                   )}
                 >
                   <td className="px-0 text-center align-middle">
-                    <input
-                      type="checkbox"
-                      checked={selection.has(row.id)}
-                      onChange={() => toggleRow(row.id)}
-                      className="h-3.5 w-3.5 rounded border-line"
-                    />
+                    <label className="mx-auto flex h-9 w-10 items-center justify-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selection.has(row.id)}
+                        onChange={() => toggleRow(row.id)}
+                        className="h-3.5 w-3.5 rounded border-line"
+                      />
+                    </label>
                   </td>
                   {visibleColumns.map((col) => {
                     const cell = row.cells[col.key] ?? {

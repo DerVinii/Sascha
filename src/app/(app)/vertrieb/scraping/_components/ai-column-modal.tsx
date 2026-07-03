@@ -96,24 +96,24 @@ export function AiColumnModal({ open, onClose, column, columns, onSave }: Props)
           </p>
         </div>
 
-        <div className="px-5 py-3 border-t border-line flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-line flex flex-wrap justify-end gap-2">
           <button
             onClick={onClose}
-            className="h-9 px-4 text-sm text-sub hover:text-ink"
+            className="h-9 px-4 whitespace-nowrap text-sm text-sub hover:text-ink"
           >
             Abbrechen
           </button>
           <button
             onClick={() => save(false)}
             disabled={pending || !prompt.trim()}
-            className="h-9 px-4 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
+            className="h-9 px-4 whitespace-nowrap rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
           >
             Speichern
           </button>
           <button
             onClick={() => save(true)}
             disabled={pending || !prompt.trim()}
-            className="h-9 px-4 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
+            className="h-9 px-4 whitespace-nowrap rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
           >
             {pending ? "…" : "Speichern & ausführen"}
           </button>

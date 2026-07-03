@@ -188,7 +188,7 @@ function RunDot({ onClick, title }: { onClick: () => void; title: string }) {
         onClick();
       }}
       title={title}
-      className="opacity-0 group-hover/cell:opacity-100 transition shrink-0 inline-flex h-5 w-5 items-center justify-center rounded bg-brand text-white hover:bg-sidebar-soft"
+      className="opacity-100 md:opacity-0 md:group-hover/cell:opacity-100 focus-visible:opacity-100 transition shrink-0 inline-flex h-5 w-5 items-center justify-center rounded bg-brand text-white hover:bg-sidebar-soft"
     >
       <Play className="h-3 w-3" />
     </button>

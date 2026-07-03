@@ -105,7 +105,7 @@ export function TableToolbar(props: Props) {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onOpenSource}
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
@@ -205,7 +205,7 @@ export function TableToolbar(props: Props) {
               </span>
               <button
                 onClick={onStop}
-                className="inline-flex items-center gap-1 h-6 px-2 rounded border border-line text-ink hover:bg-bg"
+                className="inline-flex items-center gap-1 h-9 md:h-6 px-3 md:px-2 rounded border border-line text-ink hover:bg-bg"
               >
                 <Square className="h-3 w-3" />
                 Stop

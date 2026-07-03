@@ -237,7 +237,7 @@ export function CampaignSetupModal({
         if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
-      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl max-h-[90dvh] flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div>
             <h3 className="text-sm font-semibold text-ink inline-flex items-center gap-2">
@@ -476,7 +476,7 @@ export function CampaignSetupModal({
         </div>
 
         {/* Footer-Navigation */}
-        <div className="px-5 py-3 border-t border-line flex items-center justify-between gap-2">
+        <div className="px-5 py-3 border-t border-line flex flex-wrap items-center justify-between gap-2 gap-y-2">
           <div>
             {step === 2 && !done && (
               <button
@@ -511,7 +511,7 @@ export function CampaignSetupModal({
                 <button
                   onClick={handleSubmit}
                   disabled={busy || !firstMailFilled}
-                  className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
+                  className="h-9 px-4 inline-flex items-center gap-2 whitespace-nowrap rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
                 >
                   {busy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

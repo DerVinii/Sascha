@@ -115,7 +115,7 @@ export function CsvImportModal({
             if (e.target === e.currentTarget) close();
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-2xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-surface rounded-xl w-full max-w-2xl shadow-xl max-h-[90dvh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="text-sm font-semibold">Leads aus CSV importieren</h3>
               <button onClick={close} className="text-sub hover:text-ink">
@@ -175,7 +175,7 @@ export function CsvImportModal({
                     <span className="text-sub">— {rows.length} Zeilen</span>
                   </div>
 
-                  <div className="border border-line rounded-md overflow-hidden">
+                  <div className="border border-line rounded-md overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-bg text-left text-sub">
                         <tr>
