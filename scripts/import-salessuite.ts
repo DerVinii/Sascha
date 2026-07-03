@@ -123,14 +123,6 @@ const STAGE_COLORS = [
   "#f1f5f9",
 ];
 
-function stageProbability(name: string, idx: number, total: number): number {
-  const n = name.toLowerCase();
-  if (n.includes("nicht verkauft")) return 0;
-  if (n.includes("unqualifiz")) return 0;
-  if (n.includes("verkauft")) return 100;
-  return Math.round(10 + (70 * idx) / Math.max(1, total - 1));
-}
-
 function stageColor(name: string, idx: number): string {
   const n = name.toLowerCase();
   if (n.includes("nicht verkauft")) return "#fee2e2";
@@ -196,7 +188,6 @@ async function main() {
               pipelineId: pid,
               name: sname,
               position: i,
-              probability: stageProbability(sname, i, def.stages.length),
               color: stageColor(sname, i),
             })
             .returning({ id: pipelineStages.id });

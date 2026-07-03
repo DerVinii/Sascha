@@ -22,7 +22,6 @@ export type BoardStage = {
   id: string;
   name: string;
   position: number;
-  probability: number;
   color: string | null;
 };
 
@@ -131,7 +130,7 @@ function Column({ stage, deals }: { stage: BoardStage; deals: BoardDeal[] }) {
             {stage.name}
           </div>
           <div className="text-[10px] text-ink/60">
-            {formatEur(sum)} · {stage.probability}%
+            {formatEur(sum)}
           </div>
         </div>
         <span className="text-[10px] bg-white/60 rounded-full px-1.5 py-0.5 shrink-0">

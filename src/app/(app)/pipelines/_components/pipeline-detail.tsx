@@ -24,7 +24,6 @@ export type DetailStage = {
   id: string;
   name: string;
   position: number;
-  probability: number;
   color: string | null;
 };
 
@@ -104,7 +103,6 @@ export function PipelineDetail({
     id: s.id,
     name: s.name,
     position: s.position,
-    probability: s.probability,
     color: s.color,
     dealCount: countByStage.get(s.id) ?? 0,
   }));

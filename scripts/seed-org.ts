@@ -27,12 +27,12 @@ import * as schema from "../src/db/schema";
 const ORG_NAME = "SK Kommandozentrale";
 
 const DEFAULT_STAGES = [
-  { name: "Lead", position: 0, probability: 10, color: "#fef3c7" },
-  { name: "Qualified", position: 1, probability: 25, color: "#dbeafe" },
-  { name: "In Conversation", position: 2, probability: 40, color: "#dbeafe" },
-  { name: "Termin gebucht", position: 3, probability: 60, color: "#fed7aa" },
-  { name: "Closed Won", position: 4, probability: 100, color: "#d1fae5" },
-  { name: "Closed Lost", position: 5, probability: 0, color: "#fee2e2" },
+  { name: "Lead", position: 0, color: "#fef3c7" },
+  { name: "Qualified", position: 1, color: "#dbeafe" },
+  { name: "In Conversation", position: 2, color: "#dbeafe" },
+  { name: "Termin gebucht", position: 3, color: "#fed7aa" },
+  { name: "Closed Won", position: 4, color: "#d1fae5" },
+  { name: "Closed Lost", position: 5, color: "#fee2e2" },
 ];
 
 async function main() {
@@ -94,7 +94,6 @@ async function main() {
           pipelineId: pipeline.id,
           name: s.name,
           position: s.position,
-          probability: s.probability,
           color: s.color,
         })),
       );

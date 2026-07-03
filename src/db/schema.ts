@@ -244,7 +244,6 @@ export const pipelineStages = pgTable(
       .references(() => pipelines.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     position: integer("position").notNull(),
-    probability: integer("probability").default(0).notNull(),
     color: text("color"),
   },
   (t) => [index("pipeline_stages_pipeline_idx").on(t.pipelineId)],
@@ -268,7 +267,6 @@ export const deals = pgTable(
       .references(() => pipelineStages.id, { onDelete: "restrict" }),
     title: text("title").notNull(),
     valueEur: integer("value_eur"),
-    probability: integer("probability"),
     expectedClose: timestamp("expected_close", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

@@ -38,7 +38,6 @@ export default async function PipelineDetailPage({
       id: pipelineStages.id,
       name: pipelineStages.name,
       position: pipelineStages.position,
-      probability: pipelineStages.probability,
       color: pipelineStages.color,
     })
     .from(pipelineStages)

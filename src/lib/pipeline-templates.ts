@@ -5,16 +5,16 @@
  * als auch Client-Komponenten importieren können.
  */
 
-export type StageTemplate = { name: string; probability: number; color: string };
+export type StageTemplate = { name: string; color: string };
 
 /** Standard-Phasen für eine neue Pipeline (an SalesSuite angelehnt). */
 export const DEFAULT_STAGES: StageTemplate[] = [
-  { name: "Lead", probability: 10, color: "#fef3c7" },
-  { name: "Qualifiziert", probability: 25, color: "#dbeafe" },
-  { name: "Im Gespräch", probability: 40, color: "#e0e7ff" },
-  { name: "Termin gebucht", probability: 60, color: "#fed7aa" },
-  { name: "Gewonnen", probability: 100, color: "#d1fae5" },
-  { name: "Verloren", probability: 0, color: "#fee2e2" },
+  { name: "Lead", color: "#fef3c7" },
+  { name: "Qualifiziert", color: "#dbeafe" },
+  { name: "Im Gespräch", color: "#e0e7ff" },
+  { name: "Termin gebucht", color: "#fed7aa" },
+  { name: "Gewonnen", color: "#d1fae5" },
+  { name: "Verloren", color: "#fee2e2" },
 ];
 
 /**
@@ -34,42 +34,42 @@ export const PIPELINE_TEMPLATES: Record<
     label: "Kaltakquise (Cold Calling)",
     description: "Opener-Pipeline für kalte Leads (DMC) von Recherche bis Termin.",
     stages: [
-      { name: "Recherchierte Leads", probability: 5, color: "#f1f5f9" },
-      { name: "Geprüfte Leads", probability: 10, color: "#fef3c7" },
-      { name: "DMC versendet", probability: 20, color: "#dbeafe" },
-      { name: "Follow-up", probability: 35, color: "#e0e7ff" },
-      { name: "Termin vereinbart", probability: 60, color: "#fed7aa" },
-      { name: "Ungeeignet", probability: 0, color: "#fee2e2" },
+      { name: "Recherchierte Leads", color: "#f1f5f9" },
+      { name: "Geprüfte Leads", color: "#fef3c7" },
+      { name: "DMC versendet", color: "#dbeafe" },
+      { name: "Follow-up", color: "#e0e7ff" },
+      { name: "Termin vereinbart", color: "#fed7aa" },
+      { name: "Ungeeignet", color: "#fee2e2" },
     ],
   },
   setter_closer: {
     label: "Setter-Closer",
     description: "Warme Leads vom Anfrageeingang bis zum Abschluss.",
     stages: [
-      { name: "Anfrage eingegangen", probability: 15, color: "#fef3c7" },
-      { name: "Nachverfolgung", probability: 25, color: "#dbeafe" },
-      { name: "Qualifiziert", probability: 40, color: "#e0e7ff" },
-      { name: "Erstgespräch", probability: 55, color: "#fed7aa" },
-      { name: "Folgegespräch", probability: 70, color: "#fde68a" },
-      { name: "Verkauft", probability: 100, color: "#d1fae5" },
-      { name: "Nicht verkauft", probability: 0, color: "#fee2e2" },
+      { name: "Anfrage eingegangen", color: "#fef3c7" },
+      { name: "Nachverfolgung", color: "#dbeafe" },
+      { name: "Qualifiziert", color: "#e0e7ff" },
+      { name: "Erstgespräch", color: "#fed7aa" },
+      { name: "Folgegespräch", color: "#fde68a" },
+      { name: "Verkauft", color: "#d1fae5" },
+      { name: "Nicht verkauft", color: "#fee2e2" },
     ],
   },
   upsell: {
     label: "Upsell (Bestandskunden)",
     description: "Bestehende Kunden weiterentwickeln.",
     stages: [
-      { name: "Bestandskunde", probability: 20, color: "#fef3c7" },
-      { name: "Angebot", probability: 45, color: "#dbeafe" },
-      { name: "Verhandlung", probability: 70, color: "#fed7aa" },
-      { name: "Gewonnen", probability: 100, color: "#d1fae5" },
-      { name: "Verloren", probability: 0, color: "#fee2e2" },
+      { name: "Bestandskunde", color: "#fef3c7" },
+      { name: "Angebot", color: "#dbeafe" },
+      { name: "Verhandlung", color: "#fed7aa" },
+      { name: "Gewonnen", color: "#d1fae5" },
+      { name: "Verloren", color: "#fee2e2" },
     ],
   },
   blank: {
     label: "Leer (eigene Phasen)",
     description: "Eine Phase zum Start — Rest selbst anlegen.",
-    stages: [{ name: "Neu", probability: 0, color: "#e0e7ff" }],
+    stages: [{ name: "Neu", color: "#e0e7ff" }],
   },
 };
 

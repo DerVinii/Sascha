@@ -17,7 +17,6 @@ export type ManagerStage = {
   id: string;
   name: string;
   position: number;
-  probability: number;
   color: string | null;
   dealCount: number;
 };
@@ -104,18 +103,15 @@ export function PipelineManagerModal({
 
               {/* Phasen */}
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2">
                   <span className="text-[11px] font-medium text-sub uppercase tracking-wide">
                     Phasen
-                  </span>
-                  <span className="text-[10px] text-sub">
-                    Wahrscheinlichkeit in %
                   </span>
                 </div>
                 <ul className="space-y-1.5">
                   {stages.map((s, i) => (
                     <StageRow
-                      key={`${s.id}:${s.name}:${s.color}:${s.probability}`}
+                      key={`${s.id}:${s.name}:${s.color}`}
                       stage={s}
                       isFirst={i === 0}
                       isLast={i === stages.length - 1}
@@ -127,9 +123,6 @@ export function PipelineManagerModal({
                       }
                       onColor={(color) =>
                         run(() => updateStage(s.id, { color }))
-                      }
-                      onProb={(probability) =>
-                        run(() => updateStage(s.id, { probability }))
                       }
                     />
                   ))}
@@ -209,7 +202,6 @@ function StageRow({
   onDelete,
   onName,
   onColor,
-  onProb,
 }: {
   stage: ManagerStage;
   isFirst: boolean;
@@ -219,7 +211,6 @@ function StageRow({
   onDelete: () => void;
   onName: (name: string) => void;
   onColor: (color: string) => void;
-  onProb: (probability: number) => void;
 }) {
   const [palette, setPalette] = useState(false);
 
@@ -278,20 +269,6 @@ function StageRow({
         }}
         disabled={disabled}
         className="flex-1 h-8 px-2 border border-line rounded-md text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-sidebar/20 focus:border-sidebar"
-      />
-
-      <input
-        type="number"
-        min="0"
-        max="100"
-        defaultValue={stage.probability}
-        onBlur={(e) => {
-          const v = Math.round(Number(e.target.value));
-          if (!Number.isNaN(v) && v !== stage.probability) onProb(v);
-        }}
-        disabled={disabled}
-        className="w-14 h-8 px-1.5 border border-line rounded-md text-sm bg-surface text-center"
-        aria-label="Wahrscheinlichkeit"
       />
 
       <button

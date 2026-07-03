@@ -43,10 +43,10 @@ Architektur-Grundprinzip: **Zwei Ebenen** — `Kontakte` (stabile Stammdaten) un
 | SalesSuite-Feature | Was es tut | SK-CRM |
 |---|---|---|
 | **Multi-Pipeline-System** | Beliebig viele parallele Pipelines, je eigene Phasen/Logik/Filter. Kanban + Drag-Drop. | ✅ Pipeline-Selector, mehrere Pipelines, eigene Phasen je Pipeline |
-| **Anpassbare Deal-Phasen** | Phasen frei hinzufügen/löschen/umbenennen, Farben, Wahrscheinlichkeit. | ✅ Pipeline-Manager: anlegen/umbenennen/Farbe/%/Reihenfolge/löschen |
+| **Anpassbare Deal-Phasen** | Phasen frei hinzufügen/löschen/umbenennen, Farben, Wahrscheinlichkeit. | ✅ Pipeline-Manager: anlegen/umbenennen/Farbe/Reihenfolge/löschen (Wahrscheinlichkeits-% bewusst entfernt, 2026-07-03) |
 | **Setter-Closer-Rollen-Interface** | Eigene Workspaces Opener→Setter→Closer, Handoff-Tracking. | ❌ (single-user) |
 | **Pipeline-Vorlagen** | Cold-Calling, Setter-Closer, Upsell, Reaktivierung, Training. | ✅ 5 Vorlagen (Standard, Kaltakquise, Setter-Closer, Upsell, Leer) |
-| **Deal-Tracking & Phasen-Conversion** | Wert, Anrufanzahl, Abschlussdatum, Closed-Won/Lost mit Grund, Conversion-Messung. | 🟡 Wert/Abschlussdatum/Phasen-% + Summen da; Conversion-Messung & Verlust-Grund später |
+| **Deal-Tracking & Phasen-Conversion** | Wert, Anrufanzahl, Abschlussdatum, Closed-Won/Lost mit Grund, Conversion-Messung. | 🟡 Wert/Abschlussdatum + Summen da; Conversion-Messung & Verlust-Grund später |
 | **Drag-Drop Deals im Kanban** | Deals zwischen Phasen ziehen. | ✅ Echte Deals, optimistisch + Rollback bei Fehler |
 | **Ziele/Targets pro Pipeline** | Ziele für Calls, Termin-Conversion, Abschlüsse. | ❌ |
 
@@ -158,7 +158,7 @@ Architektur-Grundprinzip: **Zwei Ebenen** — `Kontakte` (stabile Stammdaten) un
 **Bereits da (Fundament steht):** Kontakte-CRUD, Detail-Page, Notizen, Aufgaben, einfache Pipeline-Kanban, CSV-Export, Dashboard-Basis. **DB-Schema für Deals/Pipelines/Stages/Activities existiert vollständig** — größte Lücke ist UI.
 
 **Kern-Nachbau CRM (single-user-sinnvoll, ohne externe Dienste):**
-1. ✅ **Deals als eigene Ebene** + Multi-Pipeline-Verwaltung (Pipelines/Phasen anlegen, Farben, Wahrscheinlichkeit) — *fertig 2026-06-28*
+1. ✅ **Deals als eigene Ebene** + Multi-Pipeline-Verwaltung (Pipelines/Phasen anlegen, Farben) — *fertig 2026-06-28; Wahrscheinlichkeits-% am 2026-07-03 wieder entfernt*
 2. ✅ **Deal-Kanban** mit Drag-Drop von Deals (statt Kontakt-Status), pro Pipeline — *fertig 2026-06-28*
 3. **Einheitliche 3-Tab-Detailansicht** (Stammdaten · Aktivitäten · Notizen) für Kontakt & Deal ← *als Nächstes*
 4. **Custom-Fields-UI** (Kontakt + Deal)

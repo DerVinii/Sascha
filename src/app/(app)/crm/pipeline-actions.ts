@@ -59,7 +59,6 @@ export async function createPipeline(
       pipelineId: pl.id,
       name: s.name,
       position: i,
-      probability: s.probability,
       color: s.color,
     })),
   );
@@ -149,7 +148,6 @@ export async function addStage(pipelineId: string, name: string) {
     pipelineId,
     name: name.trim() || "Neue Phase",
     position: maxPos + 1,
-    probability: 0,
     color: "#e0e7ff",
   });
   revalidatePath("/crm");
@@ -158,17 +156,15 @@ export async function addStage(pipelineId: string, name: string) {
 
 export async function updateStage(
   stageId: string,
-  patch: { name?: string; color?: string; probability?: number },
+  patch: { name?: string; color?: string },
 ) {
   const org = await requireActiveOrg();
   if (!(await stagePipeline(stageId, org.id)))
     throw new Error("Phase nicht gefunden.");
 
-  const set: { name?: string; color?: string; probability?: number } = {};
+  const set: { name?: string; color?: string } = {};
   if (patch.name !== undefined) set.name = patch.name.trim() || "Phase";
   if (patch.color !== undefined) set.color = patch.color;
-  if (patch.probability !== undefined)
-    set.probability = Math.max(0, Math.min(100, Math.round(patch.probability)));
   if (Object.keys(set).length === 0) return;
 
   await db.update(pipelineStages).set(set).where(eq(pipelineStages.id, stageId));
