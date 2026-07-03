@@ -3,27 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Building2,
   TextCursorInput,
   Tags,
-  Plug,
   Database,
   SunMoon,
-  ShieldCheck,
 } from "lucide-react";
 
 const ITEMS = [
-  { href: "/einstellungen/organisation", label: "Organisation", icon: Building2 },
   {
     href: "/einstellungen/kontaktfelder",
     label: "Kontaktfelder",
     icon: TextCursorInput,
   },
   { href: "/einstellungen/tags", label: "Tags", icon: Tags },
-  { href: "/einstellungen/integrationen", label: "Integrationen", icon: Plug },
   { href: "/einstellungen/daten", label: "Daten", icon: Database },
   { href: "/einstellungen/darstellung", label: "Darstellung", icon: SunMoon },
-  { href: "/einstellungen/sicherheit", label: "Sicherheit", icon: ShieldCheck },
 ];
 
 export function SettingsNav() {

@@ -1,10 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { organizations, contacts, tags } from "@/db/schema";
+import { contacts, tags } from "@/db/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { getOrgSettings, setOrgSettingsKey } from "@/lib/server/org-settings";
@@ -15,118 +14,6 @@ import {
   type ContactFieldType,
   CONTACT_FIELD_TYPES,
 } from "@/lib/contact-fields";
-import { getUnreadCount } from "@/lib/server/instantly/client";
-import { ZUGANG_COOKIE } from "@/lib/zugang-token";
-
-// ============================================================================
-// Organisation
-// ============================================================================
-
-export async function updateOrgNameAction(name: string) {
-  const org = await requireActiveOrg();
-  const trimmed = name.trim();
-  if (!trimmed) return;
-  await db
-    .update(organizations)
-    .set({ name: trimmed })
-    .where(eq(organizations.id, org.id));
-  // Der Org-Name steht in der Sidebar — gesamtes Layout revalidieren.
-  revalidatePath("/", "layout");
-}
-
-// ============================================================================
-// Integrationen — Verbindungstests
-// ============================================================================
-
-export type IntegrationTestResult = { ok: boolean; message: string };
-
-/**
- * Bewusst Result-Objekt statt throw: Next.js maskiert geworfene
- * Server-Action-Fehler im Production-Build (generische Meldung).
- */
-export async function testIntegrationAction(
-  service: "instantly" | "places" | "gemini",
-): Promise<IntegrationTestResult> {
-  try {
-    switch (service) {
-      case "instantly": {
-        if (!process.env.INSTANTLY_API_KEY?.trim()) {
-          return {
-            ok: false,
-            message: "Kein API-Key hinterlegt (INSTANTLY_API_KEY).",
-          };
-        }
-        const unread = await getUnreadCount();
-        return {
-          ok: true,
-          message: `Verbunden — ${unread} ungelesene Antwort(en) in der Unibox.`,
-        };
-      }
-      case "places": {
-        const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
-        if (!apiKey) {
-          return {
-            ok: false,
-            message: "Kein API-Key hinterlegt (GOOGLE_PLACES_API_KEY).",
-          };
-        }
-        // Billigste Abfrage: nur places.id als FieldMask (ID-only-SKU).
-        const res = await fetch(
-          "https://places.googleapis.com/v1/places:searchText",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Goog-Api-Key": apiKey,
-              "X-Goog-FieldMask": "places.id",
-            },
-            body: JSON.stringify({
-              textQuery: "Bäckerei Berlin",
-              languageCode: "de",
-              regionCode: "DE",
-            }),
-            cache: "no-store",
-          },
-        );
-        if (!res.ok) {
-          const detail = (await res.text()).slice(0, 200);
-          return { ok: false, message: `Fehler ${res.status}: ${detail}` };
-        }
-        return { ok: true, message: "Verbunden — Test-Suche erfolgreich." };
-      }
-      case "gemini": {
-        const apiKey = process.env.GEMINI_API_KEY?.trim();
-        if (!apiKey) {
-          return {
-            ok: false,
-            message: "Kein API-Key hinterlegt (GEMINI_API_KEY).",
-          };
-        }
-        // ListModels ist kostenlos und validiert den Key.
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) {
-          const detail = (await res.text()).slice(0, 200);
-          return { ok: false, message: `Fehler ${res.status}: ${detail}` };
-        }
-        const data = (await res.json()) as { models?: unknown[] };
-        const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-        return {
-          ok: true,
-          message: `Verbunden — ${data.models?.length ?? 0} Modelle verfügbar (genutzt: ${model}).`,
-        };
-      }
-    }
-  } catch (e) {
-    return {
-      ok: false,
-      message:
-        e instanceof Error ? e.message.slice(0, 200) : "Unbekannter Fehler.",
-    };
-  }
-}
 
 // ============================================================================
 // Kontaktfelder (Custom-Field-Definitionen)
@@ -418,14 +305,4 @@ export async function setThemeAction(theme: Theme) {
     sameSite: "lax",
   });
   revalidatePath("/", "layout");
-}
-
-// ============================================================================
-// Sicherheit (Zugriffsschutz)
-// ============================================================================
-
-export async function logoutAction() {
-  const store = await cookies();
-  store.delete(ZUGANG_COOKIE);
-  redirect("/zugang");
 }
