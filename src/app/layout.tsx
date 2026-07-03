@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "@/components/app/pwa-register";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -11,6 +12,23 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "SK Kommandozentrale",
   description: "Vertrieb, Sichtbarkeit und CRM für SK – Dozent und Coach",
+  applicationName: "SK Kommandozentrale",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SK Zentrale",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 /**
@@ -30,6 +48,7 @@ export default function RootLayout({
     <html lang="de" className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <PwaRegister />
         {children}
       </body>
     </html>
