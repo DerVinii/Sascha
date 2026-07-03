@@ -329,12 +329,23 @@ export async function listLeadTableAction(input: {
 // ENRICHMENT-RUN (Zelle / Auswahl / Spalte / alle) — unterer n8n-Workflow
 // ============================================================================
 
+type RowOutcome = {
+  status: "success" | "not_found" | "error";
+  /** Fehler war ein Gemini-Kontingent-/Rate-Limit-Fehler (429). */
+  rateLimited?: boolean;
+};
+
+/** Erkennt Gemini-429/Kontingent-Fehler an der Fehlermeldung. */
+function isRateLimitError(msg: string): boolean {
+  return /\b429\b|quota|rate[ _-]?limit|RESOURCE_EXHAUSTED/i.test(msg);
+}
+
 async function runEnrichmentForRow(
   orgId: string,
   column: LeadColumn,
   src: RowSources,
   columns: LeadColumn[],
-): Promise<"success" | "not_found" | "error"> {
+): Promise<RowOutcome> {
   // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
   if (column.config.ai?.prompt) {
     const runAt = new Date().toISOString();
@@ -360,13 +371,14 @@ async function runEnrichmentForRow(
         .update(contacts)
         .set({ customFields: cellPatch(column.key, cell) })
         .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return found ? "success" : "not_found";
+      return { status: found ? "success" : "not_found" };
     } catch (e) {
+      const message = e instanceof Error ? e.message : "Fehler";
       const cell = {
         status: "error",
         provider: null,
         runAt,
-        error: e instanceof Error ? e.message.slice(0, 300) : "Fehler",
+        error: message.slice(0, 300),
         value: "",
         raw: null,
       };
@@ -374,7 +386,7 @@ async function runEnrichmentForRow(
         .update(contacts)
         .set({ customFields: cellPatch(column.key, cell) })
         .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return "error";
+      return { status: "error", rateLimited: isRateLimitError(message) };
     }
   }
 
@@ -432,7 +444,7 @@ async function runEnrichmentForRow(
         .update(contacts)
         .set(set)
         .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return "success";
+      return { status: "success" };
     }
 
     const cell = {
@@ -447,13 +459,14 @@ async function runEnrichmentForRow(
       .update(contacts)
       .set({ customFields: cellPatch(column.key, cell) })
       .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-    return "not_found";
+    return { status: "not_found" };
   } catch (e) {
+    const message = e instanceof Error ? e.message : "Fehler";
     const cell = {
       status: "error",
       provider: null,
       runAt: new Date().toISOString(),
-      error: e instanceof Error ? e.message.slice(0, 300) : "Fehler",
+      error: message.slice(0, 300),
       value: "",
       raw: null,
     };
@@ -461,7 +474,7 @@ async function runEnrichmentForRow(
       .update(contacts)
       .set({ customFields: cellPatch(column.key, cell) })
       .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-    return "error";
+    return { status: "error", rateLimited: isRateLimitError(message) };
   }
 }
 
@@ -499,9 +512,14 @@ export async function runEnrichmentBatchAction(input: {
     toProcess = all.slice(offset, offset + limit);
     remaining = Math.max(0, all.length - (offset + toProcess.length));
   } else {
-    // missing: nur Zellen, die einen Run brauchen + "Only run if"
+    // missing: nur Zellen, die einen Run brauchen + "Only run if".
+    // excludeRowIds = in diesem Lauf bereits versuchte Zeilen; nicht erneut ziehen,
+    // sonst würden Fehler-Zellen (die weiter „braucht Run" sind) den Lauf in eine
+    // Endlosschleife treiben.
     const onlyRunIf = column.config.runSettings?.onlyRunIf;
+    const exclude = new Set(input.scope.excludeRowIds ?? []);
     const candidates = all.filter((src) => {
+      if (exclude.has(src.contact.id)) return false;
       const cell = buildCells(columns, src)[column.key];
       return cellNeedsRun(cell) && passesOnlyRunIf(onlyRunIf, src.contact);
     });
@@ -516,10 +534,14 @@ export async function runEnrichmentBatchAction(input: {
   let succeeded = 0;
   let notFound = 0;
   let failed = 0;
+  let rateLimited = false;
   for (const r of results) {
-    if (r === "success") succeeded++;
-    else if (r === "not_found") notFound++;
-    else failed++;
+    if (r.status === "success") succeeded++;
+    else if (r.status === "not_found") notFound++;
+    else {
+      failed++;
+      if (r.rateLimited) rateLimited = true;
+    }
   }
 
   revalidatePath("/vertrieb/scraping");
@@ -533,6 +555,7 @@ export async function runEnrichmentBatchAction(input: {
     failed,
     remaining,
     rowIds: toProcess.map((s) => s.contact.id),
+    rateLimited,
   };
 }
 

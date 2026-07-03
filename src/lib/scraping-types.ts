@@ -99,7 +99,13 @@ export type LeadView = {
 /** Ausführungs-Scope für einen Enrichment-Run. */
 export type RunScope =
   | { rowIds: string[] } // einzelne Zelle / Auswahl
-  | { mode: "missing" | "force"; limit?: number; offset?: number }; // Spalte / alle
+  | {
+      mode: "missing" | "force";
+      limit?: number;
+      offset?: number;
+      /** Zeilen, die in diesem Lauf schon versucht wurden — nicht erneut ziehen. */
+      excludeRowIds?: string[];
+    }; // Spalte / alle
 
 export type RunBatchResult = {
   processed: number;
@@ -109,6 +115,8 @@ export type RunBatchResult = {
   remaining: number;
   /** betroffene Zeilen-IDs dieses Batches (für optimistische UI-Updates). */
   rowIds: string[];
+  /** true, wenn eine Zeile am Gemini-Kontingent (429) scheiterte — Lauf stoppen. */
+  rateLimited?: boolean;
 };
 
 export type LeadList = {

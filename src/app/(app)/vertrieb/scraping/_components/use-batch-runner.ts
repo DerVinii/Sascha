@@ -80,6 +80,15 @@ export function useBatchRunner(cb: Callbacks) {
           acc = accumulate(acc, r);
           setProgress(acc);
           await cb.onBatch?.(r);
+          // Gemini-Kontingent erschöpft (429): nicht weiter feuern — das würde die
+          // Quota nur weiter belasten und den Zähler endlos hochzählen lassen.
+          if (r.rateLimited) {
+            cb.onError?.(
+              "Gemini-Kontingent erreicht (429): Tages-/Minuten-Limit der Google-AI-API überschritten. " +
+                "Lauf gestoppt. Bitte später erneut versuchen oder in Google AI Studio die Abrechnung/Kontingente prüfen.",
+            );
+            break;
+          }
           if (r.processed === 0 || r.remaining === 0) break;
         }
       } catch (e) {
@@ -92,14 +101,20 @@ export function useBatchRunner(cb: Callbacks) {
   );
 
   const runMissing = useCallback(
-    (columnKey: string, label = "Anreichern") =>
-      loop(label, () =>
-        runEnrichmentBatchAction({
+    (columnKey: string, label = "Anreichern") => {
+      // Bereits versuchte Zeilen dieses Laufs sammeln und ausschließen, sonst
+      // liefert der Server Fehler-Zellen immer wieder aus → Endlosschleife.
+      const attempted: string[] = [];
+      return loop(label, async () => {
+        const r = await runEnrichmentBatchAction({
           columnKey,
           listId: cb.listId,
-          scope: { mode: "missing", limit: BATCH },
-        }),
-      ),
+          scope: { mode: "missing", limit: BATCH, excludeRowIds: attempted },
+        });
+        attempted.push(...r.rowIds);
+        return r;
+      });
+    },
     [cb.listId, loop],
   );
 
