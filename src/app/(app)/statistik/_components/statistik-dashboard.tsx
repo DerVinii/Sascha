@@ -2,26 +2,18 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   ExternalLink,
-  Filter,
   Loader2,
-  MailOpen,
-  MoreHorizontal,
-  MousePointerClick,
   RefreshCw,
   Reply,
   Rocket,
   Send,
-  Settings2,
-  Share2,
   Target,
 } from "lucide-react";
 import {
@@ -37,6 +29,7 @@ import {
   type DailyPoint,
   type Range,
   type StatOverview,
+  type StatusCounts,
   type Tone,
 } from "@/lib/statistik-ui";
 
@@ -62,6 +55,7 @@ export function StatistikDashboard({
   overview,
   daily,
   campaigns,
+  statusCounts,
   range,
   rangeLabel,
   error,
@@ -70,6 +64,7 @@ export function StatistikDashboard({
   overview: StatOverview;
   daily: DailyPoint[];
   campaigns: CampaignRow[];
+  statusCounts: StatusCounts;
   range: Range;
   rangeLabel: string;
   error: string | null;
@@ -116,27 +111,13 @@ export function StatistikDashboard({
       )}
 
       {/* KPI-Karten */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Kpi
           icon={Send}
           iconClass="text-accent"
           label="Gesendet"
           value={fmtCompact(overview.emailsSent)}
           title={fmtInt(overview.emailsSent) + " E-Mails"}
-        />
-        <Kpi
-          icon={MailOpen}
-          iconClass="text-info"
-          label="Öffnungsrate"
-          value={fmtPct(pct(overview.openUnique, contacted))}
-          title={`${fmtInt(overview.openUnique)} eindeutige Öffnungen`}
-        />
-        <Kpi
-          icon={MousePointerClick}
-          iconClass="text-warn"
-          label="Klickrate"
-          value={fmtPct(pct(overview.linkClickUnique, contacted))}
-          title={`${fmtInt(overview.linkClickUnique)} eindeutige Klicks`}
         />
         <Kpi
           icon={Reply}
@@ -154,8 +135,8 @@ export function StatistikDashboard({
         />
       </div>
 
-      {/* Trichter */}
-      <FunnelStrip overview={overview} />
+      {/* Trichter (Kopf aus Instantly, Rest aus dem CRM-Kontaktstatus) */}
+      <FunnelStrip overview={overview} statusCounts={statusCounts} />
 
       {/* Verlaufs-Chart */}
       <div
@@ -165,28 +146,23 @@ export function StatistikDashboard({
       >
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-line">
           <h2 className="text-sm font-semibold text-ink">Versandverlauf</h2>
-          <div className="flex items-center gap-1.5">
-            <StubButton icon={Share2} label="Teilen" />
-            <StubButton icon={Filter} label="Filter" />
-            <StubButton icon={Settings2} label="Einstellungen" iconOnly />
-            <RangeControl range={range} onChange={setRange} pending={pending} />
-          </div>
+          <RangeControl range={range} onChange={setRange} pending={pending} />
         </div>
         <div className="p-4">
           <TrendChart daily={daily} />
         </div>
       </div>
 
-      {/* Tabs + Panel */}
-      <CampaignSection campaigns={campaigns} />
+      {/* Kampagnen-Tabelle */}
+      <CampaignTable campaigns={campaigns} />
 
       {/* Fußnote */}
       <p className="text-[11px] text-sub leading-relaxed">
-        Alle Zahlen kommen live aus Instantly (Zeitraum: {rangeLabel}). Raten
-        beziehen sich auf kontaktierte Leads; das Öffnungs-Tracking ist durch
-        Apple Mail Privacy oft ungenau. Die KPI-Karten nutzen eindeutige Werte,
-        die Tabelle die Roh-Öffnungen/-Antworten – kleine Abweichungen sind
-        normal.
+        Versand-, Antwort- und Chancen-Zahlen kommen live aus Instantly
+        (Zeitraum: {rangeLabel}); Antwortrate bezogen auf kontaktierte Leads.
+        Die Trichter-Stufen Interessiert, Termine und Gewonnen stammen aus dem
+        CRM-Kontaktstatus (org-weit, aktueller Stand) – nur dort werden sie
+        gepflegt.
       </p>
     </div>
   );
@@ -228,61 +204,84 @@ function Kpi({
 
 // --- Trichter ----------------------------------------------------------------
 
-function FunnelStrip({ overview }: { overview: StatOverview }) {
+function FunnelStrip({
+  overview,
+  statusCounts,
+}: {
+  overview: StatOverview;
+  statusCounts: StatusCounts;
+}) {
   const c = overview.contacted;
+  const interessiert = statusCounts.qualified + statusCounts.in_conversation;
+  const termine = statusCounts.meeting_booked;
+  const gewonnen = statusCounts.won;
+
   const stages: {
     label: string;
     value: number;
     sub: string;
+    from: "Instantly" | "CRM";
     win?: boolean;
   }[] = [
-    { label: "Kontaktiert", value: c, sub: c > 0 ? "100 %" : "–" },
-    {
-      label: "Geöffnet",
-      value: overview.openUnique,
-      sub: fmtPct(pct(overview.openUnique, c), 1),
-    },
+    { label: "Kontaktiert", value: c, sub: c > 0 ? "100 %" : "–", from: "Instantly" },
     {
       label: "Geantwortet",
       value: overview.replyUnique,
       sub: fmtPct(pct(overview.replyUnique, c), 1),
+      from: "Instantly",
     },
     {
       label: "Interessiert",
-      value: overview.interested,
-      sub: fmtPct(pct(overview.interested, c), 1),
+      value: interessiert,
+      sub: fmtPct(pct(interessiert, c), 1),
+      from: "CRM",
     },
     {
       label: "Termine",
-      value: overview.meetingBooked,
-      sub: `${fmtInt(overview.meetingCompleted)} wahrgenommen`,
+      value: termine,
+      sub: fmtPct(pct(termine, c), 1),
+      from: "CRM",
     },
     {
       label: "Gewonnen",
-      value: overview.closed,
-      sub: fmtPct(pct(overview.closed, c), 1),
+      value: gewonnen,
+      sub: fmtPct(pct(gewonnen, c), 1),
+      from: "CRM",
       win: true,
     },
   ];
+
+  // Balken relativ zur größten Stufe, damit sie auch dann sichtbar sind, wenn
+  // Instantly noch leer ist, das CRM aber schon gepflegte Kontakte hat.
+  const denom = Math.max(1, ...stages.map((s) => s.value));
+  const allZero = stages.every((s) => s.value === 0);
 
   return (
     <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-col lg:flex-row lg:items-stretch gap-3 lg:gap-0 overflow-x-auto">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-1 gap-3 lg:gap-0">
           {stages.map((s, i) => {
-            const width = c > 0 ? Math.min(100, (s.value / c) * 100) : 0;
+            const width = Math.min(100, (s.value / denom) * 100);
             return (
               <div key={s.label} className="lg:flex-1 lg:flex lg:items-center">
                 <div className="min-w-0 lg:flex-1 lg:px-3">
-                  <div className="text-[11px] uppercase tracking-wide text-sub truncate">
-                    {s.label}
+                  <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-sub">
+                    <span className="truncate">{s.label}</span>
+                    {s.from === "CRM" && (
+                      <span
+                        className="text-[9px] font-medium text-accent/70 normal-case"
+                        title="Quelle: CRM-Kontaktstatus"
+                      >
+                        CRM
+                      </span>
+                    )}
                   </div>
                   <div
                     className={`mt-0.5 text-base font-semibold tabular-nums ${
                       s.win && s.value > 0 ? "text-ok" : "text-ink"
                     }`}
                   >
-                    {c > 0 || s.value > 0 ? fmtInt(s.value) : "–"}
+                    {allZero ? "–" : fmtInt(s.value)}
                   </div>
                   <div className="text-[11px] text-sub tabular-nums">{s.sub}</div>
                   <div className="mt-1.5 h-1 rounded-full bg-line overflow-hidden">
@@ -300,10 +299,10 @@ function FunnelStrip({ overview }: { overview: StatOverview }) {
           })}
         </div>
       </div>
-      {c === 0 && (
+      {allZero && (
         <p className="mt-3 text-[11px] text-sub text-center">
-          Noch keine Kontakte im Zeitraum – der Trichter füllt sich, sobald die
-          erste Kampagne sendet.
+          Noch keine Daten – der Trichter füllt sich mit dem Versand (Instantly)
+          und dem gepflegten Kontaktstatus (CRM).
         </p>
       )}
     </div>
@@ -312,23 +311,17 @@ function FunnelStrip({ overview }: { overview: StatOverview }) {
 
 // --- Chart -------------------------------------------------------------------
 
-type SeriesKey = "sent" | "opens" | "opensU" | "replies" | "clicks" | "clicksU";
-
+// Nur getrackte Reihen: Öffnungen/Klicks werden nicht erfasst und daher nicht
+// gezeigt. Beide Reihen sind immer sichtbar (keine Auswahl).
 const SERIES: {
-  key: SeriesKey;
+  key: string;
   label: string;
   get: (d: DailyPoint) => number;
   color: string; // CSS-Var-Name, z. B. --c-accent
   area?: boolean;
-  dash?: boolean;
-  defaultOn: boolean;
 }[] = [
-  { key: "sent", label: "Gesendet", get: (d) => d.sent, color: "--c-accent", area: true, defaultOn: true },
-  { key: "opens", label: "Öffnungen gesamt", get: (d) => d.opened, color: "--c-info", defaultOn: true },
-  { key: "opensU", label: "Eindeutige Öffnungen", get: (d) => d.uniqueOpened, color: "--c-info", dash: true, defaultOn: false },
-  { key: "replies", label: "Antworten gesamt", get: (d) => d.replies, color: "--c-ok", defaultOn: true },
-  { key: "clicks", label: "Klicks gesamt", get: (d) => d.clicks, color: "--c-warn", defaultOn: false },
-  { key: "clicksU", label: "Eindeutige Klicks", get: (d) => d.uniqueClicks, color: "--c-warn", dash: true, defaultOn: false },
+  { key: "sent", label: "Gesendet", get: (d) => d.sent, color: "--c-accent", area: true },
+  { key: "replies", label: "Antworten", get: (d) => d.replies, color: "--c-ok" },
 ];
 
 const VB_W = 720;
@@ -356,22 +349,18 @@ function niceScale(rawMax: number): { max: number; ticks: number[] } {
 
 function TrendChart({ daily }: { daily: DailyPoint[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [visible, setVisible] = useState<Set<SeriesKey>>(
-    () => new Set(SERIES.filter((s) => s.defaultOn).map((s) => s.key)),
-  );
   const [hover, setHover] = useState<number | null>(null);
 
   const n = daily.length;
-  const activeSeries = SERIES.filter((s) => visible.has(s.key));
+  const activeSeries = SERIES;
 
   const { max: niceMax, ticks } = useMemo(() => {
     let raw = 0;
     for (const d of daily) {
-      for (const s of activeSeries) raw = Math.max(raw, s.get(d));
+      for (const s of SERIES) raw = Math.max(raw, s.get(d));
     }
     return niceScale(raw);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daily, visible]);
+  }, [daily]);
 
   const hasData = useMemo(
     () => daily.some((d) => SERIES.some((s) => s.get(d) > 0)),
@@ -400,15 +389,6 @@ function TrendChart({ daily }: { daily: DailyPoint[] }) {
     );
   }
 
-  function toggle(key: SeriesKey) {
-    setVisible((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
   function onMove(e: React.MouseEvent) {
     const svg = svgRef.current;
     if (!svg || n === 0) return;
@@ -430,29 +410,20 @@ function TrendChart({ daily }: { daily: DailyPoint[] }) {
 
   return (
     <div>
-      {/* Legende */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        {SERIES.map((s) => {
-          const on = visible.has(s.key);
-          return (
-            <button
-              key={s.key}
-              onClick={() => toggle(s.key)}
-              aria-pressed={on}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
-                on
-                  ? "border-accent-line bg-accent-faint text-accent-ink"
-                  : "border-line text-sub opacity-60 hover:opacity-100"
-              }`}
-            >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: `rgb(var(${s.color}))` }}
-              />
-              {s.label}
-            </button>
-          );
-        })}
+      {/* Legende (statisch – beide Reihen immer sichtbar) */}
+      <div className="flex flex-wrap gap-4 mb-3">
+        {SERIES.map((s) => (
+          <span
+            key={s.key}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-sub"
+          >
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: `rgb(var(${s.color}))` }}
+            />
+            {s.label}
+          </span>
+        ))}
       </div>
 
       {/* Plot */}
@@ -540,7 +511,6 @@ function TrendChart({ daily }: { daily: DailyPoint[] }) {
                     fill="none"
                     stroke={`rgb(var(${s.color}))`}
                     strokeWidth={1.5}
-                    strokeDasharray={s.dash ? "4 3" : undefined}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
@@ -628,74 +598,7 @@ function TrendChart({ daily }: { daily: DailyPoint[] }) {
 
 // --- Tabs + Kampagnentabelle -------------------------------------------------
 
-type SortKey =
-  | "contacted"
-  | "openRate"
-  | "replyRate"
-  | "bounceRate"
-  | "opportunities";
-
-function CampaignSection({ campaigns }: { campaigns: CampaignRow[] }) {
-  const [tab, setTab] = useState<"kampagnen" | "konten">("kampagnen");
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-4 border-b border-line">
-        <TabButton active={tab === "kampagnen"} onClick={() => setTab("kampagnen")}>
-          Kampagnen-Analyse
-        </TabButton>
-        <TabButton active={tab === "konten"} onClick={() => setTab("konten")}>
-          Konten-Analyse
-        </TabButton>
-      </div>
-
-      {tab === "kampagnen" ? (
-        <CampaignTable campaigns={campaigns} />
-      ) : (
-        <div className="rounded-xl border border-line bg-surface p-8 text-center">
-          <p className="text-sm text-sub max-w-md mx-auto">
-            Die Konten-Analyse je Absender-Postfach (Status, Warmup,
-            Zustellbarkeit) findest du unter{" "}
-            <span className="text-ink font-medium">
-              Postfach › Sending-Accounts
-            </span>
-            .
-          </p>
-          <Link
-            href="/postfach/accounts"
-            className="mt-4 inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md border border-line text-sm text-sub hover:text-ink hover:bg-bg transition"
-          >
-            Zu den Sending-Accounts
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`-mb-px pb-2 px-1 text-sm font-medium transition ${
-        active
-          ? "text-ink border-b-2 border-accent"
-          : "text-sub hover:text-ink border-b-2 border-transparent"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+type SortKey = "contacted" | "replyRate" | "bounceRate" | "opportunities";
 
 function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
@@ -708,8 +611,6 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
       switch (key) {
         case "contacted":
           return c.contacted;
-        case "openRate":
-          return pct(c.openCount, c.contacted) ?? -1;
         case "replyRate":
           return pct(c.replyCount, c.contacted) ?? -1;
         case "bounceRate":
@@ -749,12 +650,6 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                 sortKey="contacted"
               />
               <SortableTh
-                label="Geöffnet"
-                sort={sort}
-                onSort={toggleSort}
-                sortKey="openRate"
-              />
-              <SortableTh
                 label="Geantwortet"
                 sort={sort}
                 onSort={toggleSort}
@@ -778,14 +673,13 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sub">
+                <td colSpan={6} className="px-4 py-8 text-center text-sub">
                   Noch keine Kampagnen im Instantly-Workspace.
                 </td>
               </tr>
             )}
             {rows.map((c) => {
               const badge = campaignStatusBadge(c.status);
-              const openRate = pct(c.openCount, c.contacted);
               const replyRate = pct(c.replyCount, c.contacted);
               const bounceRate = pct(c.bounced, c.emailsSent);
               const bounceTone =
@@ -819,12 +713,6 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                     {fmtInt(c.contacted)}
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">
-                    <span className="text-ink">{fmtInt(c.openCount)}</span>{" "}
-                    <span className="text-[11px] text-sub">
-                      · {fmtPct(openRate, 1)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 tabular-nums">
                     <span className="text-ink">{fmtInt(c.replyCount)}</span>{" "}
                     <span className="text-[11px] text-sub">
                       · {fmtPct(replyRate, 1)}
@@ -846,23 +734,16 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <a
-                        href={`https://app.instantly.ai/app/campaign/${c.id}/analytics`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="In Instantly öffnen"
-                        className="h-9 sm:h-7 w-9 sm:w-7 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                      <button
-                        title="Weitere Aktionen (bald verfügbar)"
-                        className="h-9 sm:h-7 w-9 sm:w-7 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition"
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <a
+                      href={`https://app.instantly.ai/app/campaign/${c.id}/analytics`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="In Instantly öffnen"
+                      className="h-9 sm:h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs text-sub hover:text-ink hover:bg-bg transition"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Instantly</span>
+                    </a>
                   </td>
                 </tr>
               );
@@ -942,26 +823,6 @@ function RangeControl({
         </button>
       ))}
     </div>
-  );
-}
-
-function StubButton({
-  icon: Icon,
-  label,
-  iconOnly,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  iconOnly?: boolean;
-}) {
-  return (
-    <button
-      title={`${label} (bald verfügbar)`}
-      className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs text-sub hover:text-ink hover:bg-bg transition"
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {!iconOnly && <span className="hidden sm:inline">{label}</span>}
-    </button>
   );
 }
 

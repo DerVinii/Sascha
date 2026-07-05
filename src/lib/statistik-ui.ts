@@ -7,6 +7,17 @@
 
 export type Range = "7d" | "30d" | "90d" | "all";
 
+/** CRM-Kontaktstatus (contactStatusEnum) — Quelle für den Trichter unten. */
+export type ContactStatusKey =
+  | "lead"
+  | "qualified"
+  | "in_conversation"
+  | "meeting_booked"
+  | "won"
+  | "lost";
+
+export type StatusCounts = Record<ContactStatusKey, number>;
+
 /** Workspace-Aggregat für die KPI-Karten + den Trichter. */
 export type StatOverview = {
   emailsSent: number;

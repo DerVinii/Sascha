@@ -1,3 +1,6 @@
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { contacts } from "@/db/schema";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import {
   getCampaignOverview,
@@ -8,9 +11,11 @@ import {
 import {
   fmtDayLabelYear,
   type CampaignRow,
+  type ContactStatusKey,
   type DailyPoint,
   type Range,
   type StatOverview,
+  type StatusCounts,
 } from "@/lib/statistik-ui";
 import { StatistikDashboard } from "./_components/statistik-dashboard";
 
@@ -59,10 +64,18 @@ export default async function StatistikPage({
 }: {
   searchParams: Promise<{ range?: string }>;
 }) {
-  await requireActiveOrg();
+  const org = await requireActiveOrg();
 
   const sp = await searchParams;
   const range = normalizeRange(sp?.range);
+
+  // Trichter-Quelle: CRM-Kontaktstatus (org-weit) — nur so sind Interessiert /
+  // Termine / Gewonnen trackbar. Läuft parallel zu den Instantly-Calls.
+  const statusPromise = db
+    .select({ status: contacts.status, count: sql<number>`count(*)::int` })
+    .from(contacts)
+    .where(eq(contacts.orgId, org.id))
+    .groupBy(contacts.status);
 
   const today = new Date();
   const end = isoDay(today);
@@ -172,11 +185,28 @@ export default async function StatistikPage({
       ? "gesamter Zeitraum"
       : `${fmtDayLabelYear(startDate!)} – ${fmtDayLabelYear(end)}`;
 
+  const statusCounts: StatusCounts = {
+    lead: 0,
+    qualified: 0,
+    in_conversation: 0,
+    meeting_booked: 0,
+    won: 0,
+    lost: 0,
+  };
+  try {
+    for (const r of await statusPromise) {
+      statusCounts[r.status as ContactStatusKey] = Number(r.count);
+    }
+  } catch {
+    // CRM-Zählung optional — bei DB-Fehler bleibt der Trichter-Unterbau leer.
+  }
+
   return (
     <StatistikDashboard
       overview={overview}
       daily={daily}
       campaigns={campaigns}
+      statusCounts={statusCounts}
       range={range}
       rangeLabel={rangeLabel}
       error={error}
