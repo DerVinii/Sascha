@@ -71,6 +71,7 @@
 | 2.7 | Wiedervorlagen | ✅ | „Heute fällig" / „Überfällig" auf Aufgaben + Dashboard |
 | 2.8 | Abschlusswahrscheinlichkeiten | ⚠️ | `pipeline_stages.probability` + `deals.probability` in DB, **nicht im UI** sichtbar |
 | 2.9 | Vertriebsautomationen | ❌ 🔮 | Phase 2. `automations`-Tabelle als Hook angelegt |
+| 2.10 | Ordner ↔ Pipeline synchronisieren | ✅ | Vertrieb-Ordner via „Mit Pipeline verbinden" 1:1 an Pipeline koppeln → Leads ↔ Deals beidseitig synchron (Hinzufügen/Löschen); Deal löschen = Lead löschen (voll gespiegelt). System-Spalte „Pipeline-Phase" (farbcodiertes Phasen-Dropdown, nicht editier-/löschbar). `lead_lists.pipeline_id` (1:1-Unique-Index), Engine in `src/lib/server/pipeline-sync.ts`. Verbinden befüllt nur Ordner→Pipeline. Hinweis: einzelner Deal-Löschen-Button ist im Pipeline-UI derzeit nicht verdrahtet |
 
 ---
 
