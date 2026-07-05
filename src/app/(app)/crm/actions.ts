@@ -247,25 +247,6 @@ export async function bulkDeleteContactsAction(
   return { ok: true, count: clean.length };
 }
 
-/** Status ("Phase") mehrerer Kontakte setzen — das „Verschieben". */
-export async function bulkUpdateContactStatusAction(
-  ids: string[],
-  status: ContactStatus,
-): Promise<BulkResult> {
-  const org = await requireActiveOrg();
-  const clean = cleanIds(ids);
-  if (!clean.length) return { ok: true, count: 0 };
-  if (!(VALID_STATUSES as string[]).includes(status)) {
-    throw new Error("Ungültiger Status.");
-  }
-  await db
-    .update(contacts)
-    .set({ status })
-    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
-  revalidatePath("/crm");
-  return { ok: true, count: clean.length };
-}
-
 /** Tags zu mehreren Kontakten hinzufügen (nur verwaltete Tags, dedupliziert). */
 export async function bulkAddContactTagsAction(
   ids: string[],
@@ -320,6 +301,135 @@ export async function bulkRemoveContactTagsAction(
     .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
   revalidatePath("/crm");
   return { ok: true, count: clean.length };
+}
+
+// ============================================================================
+// IMPORT (CSV → Kontakte)
+// ============================================================================
+
+export type ImportContactInput = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  companyName?: string;
+  status?: string;
+  source?: string;
+  tags?: string;
+};
+
+export type ImportResult = {
+  imported: number;
+  skipped: number;
+  total: number;
+};
+
+/** Deutsche/englische Status-Bezeichnungen und Enum-Keys → Enum. */
+const STATUS_FROM_TEXT: Record<string, ContactStatus> = {
+  lead: "lead",
+  "neuer lead": "lead",
+  qualifiziert: "qualified",
+  qualified: "qualified",
+  "im gespräch": "in_conversation",
+  "im gespraech": "in_conversation",
+  in_conversation: "in_conversation",
+  "termin gebucht": "meeting_booked",
+  meeting_booked: "meeting_booked",
+  "closed won": "won",
+  gewonnen: "won",
+  won: "won",
+  "closed lost": "lost",
+  verloren: "lost",
+  lost: "lost",
+};
+
+function statusFromText(v: string | undefined): ContactStatus {
+  const s = (v ?? "").trim().toLowerCase();
+  return STATUS_FROM_TEXT[s] ?? "lead";
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Legt mehrere Kontakte aus einer CSV/Tabelle an. Firmen werden anhand des
+ * Namens wiederverwendet oder neu erstellt. Es werden bewusst KEINE
+ * Push-Benachrichtigungen ausgelöst (sonst Spam bei Massenimport).
+ */
+export async function importContactsAction(
+  input: ImportContactInput[],
+): Promise<ImportResult> {
+  const org = await requireActiveOrg();
+  const total = Array.isArray(input) ? input.length : 0;
+  if (!total) return { imported: 0, skipped: 0, total: 0 };
+
+  const norm = (v: string | undefined) => {
+    const s = (v ?? "").trim();
+    return s ? s : null;
+  };
+
+  // Nur Zeilen mit mindestens einem sinnvollen Feld übernehmen.
+  const rows = input
+    .slice(0, 5000)
+    .map((r) => ({
+      firstName: norm(r.firstName),
+      lastName: norm(r.lastName),
+      email: norm(r.email),
+      phone: norm(r.phone),
+      companyName: norm(r.companyName),
+      status: statusFromText(r.status),
+      source: norm(r.source),
+      tags: parseTags(r.tags ?? null),
+    }))
+    .filter(
+      (r) =>
+        r.firstName || r.lastName || r.email || r.phone || r.companyName,
+    );
+
+  const skipped = Math.min(total, 5000) - rows.length;
+  if (!rows.length) return { imported: 0, skipped, total };
+
+  // Firmen einmalig auflösen (vorhandene wiederverwenden, fehlende anlegen).
+  const names = [...new Set(rows.map((r) => r.companyName).filter(Boolean))] as string[];
+  const companyByName = new Map<string, string>();
+  if (names.length) {
+    const existing = await db
+      .select({ id: companies.id, name: companies.name })
+      .from(companies)
+      .where(and(eq(companies.orgId, org.id), inArray(companies.name, names)));
+    existing.forEach((c) => companyByName.set(c.name, c.id));
+
+    const toCreate = names.filter((n) => !companyByName.has(n));
+    for (const nameChunk of chunk(toCreate, 500)) {
+      const created = await db
+        .insert(companies)
+        .values(nameChunk.map((name) => ({ orgId: org.id, name })))
+        .returning({ id: companies.id, name: companies.name });
+      created.forEach((c) => companyByName.set(c.name, c.id));
+    }
+  }
+
+  const values = rows.map((r) => ({
+    orgId: org.id,
+    companyId: r.companyName ? companyByName.get(r.companyName) ?? null : null,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    email: r.email,
+    phone: r.phone,
+    status: r.status,
+    source: r.source,
+    tags: r.tags,
+  }));
+
+  for (const part of chunk(values, 500)) {
+    await db.insert(contacts).values(part);
+  }
+
+  revalidatePath("/crm");
+  return { imported: values.length, skipped, total };
 }
 
 export { assertOrgAccess };

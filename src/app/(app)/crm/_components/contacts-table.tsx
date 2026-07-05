@@ -11,15 +11,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Upload,
   Settings,
   Plus,
   X,
   Trash2,
   Tag as TagIcon,
-  ArrowRightLeft,
   Check,
 } from "lucide-react";
 import { NewContactModal } from "./new-contact-modal";
+import { ImportContactsModal } from "./import-contacts-modal";
 import {
   StatusPill,
   STATUS_LABELS,
@@ -27,7 +28,6 @@ import {
 import type { ContactStatus } from "../actions";
 import {
   bulkDeleteContactsAction,
-  bulkUpdateContactStatusAction,
   bulkAddContactTagsAction,
   bulkRemoveContactTagsAction,
 } from "../actions";
@@ -248,13 +248,11 @@ export function ContactsTable({
   const [perPage, setPerPage] = useState(25);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [colsOpen, setColsOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<FilterCond[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Bulk-Menüs
-  const [moveOpen, setMoveOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [tagMode, setTagMode] = useState<"add" | "remove">("add");
   const [tagPick, setTagPick] = useState<Set<string>>(new Set());
@@ -344,7 +342,6 @@ export function ContactsTable({
 
   function clearSelection() {
     setSelected(new Set());
-    setMoveOpen(false);
     setTagsOpen(false);
   }
 
@@ -383,13 +380,6 @@ export function ContactsTable({
         router.refresh();
       }
     });
-  }
-
-  function bulkMove(status: ContactStatus) {
-    const ids = [...selected];
-    runBulk(() => bulkUpdateContactStatusAction(ids, status), () =>
-      setMoveOpen(false),
-    );
   }
 
   function bulkDelete() {
@@ -577,33 +567,27 @@ export function ContactsTable({
             )}
           </div>
 
-          {/* Mehr Optionen */}
-          <div>
-            <button
-              onClick={() => setMoreOpen((v) => !v)}
-              className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
-            >
-              Mehr Optionen
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {moreOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setMoreOpen(false)}
-                />
-                <div className="absolute right-2 top-full mt-1 z-20 w-48 max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-md shadow-lg p-1.5">
-                  <a
-                    href="/api/crm/export"
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg"
-                  >
-                    <Download className="h-4 w-4" />
-                    Als CSV exportieren
-                  </a>
-                </div>
-              </>
+          {/* Importieren */}
+          <ImportContactsModal
+            trigger={(open) => (
+              <button
+                onClick={open}
+                className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Importieren</span>
+              </button>
             )}
-          </div>
+          />
+
+          {/* Exportieren */}
+          <a
+            href="/api/crm/export"
+            className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Exportieren</span>
+          </a>
 
           <NewContactModal
             trigger={(open) => (
@@ -634,53 +618,10 @@ export function ContactsTable({
 
             <div className="h-5 w-px bg-line mx-1 hidden sm:block" />
 
-            {/* Verschieben nach Status */}
-            <div>
-              <button
-                onClick={() => {
-                  setMoveOpen((v) => !v);
-                  setTagsOpen(false);
-                }}
-                disabled={pending}
-                className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
-              >
-                <ArrowRightLeft className="h-4 w-4" />
-                Verschieben
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {moveOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setMoveOpen(false)}
-                  />
-                  <div className="absolute left-2 top-full mt-1 z-20 w-52 max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-md shadow-lg p-1.5">
-                    <div className="px-2 py-1 text-[11px] uppercase tracking-wide text-sub">
-                      Status setzen auf
-                    </div>
-                    {(Object.keys(STATUS_LABELS) as ContactStatus[]).map(
-                      (key) => (
-                        <button
-                          key={key}
-                          onClick={() => bulkMove(key)}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-bg text-left"
-                        >
-                          <StatusPill status={key} />
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
             {/* Tags */}
             <div>
               <button
-                onClick={() => {
-                  setTagsOpen((v) => !v);
-                  setMoveOpen(false);
-                }}
+                onClick={() => setTagsOpen((v) => !v)}
                 disabled={pending || availableTags.length === 0}
                 title={
                   availableTags.length === 0
