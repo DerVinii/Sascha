@@ -13,12 +13,14 @@ export type StageTemplate = { name: string; color: string };
  * abgefragt und immer dieser Standard-Satz an Phasen verwendet.
  */
 export const DEFAULT_STAGES: StageTemplate[] = [
-  { name: "Lead", color: "#fef3c7" },
-  { name: "Qualifiziert", color: "#dbeafe" },
-  { name: "Im Gespräch", color: "#e0e7ff" },
-  { name: "Termin gebucht", color: "#fed7aa" },
-  { name: "Gewonnen", color: "#d1fae5" },
-  { name: "Verloren", color: "#fee2e2" },
+  { name: "gescrapt", color: "#f1f5f9" },
+  { name: "in Kampagne", color: "#fef3c7" },
+  { name: "angeschrieben", color: "#dbeafe" },
+  { name: "Kampagne fertig", color: "#e0e7ff" },
+  { name: "geantwortet", color: "#fed7aa" },
+  { name: "Termin vereinbart", color: "#fde68a" },
+  { name: "Deal", color: "#d1fae5" },
+  { name: "Lost", color: "#fee2e2" },
 ];
 
 /** Farbpalette für die Phasen-Auswahl im Pipeline-Manager. */
