@@ -127,6 +127,9 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     pending: number;
   }>({ active: false, pending: 0 });
   const bgPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stall-Erkennung: kein Fortschritt über mehrere Ticks -> Drain neu anstoßen
+  // (deckt den seltenen Fall ab, dass eine Server-Chain abbricht).
+  const bgStall = useRef({ last: -1, misses: 0 });
 
   const stopBgPoll = useCallback(() => {
     if (bgPoll.current) {
@@ -140,7 +143,24 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       const st = await enrichmentStatusAction({ listId });
       setBgEnrich(st);
       await refresh();
-      if (!st.active && st.pending === 0) stopBgPoll();
+      if (!st.active && st.pending === 0) {
+        stopBgPoll();
+        bgStall.current = { last: -1, misses: 0 };
+        return;
+      }
+      if (st.active) {
+        if (st.pending === bgStall.current.last) {
+          bgStall.current.misses += 1;
+          if (bgStall.current.misses >= 3) {
+            bgStall.current.misses = 0;
+            // Lauf scheint zu hängen -> server-seitig neu anstoßen (Doppel-Guard
+            // im Server verhindert parallele Chains).
+            queueEnrichmentAction({ listId }).catch(() => {});
+          }
+        } else {
+          bgStall.current = { last: st.pending, misses: 0 };
+        }
+      }
     } catch {
       /* transient — nächster Tick versucht es erneut */
     }
@@ -151,14 +171,19 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     bgPoll.current = setInterval(pollEnrichment, 4000);
   }, [pollEnrichment]);
 
-  // Beim Laden: läuft server-seitig noch ein Lauf? Dann Anzeige + Polling wieder aufnehmen.
+  // Beim Laden: läuft server-seitig noch ein Lauf? Dann Anzeige + Polling wieder
+  // aufnehmen UND den Drain sicherheitshalber neu anstoßen (falls die Chain
+  // abbrach, während die App geschlossen war).
   useEffect(() => {
     let cancelled = false;
     enrichmentStatusAction({ listId })
       .then((st) => {
         if (cancelled) return;
         setBgEnrich(st);
-        if (st.active) startBgPoll();
+        if (st.active) {
+          startBgPoll();
+          queueEnrichmentAction({ listId }).catch(() => {});
+        }
       })
       .catch(() => {});
     return () => {
