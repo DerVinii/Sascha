@@ -19,7 +19,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LeadColumn } from "@/lib/scraping-types";
+import { isProtectedColumn, type LeadColumn } from "@/lib/scraping-types";
 
 const COLOR_TOKENS: Record<string, string> = {
   info: "text-info",
@@ -78,6 +78,8 @@ export function ColumnHeader({
   const runnable = column.kind === "enrichment" || !!column.config.ai;
   // "Mit KI ausfüllen" für eigene Daten-/KI-Spalten (nicht Source, nicht find_dm).
   const canAi = column.kind !== "source" && !column.config.provider;
+  // Kernfelder (Vorname/Nachname/E-Mail) dürfen nicht gelöscht werden.
+  const canDelete = !isProtectedColumn(column.key);
 
   function close() {
     setOpen(false);
@@ -230,15 +232,17 @@ export function ColumnHeader({
                 close();
               }}
             />
-            <MenuItem
-              icon={<Trash2 className="h-3.5 w-3.5" />}
-              label="Löschen"
-              danger
-              onClick={() => {
-                onDelete();
-                close();
-              }}
-            />
+            {canDelete && (
+              <MenuItem
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+                label="Löschen"
+                danger
+                onClick={() => {
+                  onDelete();
+                  close();
+                }}
+              />
+            )}
           </div>
         </>
       )}

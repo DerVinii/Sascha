@@ -39,6 +39,7 @@ import {
 import {
   instantlyVarToken,
   NATIVE_INSTANTLY_TOKENS,
+  isProtectedColumn,
 } from "@/lib/scraping-types";
 import type {
   LeadColumn,
@@ -625,6 +626,17 @@ export async function updateColumnAction(input: {
 
 export async function deleteColumnAction(input: { id: string }): Promise<void> {
   const org = await requireActiveOrg();
+  const [col] = await db
+    .select({ key: leadColumns.key })
+    .from(leadColumns)
+    .where(and(eq(leadColumns.id, input.id), eq(leadColumns.orgId, org.id)))
+    .limit(1);
+  if (!col) return;
+  if (isProtectedColumn(col.key)) {
+    throw new Error(
+      "Diese Spalte ist ein Kernfeld (Vorname, Nachname oder E-Mail) und kann nicht gelöscht werden.",
+    );
+  }
   await db
     .delete(leadColumns)
     .where(and(eq(leadColumns.id, input.id), eq(leadColumns.orgId, org.id)));

@@ -6,6 +6,16 @@
 /** Schlüssel der kanonischen Enrichment-Spalte (Geschäftsführer finden). */
 export const ENRICHMENT_KEY = "find_dm";
 
+/**
+ * Kern-Spalten mit festem Key, die nicht gelöscht werden dürfen — diese Felder
+ * werden vom Enrichment zurückgeschrieben und in Instantly-Kampagnen gebraucht.
+ */
+export const PROTECTED_COLUMN_KEYS = ["firstName", "lastName", "email"] as const;
+
+export function isProtectedColumn(key: string): boolean {
+  return (PROTECTED_COLUMN_KEYS as readonly string[]).includes(key);
+}
+
 export type LeadColumnKind = "source" | "data" | "enrichment" | "action";
 
 export type LeadDataType =

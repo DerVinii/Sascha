@@ -232,8 +232,12 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   };
   const onDeleteColumn = async (id: string) => {
     if (!confirm("Spalte löschen?")) return;
-    await deleteColumnAction({ id });
-    await refresh();
+    try {
+      await deleteColumnAction({ id });
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Spalte konnte nicht gelöscht werden.");
+    }
   };
   const onAddAsColumn = async (field: string, label: string) => {
     if (!details) return;
