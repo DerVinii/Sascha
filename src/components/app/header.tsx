@@ -12,6 +12,10 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "Vertrieb",
     desc: "Lead-Recherche, Akquise und Cold-Outreach.",
   },
+  "/statistik": {
+    title: "Statistik",
+    desc: "Kampagnen-Kennzahlen aus Instantly – Öffnungen, Antworten, Chancen.",
+  },
   "/pipelines": {
     title: "Pipelines",
     desc: "Deals nach Pipelines und Phasen verwalten.",

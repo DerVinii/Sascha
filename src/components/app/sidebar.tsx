@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Inbox,
   Filter,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ type NavItem = {
 const TOP: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/vertrieb", label: "Vertrieb", icon: Megaphone },
+  { href: "/statistik", label: "Statistik", icon: BarChart3 },
   { href: "/crm", label: "Kontakte", icon: Users },
 ];
 

@@ -470,6 +470,182 @@ export async function deleteWebhook(id: string): Promise<void> {
   await call(`/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- Kampagnen-Statistik (Analytics) ----------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function num(v: any): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/** Workspace-Aggregat über alle (gefilterten) Kampagnen in einem Zeitraum. */
+export type CampaignOverview = {
+  emailsSent: number;
+  contacted: number;
+  newLeadsContacted: number;
+  openCount: number;
+  openUnique: number;
+  linkClickCount: number;
+  linkClickUnique: number;
+  replyCount: number;
+  replyUnique: number;
+  bounced: number;
+  unsubscribed: number;
+  opportunities: number;
+  opportunityValue: number;
+  interested: number;
+  meetingBooked: number;
+  meetingCompleted: number;
+  closed: number;
+};
+
+const EMPTY_OVERVIEW: CampaignOverview = {
+  emailsSent: 0,
+  contacted: 0,
+  newLeadsContacted: 0,
+  openCount: 0,
+  openUnique: 0,
+  linkClickCount: 0,
+  linkClickUnique: 0,
+  replyCount: 0,
+  replyUnique: 0,
+  bounced: 0,
+  unsubscribed: 0,
+  opportunities: 0,
+  opportunityValue: 0,
+  interested: 0,
+  meetingBooked: 0,
+  meetingCompleted: 0,
+  closed: 0,
+};
+
+/**
+ * GET /campaigns/analytics/overview — ein Objekt mit den Summen des Zeitraums.
+ * Ohne Datumsgrenzen liefert Instantly den Lifetime-Wert.
+ */
+export async function getCampaignOverview(
+  startDate?: string,
+  endDate?: string,
+): Promise<CampaignOverview> {
+  const qs = new URLSearchParams();
+  if (startDate) qs.set("start_date", startDate);
+  if (endDate) qs.set("end_date", endDate);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = await call<any>(`/campaigns/analytics/overview${suffix}`);
+  if (!d || typeof d !== "object") return { ...EMPTY_OVERVIEW };
+  return {
+    emailsSent: num(d.emails_sent_count),
+    contacted: num(d.contacted_count),
+    newLeadsContacted: num(d.new_leads_contacted_count),
+    openCount: num(d.open_count),
+    openUnique: num(d.open_count_unique),
+    linkClickCount: num(d.link_click_count),
+    linkClickUnique: num(d.link_click_count_unique),
+    replyCount: num(d.reply_count),
+    replyUnique: num(d.reply_count_unique),
+    bounced: num(d.bounced_count),
+    unsubscribed: num(d.unsubscribed_count),
+    opportunities: num(d.total_opportunities),
+    opportunityValue: num(d.total_opportunity_value),
+    interested: num(d.total_interested),
+    meetingBooked: num(d.total_meeting_booked),
+    meetingCompleted: num(d.total_meeting_completed),
+    closed: num(d.total_closed),
+  };
+}
+
+/** GET /campaigns/analytics — Kennzahlen pro Kampagne. */
+export type CampaignStat = {
+  campaignId: string;
+  campaignName: string;
+  status: number | null;
+  isEvergreen: boolean;
+  leads: number;
+  contacted: number;
+  emailsSent: number;
+  openCount: number;
+  replyCount: number;
+  linkClickCount: number;
+  bounced: number;
+  unsubscribed: number;
+  completed: number;
+  newLeadsContacted: number;
+  opportunities: number;
+  opportunityValue: number;
+};
+
+export async function getCampaignAnalytics(
+  startDate?: string,
+  endDate?: string,
+): Promise<CampaignStat[]> {
+  const qs = new URLSearchParams();
+  if (startDate) qs.set("start_date", startDate);
+  if (endDate) qs.set("end_date", endDate);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await call<any>(`/campaigns/analytics${suffix}`);
+  const rows = Array.isArray(data) ? data : (data?.items ?? []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return rows.map((r: any) => ({
+    campaignId: r.campaign_id ?? r.id ?? "",
+    campaignName: r.campaign_name ?? r.name ?? "(ohne Name)",
+    status: typeof r.campaign_status === "number" ? r.campaign_status : null,
+    isEvergreen: Boolean(r.campaign_is_evergreen),
+    leads: num(r.leads_count),
+    contacted: num(r.contacted_count),
+    emailsSent: num(r.emails_sent_count),
+    openCount: num(r.open_count),
+    replyCount: num(r.reply_count),
+    linkClickCount: num(r.link_click_count),
+    bounced: num(r.bounced_count),
+    unsubscribed: num(r.unsubscribed_count),
+    completed: num(r.completed_count),
+    newLeadsContacted: num(r.new_leads_contacted_count),
+    opportunities: num(r.total_opportunities),
+    opportunityValue: num(r.total_opportunity_value),
+  }));
+}
+
+/** GET /campaigns/analytics/daily — Tageszeitreihe (Chart). */
+export type CampaignDailyStat = {
+  date: string;
+  sent: number;
+  opened: number;
+  uniqueOpened: number;
+  replies: number;
+  uniqueReplies: number;
+  clicks: number;
+  uniqueClicks: number;
+};
+
+export async function getCampaignDailyAnalytics(
+  startDate: string,
+  endDate: string,
+  campaignId?: string,
+): Promise<CampaignDailyStat[]> {
+  const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  if (campaignId) qs.set("campaign_id", campaignId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await call<any>(`/campaigns/analytics/daily?${qs.toString()}`);
+  const rows = Array.isArray(data) ? data : (data?.items ?? []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return rows
+    .map((r: any) => ({
+      date: r.date ?? r.day ?? "",
+      sent: num(r.sent ?? r.emails_sent_count),
+      opened: num(r.opened ?? r.open_count),
+      uniqueOpened: num(r.unique_opened ?? r.open_count_unique),
+      replies: num(r.replies ?? r.reply_count),
+      uniqueReplies: num(r.unique_replies ?? r.reply_count_unique),
+      clicks: num(r.clicks ?? r.link_click_count),
+      uniqueClicks: num(r.unique_clicks ?? r.link_click_count_unique),
+    }))
+    .filter((r: CampaignDailyStat) => r.date)
+    .sort((a: CampaignDailyStat, b: CampaignDailyStat) =>
+      a.date.localeCompare(b.date),
+    );
+}
+
 export type InstantlyLead = {
   email: string;
   first_name?: string;
