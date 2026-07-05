@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/db";
 import {
   contacts,
@@ -9,11 +10,10 @@ import {
   leadColumns,
   leadLists,
 } from "@/db/schema";
-import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
-import { runProvider } from "@/lib/server/scraping/providers";
-import { runAiColumn } from "@/lib/server/scraping/ai-column";
+import { triggerEnrichmentRun } from "@/lib/server/scraping/enrichment-trigger";
 import {
   bulkAddLeads,
   listAccounts,
@@ -29,13 +29,19 @@ import {
   getColumns,
   getColumnByKey,
   buildCells,
-  resolveRowPath,
   cellNeedsRun,
   passesOnlyRunIf,
   BUILTIN_VIEWS,
   ENRICHMENT_KEY,
   type RowSources,
 } from "@/lib/server/scraping/lead-columns";
+import {
+  loadLeadRows,
+  cellPatch,
+  runEnrichmentForRow,
+  pendingCountForList,
+  ENRICH_STALE_MS,
+} from "@/lib/server/scraping/enrich-run";
 import {
   instantlyVarToken,
   NATIVE_INSTANTLY_TOKENS,
@@ -61,64 +67,10 @@ import type {
 } from "@/lib/scraping-types";
 
 const SOURCE = "Google Maps";
-const MAX_ROWS = 1000; // Phase-1-Cap (ein Kunde); Server-Pagination = Phase 2.
 
 // ============================================================================
 // Hilfen
 // ============================================================================
-
-async function loadLeadRows(
-  orgId: string,
-  listId: string,
-  limit = MAX_ROWS,
-): Promise<RowSources[]> {
-  const rows = await db
-    .select({
-      id: contacts.id,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-      email: contacts.email,
-      phone: contacts.phone,
-      companyId: contacts.companyId,
-      contactCf: contacts.customFields,
-      companyName: companies.name,
-      companyDomain: companies.domain,
-      companyAddress: companies.address,
-      companyCf: companies.customFields,
-    })
-    .from(contacts)
-    .leftJoin(companies, eq(contacts.companyId, companies.id))
-    .where(and(eq(contacts.orgId, orgId), eq(contacts.leadListId, listId)))
-    .orderBy(desc(contacts.createdAt), asc(contacts.id))
-    .limit(limit);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return rows.map((r: any) => ({
-    contact: {
-      id: r.id,
-      firstName: r.firstName,
-      lastName: r.lastName,
-      email: r.email,
-      phone: r.phone,
-      companyId: r.companyId,
-      customFields: r.contactCf ?? {},
-    },
-    company: r.companyId
-      ? {
-          name: r.companyName,
-          domain: r.companyDomain,
-          address: r.companyAddress ?? null,
-          customFields: r.companyCf ?? {},
-        }
-      : null,
-  }));
-}
-
-/** jsonb-Merge, der cells[columnKey] setzt und alles andere erhält. */
-function cellPatch(columnKey: string, cell: Record<string, unknown>) {
-  const patch = JSON.stringify({ [columnKey]: cell });
-  return sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('cells', coalesce(${contacts.customFields} -> 'cells', '{}'::jsonb) || ${patch}::jsonb)`;
-}
 
 function slugKey(label: string): string {
   const base = label
@@ -330,154 +282,9 @@ export async function listLeadTableAction(input: {
 // ENRICHMENT-RUN (Zelle / Auswahl / Spalte / alle) — unterer n8n-Workflow
 // ============================================================================
 
-type RowOutcome = {
-  status: "success" | "not_found" | "error";
-  /** Fehler war ein Gemini-Kontingent-/Rate-Limit-Fehler (429). */
-  rateLimited?: boolean;
-};
-
-/** Erkennt Gemini-429/Kontingent-Fehler an der Fehlermeldung. */
-function isRateLimitError(msg: string): boolean {
-  return /\b429\b|quota|rate[ _-]?limit|RESOURCE_EXHAUSTED/i.test(msg);
-}
-
-async function runEnrichmentForRow(
-  orgId: string,
-  column: LeadColumn,
-  src: RowSources,
-  columns: LeadColumn[],
-): Promise<RowOutcome> {
-  // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
-  if (column.config.ai?.prompt) {
-    const runAt = new Date().toISOString();
-    try {
-      const cellsNow = buildCells(columns, src);
-      const ctx: Record<string, unknown> = {};
-      for (const c of columns) {
-        if (c.key === column.key) continue;
-        const v = cellsNow[c.key]?.value;
-        if (v !== null && v !== undefined && v !== "") ctx[c.label] = v;
-      }
-      const value = await runAiColumn(column.config.ai.prompt, ctx);
-      const found = value.toUpperCase() !== "NF" && value.trim() !== "";
-      const cell = {
-        status: found ? "success" : "not_found",
-        provider: "gemini",
-        runAt,
-        error: null,
-        value: found ? value : "",
-        raw: { prompt: column.config.ai.prompt, value },
-      };
-      await db
-        .update(contacts)
-        .set({ customFields: cellPatch(column.key, cell) })
-        .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return { status: found ? "success" : "not_found" };
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Fehler";
-      const cell = {
-        status: "error",
-        provider: null,
-        runAt,
-        error: message.slice(0, 300),
-        value: "",
-        raw: null,
-      };
-      await db
-        .update(contacts)
-        .set({ customFields: cellPatch(column.key, cell) })
-        .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return { status: "error", rateLimited: isRateLimitError(message) };
-    }
-  }
-
-  const inputs = column.config.inputs ?? {};
-  const firmenname = String(
-    resolveRowPath(inputs["Firmenname"] ?? "company.name", src) ?? "",
-  );
-  const webseite = resolveRowPath(
-    inputs["Webseite"] ?? "company.customFields.websiteUri",
-    src,
-  ) as string | null;
-  const gmapsUrl = resolveRowPath(
-    inputs["Google Maps Link"] ?? "company.customFields.googleMapsUri",
-    src,
-  ) as string | null;
-
-  const chain = column.config.provider ?? ["gemini"];
-
-  try {
-    const { provider, result } = await runProvider(chain, {
-      firmenname,
-      webseite,
-      gmapsUrl,
-    });
-    const runAt = new Date().toISOString();
-
-    if (result.found) {
-      const firstName =
-        result.vorname.toUpperCase() === "NF" ? null : result.vorname;
-      const lastName =
-        result.nachname.toUpperCase() === "NF" ? null : result.nachname;
-      const email =
-        result.email.toUpperCase() === "NF" || !result.email.includes("@")
-          ? null
-          : result.email.toLowerCase();
-
-      const cell = {
-        status: "success",
-        provider,
-        runAt,
-        error: null,
-        value: [firstName, lastName].filter(Boolean).join(" ") || email || "",
-        raw: { vorname: firstName, nachname: lastName, email },
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const set: any = { customFields: cellPatch(column.key, cell) };
-      // Nur die kanonische Enrichment schreibt in die Kontakt-Felder zurück.
-      if (column.key === ENRICHMENT_KEY) {
-        set.firstName = firstName;
-        set.lastName = lastName;
-        set.email = email;
-      }
-      await db
-        .update(contacts)
-        .set(set)
-        .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-      return { status: "success" };
-    }
-
-    const cell = {
-      status: "not_found",
-      provider: null,
-      runAt,
-      error: null,
-      value: "",
-      raw: { vorname: "NF", nachname: "NF", email: "NF" },
-    };
-    await db
-      .update(contacts)
-      .set({ customFields: cellPatch(column.key, cell) })
-      .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-    return { status: "not_found" };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Fehler";
-    const cell = {
-      status: "error",
-      provider: null,
-      runAt: new Date().toISOString(),
-      error: message.slice(0, 300),
-      value: "",
-      raw: null,
-    };
-    await db
-      .update(contacts)
-      .set({ customFields: cellPatch(column.key, cell) })
-      .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-    return { status: "error", rateLimited: isRateLimitError(message) };
-  }
-}
+// Die eigentliche Enrichment-Engine (runEnrichmentForRow, Drain, Rate-Limit-
+// Erkennung) liegt in enrich-run.ts, damit sie sowohl von diesen Server-Actions
+// als auch von der Hintergrund-Route /api/enrichment/run genutzt werden kann.
 
 export async function runEnrichmentBatchAction(input: {
   columnKey: string;
@@ -558,6 +365,75 @@ export async function runEnrichmentBatchAction(input: {
     rowIds: toProcess.map((s) => s.contact.id),
     rateLimited,
   };
+}
+
+// ============================================================================
+// HINTERGRUND-ENRICHMENT ("Update cells") — server-seitig, überlebt App-Schließen
+// ============================================================================
+
+export type EnrichmentQueueResult = {
+  queued: boolean;
+  pending: number;
+  error?: string | null;
+};
+
+/**
+ * "Update cells": markiert die Liste für Hintergrund-Enrichment und stößt den
+ * Server-Drain an. Kehrt sofort zurück — die Anreicherung (Vorname/Nachname/
+ * E-Mail) läuft server-seitig weiter, auch wenn die App geschlossen oder der
+ * Reiter gewechselt wird.
+ */
+export async function queueEnrichmentAction(input: {
+  listId: string;
+}): Promise<EnrichmentQueueResult> {
+  const org = await requireActiveOrg();
+  if (!input.listId)
+    return { queued: false, pending: 0, error: "Keine Kampagne ausgewählt." };
+
+  const pending = await pendingCountForList(org.id, input.listId);
+  if (pending === 0) return { queued: false, pending: 0 };
+
+  // Läuft schon eine lebende Chain (frischer Tick)? Dann Tick NICHT zurücksetzen,
+  // sonst würde der neue Anstoß eine zweite, parallele Chain starten.
+  const [cur] = await db
+    .select({ tickAt: leadLists.enrichmentTickAt })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)))
+    .limit(1);
+  const liveChain =
+    !!cur?.tickAt && Date.now() - cur.tickAt.getTime() < ENRICH_STALE_MS;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: any = { enrichmentQueuedAt: new Date() };
+  if (!liveChain) patch.enrichmentTickAt = null; // sofortige Aufnahme erlauben
+  await db
+    .update(leadLists)
+    .set(patch)
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+
+  // Nach der Antwort den Server-Drain anstoßen (blockiert die Action nicht).
+  after(() => triggerEnrichmentRun({ continuation: false }));
+
+  return { queued: true, pending };
+}
+
+export type EnrichmentStatus = {
+  active: boolean; // Liste ist in der Queue (Lauf aktiv)
+  pending: number; // noch offene Zeilen
+};
+
+/** Fortschritt für die Live-Anzeige — der Client pollt das, solange er offen ist. */
+export async function enrichmentStatusAction(input: {
+  listId: string;
+}): Promise<EnrichmentStatus> {
+  const org = await requireActiveOrg();
+  const [row] = await db
+    .select({ queuedAt: leadLists.enrichmentQueuedAt })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)))
+    .limit(1);
+  const pending = await pendingCountForList(org.id, input.listId);
+  return { active: !!row?.queuedAt, pending };
 }
 
 // ============================================================================

@@ -108,6 +108,10 @@ export const leadLists = pgTable(
     name: text("name").notNull(),
     // 1:1-Verknüpfung zur Instantly-Kampagne (lazy beim "Kampagne einrichten" angelegt).
     instantlyCampaignId: text("instantly_campaign_id"),
+    // Hintergrund-Enrichment: gesetzt = "Update cells" läuft (server-seitig, bis geleert).
+    enrichmentQueuedAt: timestamp("enrichment_queued_at", { withTimezone: true }),
+    // Zeitpunkt des letzten Drain-Ticks — grobe Sperre gegen doppelte Läufe.
+    enrichmentTickAt: timestamp("enrichment_tick_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

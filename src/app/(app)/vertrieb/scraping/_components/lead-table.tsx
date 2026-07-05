@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Plus, Radar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -17,6 +17,8 @@ import {
   deleteColumnAction,
   addAsColumnAction,
   editCellAction,
+  queueEnrichmentAction,
+  enrichmentStatusAction,
 } from "../actions";
 import { ENRICHMENT_KEY } from "@/lib/scraping-types";
 import { useBatchRunner } from "./use-batch-runner";
@@ -117,6 +119,54 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     }
   }, [listId]);
 
+  // --- Hintergrund-Enrichment ("Update cells") -----------------------------
+  // Der eigentliche Lauf passiert server-seitig (überlebt App-Schließen); hier
+  // wird nur gepollt, um neue Namen/E-Mails live in der Tabelle zu zeigen.
+  const [bgEnrich, setBgEnrich] = useState<{
+    active: boolean;
+    pending: number;
+  }>({ active: false, pending: 0 });
+  const bgPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopBgPoll = useCallback(() => {
+    if (bgPoll.current) {
+      clearInterval(bgPoll.current);
+      bgPoll.current = null;
+    }
+  }, []);
+
+  const pollEnrichment = useCallback(async () => {
+    try {
+      const st = await enrichmentStatusAction({ listId });
+      setBgEnrich(st);
+      await refresh();
+      if (!st.active && st.pending === 0) stopBgPoll();
+    } catch {
+      /* transient — nächster Tick versucht es erneut */
+    }
+  }, [listId, refresh, stopBgPoll]);
+
+  const startBgPoll = useCallback(() => {
+    if (bgPoll.current) return;
+    bgPoll.current = setInterval(pollEnrichment, 4000);
+  }, [pollEnrichment]);
+
+  // Beim Laden: läuft server-seitig noch ein Lauf? Dann Anzeige + Polling wieder aufnehmen.
+  useEffect(() => {
+    let cancelled = false;
+    enrichmentStatusAction({ listId })
+      .then((st) => {
+        if (cancelled) return;
+        setBgEnrich(st);
+        if (st.active) startBgPoll();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      stopBgPoll();
+    };
+  }, [listId, startBgPoll, stopBgPoll]);
+
   const runner = useBatchRunner({
     listId,
     onBatch: refresh,
@@ -215,10 +265,32 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     setSelection(new Set());
   };
 
-  const updateCells = () => {
+  const updateCells = async () => {
     if (!primaryEnrichment) return;
     setError(null);
-    runner.runMissing(primaryEnrichment.key, "Update cells");
+    try {
+      const res = await queueEnrichmentAction({ listId });
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      if (!res.queued) {
+        // Nichts offen — alle Zeilen haben schon einen Namen.
+        setBgEnrich({ active: false, pending: 0 });
+        setError("Alle Zeilen sind bereits angereichert — nichts zu tun.");
+        return;
+      }
+      setBgEnrich({ active: true, pending: res.pending });
+      startBgPoll();
+      // Erste Ergebnisse schnell einblenden.
+      setTimeout(pollEnrichment, 3000);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Anreicherung konnte nicht gestartet werden.",
+      );
+    }
   };
 
   // --- Spalten-Handler -----------------------------------------------------
@@ -296,6 +368,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         exportHref="/api/crm/export?status=lead"
         progress={runner.progress}
         onStop={runner.stop}
+        bgActive={bgEnrich.active}
+        bgPending={bgEnrich.pending}
       />
 
       {error && (

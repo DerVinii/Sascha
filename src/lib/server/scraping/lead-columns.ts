@@ -106,7 +106,9 @@ export const DEFAULT_COLUMNS: ColumnSeed[] = [
     width: 200,
     pinned: false,
     color: "info",
-    hidden: false,
+    // Reine Engine-Spalte: treibt "Update cells" (schreibt Vorname/Nachname/E-Mail
+    // zurück), wird aber selbst nicht im Grid angezeigt.
+    hidden: true,
     config: {
       provider: ["gemini"],
       inputs: {

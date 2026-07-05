@@ -55,6 +55,9 @@ type Props = {
   exportHref: string;
   progress: RunnerProgress;
   onStop: () => void;
+  /** Hintergrund-Enrichment ("Update cells") aktiv + noch offene Zeilen. */
+  bgActive: boolean;
+  bgPending: number;
 };
 
 export function TableToolbar(props: Props) {
@@ -79,6 +82,8 @@ export function TableToolbar(props: Props) {
     exportHref,
     progress,
     onStop,
+    bgActive,
+    bgPending,
   } = props;
 
   const labelFor = (key: string) =>
@@ -131,10 +136,19 @@ export function TableToolbar(props: Props) {
           </button>
           <button
             onClick={onUpdateCells}
-            disabled={progress.running}
+            disabled={progress.running || bgActive}
+            title={
+              bgActive
+                ? "Anreicherung läuft bereits im Hintergrund"
+                : "Vorname, Nachname & E-Mail für offene Zeilen finden"
+            }
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
           >
-            <Sparkles className="h-3.5 w-3.5" />
+            {bgActive ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-info" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
             <span className="hidden sm:inline">Update cells</span>
           </button>
           <button
@@ -210,6 +224,14 @@ export function TableToolbar(props: Props) {
                 <Square className="h-3 w-3" />
                 Stop
               </button>
+            </div>
+          ) : bgActive ? (
+            <div className="flex items-center gap-2 text-info">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>
+                Anreicherung läuft im Hintergrund
+                {bgPending > 0 ? ` · ${bgPending} offen` : " …"}
+              </span>
             </div>
           ) : (
             <span className="text-sub">
