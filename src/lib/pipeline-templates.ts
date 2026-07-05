@@ -14,13 +14,13 @@ export type StageTemplate = { name: string; color: string };
  */
 export const DEFAULT_STAGES: StageTemplate[] = [
   { name: "gescrapt", color: "#f1f5f9" },
-  { name: "in Kampagne", color: "#fef3c7" },
-  { name: "angeschrieben", color: "#dbeafe" },
-  { name: "Kampagne fertig", color: "#e0e7ff" },
-  { name: "geantwortet", color: "#fed7aa" },
-  { name: "Termin vereinbart", color: "#fde68a" },
-  { name: "Deal", color: "#d1fae5" },
-  { name: "Lost", color: "#fee2e2" },
+  { name: "in Kampagne", color: "#3b82f6" },
+  { name: "angeschrieben", color: "#8b5cf6" },
+  { name: "Kampagne fertig", color: "#334155" },
+  { name: "geantwortet", color: "#f59e0b" },
+  { name: "Termin vereinbart", color: "#14b8a6" },
+  { name: "Deal", color: "#22c55e" },
+  { name: "Lost", color: "#ef4444" },
 ];
 
 /**
