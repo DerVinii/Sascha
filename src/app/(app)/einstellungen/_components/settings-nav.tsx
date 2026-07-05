@@ -2,21 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  TextCursorInput,
-  Tags,
-  Database,
-  SunMoon,
-  Bell,
-} from "lucide-react";
+import { Database, SunMoon, Bell } from "lucide-react";
 
 const ITEMS = [
-  {
-    href: "/einstellungen/kontaktfelder",
-    label: "Kontaktfelder",
-    icon: TextCursorInput,
-  },
-  { href: "/einstellungen/tags", label: "Tags", icon: Tags },
   {
     href: "/einstellungen/benachrichtigungen",
     label: "Benachrichtigungen",
