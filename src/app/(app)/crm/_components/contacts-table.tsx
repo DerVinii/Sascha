@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Papa from "papaparse";
 import {
   Search,
   SlidersHorizontal,
@@ -231,6 +232,30 @@ function matchCond(
   }
 }
 
+/** Wert eines individuellen Feldes fürs CSV aufbereiten. */
+function csvCustomValue(
+  value: ContactFieldValue,
+  type: ContactFieldType | undefined,
+): string {
+  if (type === "checkbox") return value === true ? "Ja" : "";
+  if (value == null || value === "") return "";
+  if (type === "date") return formatFieldDate(String(value));
+  return String(value);
+}
+
+/** Erzeugt einen CSV-Download im Browser (kein Server-Roundtrip nötig). */
+function downloadCsv(csv: string, filename: string) {
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function ContactsTable({
   contacts,
   customColumns,
@@ -380,6 +405,30 @@ export function ContactsTable({
         router.refresh();
       }
     });
+  }
+
+  function exportSelected() {
+    const chosen = contacts.filter((c) => selected.has(c.id));
+    if (chosen.length === 0) return;
+    const data = chosen.map((c) => {
+      const row: Record<string, string> = {
+        Vorname: c.firstName ?? "",
+        Nachname: c.lastName ?? "",
+        "E-Mail": c.email ?? "",
+        Telefon: c.phone ?? "",
+        Firma: c.companyName ?? "",
+        Webseite: c.domain ?? "",
+        Status: STATUS_LABELS[c.status],
+        Tags: c.tags.join(", "),
+      };
+      for (const col of customColumns) {
+        row[col.label] = csvCustomValue(c.custom[col.key] ?? null, col.type);
+      }
+      return row;
+    });
+    const csv = Papa.unparse(data, { quotes: true });
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(csv, `kontakte-auswahl-${date}.csv`);
   }
 
   function bulkDelete() {
@@ -567,28 +616,6 @@ export function ContactsTable({
             )}
           </div>
 
-          {/* Importieren */}
-          <ImportContactsModal
-            trigger={(open) => (
-              <button
-                onClick={open}
-                className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
-              >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Importieren</span>
-              </button>
-            )}
-          />
-
-          {/* Exportieren */}
-          <a
-            href="/api/crm/export"
-            className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-sub text-sm font-medium hover:bg-bg transition"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Exportieren</span>
-          </a>
-
           <NewContactModal
             trigger={(open) => (
               <button
@@ -712,6 +739,30 @@ export function ContactsTable({
             >
               <Trash2 className="h-4 w-4" />
               Löschen
+            </button>
+
+            {/* Importieren */}
+            <ImportContactsModal
+              trigger={(open) => (
+                <button
+                  onClick={open}
+                  disabled={pending}
+                  className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  Importieren
+                </button>
+              )}
+            />
+
+            {/* Exportieren (nur die Auswahl) */}
+            <button
+              onClick={exportSelected}
+              disabled={pending}
+              className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Exportieren
             </button>
 
             <div className="flex-1" />
