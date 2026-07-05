@@ -315,16 +315,17 @@ export async function listLeadTableAction(input: {
         rows.map((r) => r.id),
       );
 
-      const maxPos = columns.reduce((m, c) => Math.max(m, c.position), 0);
+      // Immer ganz links: gepinnt + negative Position (die Sortierung in
+      // visibleColumns setzt pinned zuerst, dann aufsteigend nach position).
       const phaseCol: LeadColumn = {
         id: PIPELINE_STAGE_KEY,
         key: PIPELINE_STAGE_KEY,
         label: "Pipeline-Phase",
         kind: "data",
         dataType: "select",
-        position: maxPos + 1,
+        position: -1,
         width: 190,
-        pinned: false,
+        pinned: true,
         color: null,
         hidden: false,
         config: {

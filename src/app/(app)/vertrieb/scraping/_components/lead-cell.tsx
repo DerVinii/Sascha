@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Loader2,
   Play,
@@ -210,6 +211,12 @@ function StageDropdown({
   onSelect?: (stageId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    minWidth: number;
+  } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const stages = column.config.pipeline?.stages ?? [];
   // Feste dunkle Schrift: der Hintergrund ist immer eine helle Pastellfarbe aus
   // der DB — text-ink würde im Dunkelmodus hell und damit unlesbar.
@@ -217,12 +224,37 @@ function StageDropdown({
   const hasValue = cell.value != null && cell.value !== "";
   const disabled = !onSelect;
 
+  // Menü relativ zum Button per fixed-Position rendern (Portal), sonst würde es
+  // vom overflow-hidden der Zelle / overflow-auto der Tabelle abgeschnitten.
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r)
+      setPos({ top: r.bottom + 4, left: r.left, minWidth: Math.max(r.width, 184) });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const close = () => setOpen(false);
+    // Beim Scrollen/Resize schließen (fixed-Menü würde sonst „wegdriften").
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) place();
+          setOpen((v) => !v);
+        }}
         className={cn(
           "inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 text-xs font-medium text-slate-900 disabled:cursor-default",
           !hasValue && "text-slate-500",
@@ -236,38 +268,48 @@ function StageDropdown({
         {!disabled && <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />}
       </button>
 
-      {open && !disabled && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-7 z-50 w-48 rounded-lg border border-line bg-surface shadow-xl py-1">
-            {stages.length === 0 ? (
-              <div className="px-3 py-1.5 text-xs text-sub">Keine Phasen.</div>
-            ) : (
-              stages.map((s) => {
-                const active = cell.stageId === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      setOpen(false);
-                      if (!active) onSelect?.(s.id);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg transition"
-                  >
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full ring-1 ring-line"
-                      style={{ background: s.color ?? "#e2e8f0" }}
-                    />
-                    <span className="flex-1 truncate">{s.name}</span>
-                    {active && <Check className="h-3.5 w-3.5 text-info" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </>
-      )}
-    </div>
+      {open &&
+        !disabled &&
+        pos &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[60]"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              className="fixed z-[61] max-h-64 overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1"
+              style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth }}
+            >
+              {stages.length === 0 ? (
+                <div className="px-3 py-1.5 text-xs text-sub">Keine Phasen.</div>
+              ) : (
+                stages.map((s) => {
+                  const active = cell.stageId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setOpen(false);
+                        if (!active) onSelect?.(s.id);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg transition"
+                    >
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full ring-1 ring-line"
+                        style={{ background: s.color ?? "#e2e8f0" }}
+                      />
+                      <span className="flex-1 truncate">{s.name}</span>
+                      {active && <Check className="h-3.5 w-3.5 text-info" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 
