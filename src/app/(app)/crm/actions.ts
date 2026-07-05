@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { contacts, companies, tags } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
 import { getOrgSettings } from "@/lib/server/org-settings";
 import { sendPushToOrg } from "@/lib/server/push";
@@ -210,6 +210,116 @@ export async function deleteContactAction(contactId: string) {
     .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
   revalidatePath("/crm");
   redirect("/crm");
+}
+
+// ============================================================================
+// SAMMEL-AKTIONEN (mehrere ausgewählte Kontakte auf einmal)
+// ============================================================================
+
+export type BulkResult = { ok: boolean; count: number };
+
+/** IDs säubern: leere weg, deduplizieren, sinnvoll deckeln. */
+function cleanIds(ids: string[]): string[] {
+  return [
+    ...new Set((ids ?? []).filter((s) => typeof s === "string" && s.trim())),
+  ].slice(0, 2000);
+}
+
+/** Baut ein `array['a','b']::text[]`-Literal parametrisiert (kein SQL-Injection). */
+function pgTextArray(items: string[]) {
+  return sql`array[${sql.join(
+    items.map((i) => sql`${i}`),
+    sql`, `,
+  )}]::text[]`;
+}
+
+/** Mehrere Kontakte löschen. */
+export async function bulkDeleteContactsAction(
+  ids: string[],
+): Promise<BulkResult> {
+  const org = await requireActiveOrg();
+  const clean = cleanIds(ids);
+  if (!clean.length) return { ok: true, count: 0 };
+  await db
+    .delete(contacts)
+    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
+  revalidatePath("/crm");
+  return { ok: true, count: clean.length };
+}
+
+/** Status ("Phase") mehrerer Kontakte setzen — das „Verschieben". */
+export async function bulkUpdateContactStatusAction(
+  ids: string[],
+  status: ContactStatus,
+): Promise<BulkResult> {
+  const org = await requireActiveOrg();
+  const clean = cleanIds(ids);
+  if (!clean.length) return { ok: true, count: 0 };
+  if (!(VALID_STATUSES as string[]).includes(status)) {
+    throw new Error("Ungültiger Status.");
+  }
+  await db
+    .update(contacts)
+    .set({ status })
+    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
+  revalidatePath("/crm");
+  return { ok: true, count: clean.length };
+}
+
+/** Tags zu mehreren Kontakten hinzufügen (nur verwaltete Tags, dedupliziert). */
+export async function bulkAddContactTagsAction(
+  ids: string[],
+  tagNames: string[],
+): Promise<BulkResult> {
+  const org = await requireActiveOrg();
+  const clean = cleanIds(ids);
+  const names = [
+    ...new Set((tagNames ?? []).map((t) => t.trim()).filter(Boolean)),
+  ];
+  if (!clean.length || !names.length) return { ok: true, count: 0 };
+
+  // Nur Tags zulassen, die in der Org verwaltet werden.
+  const orgTags = await db
+    .select({ name: tags.name })
+    .from(tags)
+    .where(eq(tags.orgId, org.id));
+  const allowed = new Set(orgTags.map((t) => t.name));
+  const toAdd = names.filter((n) => allowed.has(n)).slice(0, 50);
+  if (!toAdd.length) return { ok: true, count: 0 };
+
+  const arr = pgTextArray(toAdd);
+  await db
+    .update(contacts)
+    .set({
+      // vorhandene Tags mit den neuen vereinen und deduplizieren
+      tags: sql`array(select distinct t from unnest(${contacts.tags} || ${arr}) as t)`,
+    })
+    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
+  revalidatePath("/crm");
+  return { ok: true, count: clean.length };
+}
+
+/** Tags von mehreren Kontakten entfernen. */
+export async function bulkRemoveContactTagsAction(
+  ids: string[],
+  tagNames: string[],
+): Promise<BulkResult> {
+  const org = await requireActiveOrg();
+  const clean = cleanIds(ids);
+  const names = [
+    ...new Set((tagNames ?? []).map((t) => t.trim()).filter(Boolean)),
+  ].slice(0, 50);
+  if (!clean.length || !names.length) return { ok: true, count: 0 };
+
+  const arr = pgTextArray(names);
+  await db
+    .update(contacts)
+    .set({
+      tags: sql`array(select t from unnest(${contacts.tags}) as t where t <> all(${arr}))`,
+    })
+    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
+  revalidatePath("/crm");
+  return { ok: true, count: clean.length };
 }
 
 export { assertOrgAccess };
