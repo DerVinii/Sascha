@@ -210,8 +210,7 @@ function Card({
           onPointerDown={(e) => e.stopPropagation()}
           className="text-xs text-sub mt-1 block truncate hover:text-ink hover:underline"
         >
-          {deal.contactName || "(ohne Namen)"}
-          {deal.companyName ? ` · ${deal.companyName}` : ""}
+          {deal.contactName || deal.companyName || "(ohne Namen)"}
         </Link>
       ) : (
         <span className="text-xs text-sub mt-1 block">(kein Kontakt)</span>

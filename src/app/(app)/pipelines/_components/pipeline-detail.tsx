@@ -87,6 +87,7 @@ export function PipelineDetail({
   const [visible, setVisible] = useState({
     firstName: true,
     lastName: true,
+    firma: true,
     createdAt: true,
     phone: true,
     email: true,
@@ -122,7 +123,7 @@ export function PipelineDetail({
       .filter((d) =>
         !q
           ? true
-          : [d.firstName, d.lastName, d.email, d.phone, d.title]
+          : [d.firstName, d.lastName, d.companyName, d.email, d.phone, d.title]
               .filter(Boolean)
               .some((v) => (v as string).toLowerCase().includes(q)),
       );
@@ -136,6 +137,7 @@ export function PipelineDetail({
   const COLS = [
     { key: "firstName", label: "Vorname" },
     { key: "lastName", label: "Nachname" },
+    { key: "firma", label: "Firma" },
     { key: "createdAt", label: "Deal erstellt am" },
     { key: "phone", label: "Telefon" },
     { key: "email", label: "E-Mail" },
@@ -416,7 +418,14 @@ function DealCell({
   col,
 }: {
   deal: DetailDeal;
-  col: "firstName" | "lastName" | "createdAt" | "phone" | "email" | "lastContactAt";
+  col:
+    | "firstName"
+    | "lastName"
+    | "firma"
+    | "createdAt"
+    | "phone"
+    | "email"
+    | "lastContactAt";
 }) {
   switch (col) {
     case "firstName":
@@ -432,6 +441,10 @@ function DealCell({
       );
     case "lastName":
       return <span className="text-ink">{deal.lastName || "—"}</span>;
+    case "firma":
+      return (
+        <span className="text-ink">{deal.companyName || "—"}</span>
+      );
     case "createdAt":
       return <span className="text-sub">{fmtDateTime(deal.createdAt)}</span>;
     case "phone":

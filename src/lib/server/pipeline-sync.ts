@@ -100,14 +100,23 @@ export async function dealStageByContact(
   return map;
 }
 
-function dealTitleFrom(c: {
+/**
+ * Deal-Titel eines Leads. Der Firmenname ist – sofern vorhanden – IMMER Teil des
+ * Titels: Format "Person · Firma" (bzw. "E-Mail · Firma"), oder nur "Firma", wenn
+ * kein Ansprechpartner/keine E-Mail existiert. Ohne Firma greift der bisherige
+ * Fallback (Person → E-Mail → "Neuer Lead").
+ */
+export function dealTitleFrom(c: {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
   companyName: string | null;
 }): string {
-  const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
-  return name || c.email || c.companyName || "Neuer Lead";
+  const person = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
+  const company = (c.companyName ?? "").trim();
+  const who = person || (c.email ?? "").trim();
+  if (who && company) return `${who} · ${company}`;
+  return company || who || "Neuer Lead";
 }
 
 // ── Ordner → Pipeline ────────────────────────────────────────────────────────
