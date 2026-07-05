@@ -5,6 +5,10 @@ import { db } from "@/db";
 import { contacts, companies } from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
+import {
+  onContactsAddedToList,
+  deleteDealsForContacts,
+} from "@/lib/server/pipeline-sync";
 
 export type ImportRow = {
   firstName?: string | null;
@@ -110,8 +114,17 @@ export async function importLeadsAction(
   }
 
   if (toInsert.length > 0) {
-    await db.insert(contacts).values(toInsert);
-    result.imported = toInsert.length;
+    const inserted = await db
+      .insert(contacts)
+      .values(toInsert)
+      .returning({ id: contacts.id });
+    result.imported = inserted.length;
+    // Ordner ↔ Pipeline: neue Leads als Deals spiegeln (falls verbunden).
+    await onContactsAddedToList(
+      org.id,
+      listId,
+      inserted.map((r) => r.id),
+    );
   }
 
   revalidatePath("/vertrieb");
@@ -132,14 +145,29 @@ export async function qualifyLeadAction(contactId: string) {
 
 export async function deleteLeadAction(contactId: string) {
   const org = await requireActiveOrg();
-  await db
-    .delete(contacts)
+  // Nur löschen, wenn der Kontakt wirklich noch ein 'lead' ist — und dann Deal
+  // + Kontakt im Gleichschritt entfernen. (Deal ZUERST: beim Kontakt-Löschen
+  // würde deals.contactId auf NULL gesetzt und ließe sich nicht mehr zuordnen.)
+  const [c] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
     .where(
       and(
         eq(contacts.id, contactId),
         eq(contacts.orgId, org.id),
         eq(contacts.status, "lead"),
       ),
-    );
+    )
+    .limit(1);
+  if (!c) return;
+
+  await deleteDealsForContacts(org.id, [contactId]);
+  await db
+    .delete(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
+
   revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
 }

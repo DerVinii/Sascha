@@ -10,6 +10,7 @@ import {
   primaryKey,
   index,
   unique,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // ============================================================================
@@ -108,6 +109,12 @@ export const leadLists = pgTable(
     name: text("name").notNull(),
     // 1:1-Verknüpfung zur Instantly-Kampagne (lazy beim "Kampagne einrichten" angelegt).
     instantlyCampaignId: text("instantly_campaign_id"),
+    // 1:1-Verknüpfung zu einer Pipeline ("Mit Pipeline verbinden"). Gesetzt =
+    // Ordner-Leads werden als Deals in die Pipeline gespiegelt und synchron
+    // gehalten; ON DELETE SET NULL löst die Verbindung, wenn die Pipeline weg ist.
+    pipelineId: uuid("pipeline_id").references((): AnyPgColumn => pipelines.id, {
+      onDelete: "set null",
+    }),
     // Hintergrund-Enrichment: gesetzt = "Update cells" läuft (server-seitig, bis geleert).
     enrichmentQueuedAt: timestamp("enrichment_queued_at", { withTimezone: true }),
     // Zeitpunkt des letzten Drain-Ticks — grobe Sperre gegen doppelte Läufe.

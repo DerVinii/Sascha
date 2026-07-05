@@ -14,6 +14,7 @@ import {
   Upload,
   UserPlus,
   Send,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -52,6 +53,9 @@ type Props = {
   onAddColumn: () => void;
   onUpdateCells: () => void;
   onSetupCampaign: () => void;
+  onLinkPipeline: () => void;
+  /** Name der verbundenen Pipeline (null = nicht verbunden). */
+  linkedPipelineName: string | null;
   exportHref: string;
   progress: RunnerProgress;
   onStop: () => void;
@@ -79,6 +83,8 @@ export function TableToolbar(props: Props) {
     onAddColumn,
     onUpdateCells,
     onSetupCampaign,
+    onLinkPipeline,
+    linkedPipelineName,
     exportHref,
     progress,
     onStop,
@@ -158,6 +164,25 @@ export function TableToolbar(props: Props) {
           >
             <Send className="h-3.5 w-3.5 text-info" />
             <span className="hidden sm:inline">Kampagne einrichten</span>
+          </button>
+          <button
+            onClick={onLinkPipeline}
+            className={cn(
+              "h-8 px-3 inline-flex items-center gap-1.5 rounded-md border text-sm font-medium transition",
+              linkedPipelineName
+                ? "border-accent-line bg-accent-faint text-accent hover:bg-accent-soft"
+                : "border-line bg-surface text-ink hover:bg-bg",
+            )}
+            title={
+              linkedPipelineName
+                ? `Verbunden mit Pipeline „${linkedPipelineName}" — verwalten`
+                : "Diesen Ordner mit einer Pipeline verbinden"
+            }
+          >
+            <Workflow className="h-3.5 w-3.5 text-accent" />
+            <span className="hidden sm:inline">
+              {linkedPipelineName ? "Pipeline verbunden" : "Mit Pipeline verbinden"}
+            </span>
           </button>
           <a
             href={exportHref}

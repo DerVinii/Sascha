@@ -9,11 +9,24 @@ import {
   organizations,
   leadColumns,
   leadLists,
+  pipelines,
+  pipelineStages,
+  deals,
 } from "@/db/schema";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, asc, desc, inArray, isNotNull } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { searchPlaces, extractDomain } from "@/lib/server/scraping/places";
 import { triggerEnrichmentRun } from "@/lib/server/scraping/enrichment-trigger";
+import { createPipeline } from "@/app/(app)/crm/pipeline-actions";
+import {
+  linkedPipelineForList,
+  linkedListForPipeline,
+  backfillListToPipeline,
+  onContactsAddedToList,
+  setContactDealStage,
+  pipelineStagesFor,
+  dealStageByContact,
+} from "@/lib/server/pipeline-sync";
 import {
   bulkAddLeads,
   listAccounts,
@@ -46,6 +59,7 @@ import {
   instantlyVarToken,
   NATIVE_INSTANTLY_TOKENS,
   isProtectedColumn,
+  PIPELINE_STAGE_KEY,
 } from "@/lib/scraping-types";
 import type {
   LeadColumn,
@@ -203,16 +217,26 @@ export async function runSourceAction(input: {
 
     const companyByPlace = new Map(insertedCompanies.map((c) => [c.pid, c.id]));
 
-    await db.insert(contacts).values(
-      fresh.map((p) => ({
-        orgId: org.id,
-        leadListId: listId,
-        companyId: companyByPlace.get(p.placeId) ?? null,
-        phone: p.phone,
-        status: "lead" as const,
-        source: SOURCE,
-        customFields: {},
-      })),
+    const insertedContacts = await db
+      .insert(contacts)
+      .values(
+        fresh.map((p) => ({
+          orgId: org.id,
+          leadListId: listId,
+          companyId: companyByPlace.get(p.placeId) ?? null,
+          phone: p.phone,
+          status: "lead" as const,
+          source: SOURCE,
+          customFields: {},
+        })),
+      )
+      .returning({ id: contacts.id });
+
+    // Ordner ↔ Pipeline: neue Leads als Deals spiegeln (falls verbunden).
+    await onContactsAddedToList(
+      org.id,
+      listId,
+      insertedContacts.map((c) => c.id),
     );
 
     revalidatePath("/vertrieb/scraping");
@@ -248,7 +272,7 @@ export async function listLeadTableAction(input: {
   const columns = await ensureDefaultColumns(org.id);
 
   const [listRow] = await db
-    .select({ name: leadLists.name })
+    .select({ name: leadLists.name, pipelineId: leadLists.pipelineId })
     .from(leadLists)
     .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, org.id)))
     .limit(1);
@@ -268,13 +292,77 @@ export async function listLeadTableAction(input: {
 
   const views = [...BUILTIN_VIEWS, ...(await getOrgViews(org.id))];
 
+  // "Pipeline-Phase"-Spalte: nur synthetisch anhängen, wenn der Ordner mit einer
+  // Pipeline verbunden ist. Nicht in lead_columns gespeichert (die sind org-weit).
+  let outColumns: LeadColumn[] = columns;
+  let linkedPipeline: { id: string; name: string } | null = null;
+
+  if (listRow.pipelineId) {
+    const [pl] = await db
+      .select({ id: pipelines.id, name: pipelines.name })
+      .from(pipelines)
+      .where(
+        and(eq(pipelines.id, listRow.pipelineId), eq(pipelines.orgId, org.id)),
+      )
+      .limit(1);
+    if (pl) {
+      linkedPipeline = { id: pl.id, name: pl.name };
+      const stages = await pipelineStagesFor(pl.id);
+      const stageMap = new Map(stages.map((s) => [s.id, s]));
+      const byContact = await dealStageByContact(
+        org.id,
+        pl.id,
+        rows.map((r) => r.id),
+      );
+
+      const maxPos = columns.reduce((m, c) => Math.max(m, c.position), 0);
+      const phaseCol: LeadColumn = {
+        id: PIPELINE_STAGE_KEY,
+        key: PIPELINE_STAGE_KEY,
+        label: "Pipeline-Phase",
+        kind: "data",
+        dataType: "select",
+        position: maxPos + 1,
+        width: 190,
+        pinned: false,
+        color: null,
+        hidden: false,
+        config: {
+          system: true,
+          pipeline: {
+            pipelineId: pl.id,
+            stages: stages.map((s) => ({
+              id: s.id,
+              name: s.name,
+              color: s.color,
+            })),
+          },
+        },
+      };
+      outColumns = [...columns, phaseCol];
+
+      for (const row of rows) {
+        const sid = byContact.get(row.id) ?? null;
+        const st = sid ? stageMap.get(sid) : null;
+        row.cells[PIPELINE_STAGE_KEY] = {
+          value: st?.name ?? null,
+          status: st ? "success" : "empty",
+          editable: false,
+          color: st?.color ?? null,
+          stageId: sid,
+        };
+      }
+    }
+  }
+
   return {
-    columns,
+    columns: outColumns,
     rows,
     total: totalRow?.total ?? 0,
     views,
     listId,
     listName: listRow.name,
+    linkedPipeline,
   };
 }
 
@@ -450,7 +538,13 @@ export async function createColumnAction(input: {
   const org = await requireActiveOrg();
   const label = input.label?.trim() || "Neue Spalte";
   const cols = await getColumns(org.id);
-  const key = uniqueKey(slugKey(label), new Set(cols.map((c) => c.key)));
+  // PIPELINE_STAGE_KEY reservieren: die synthetische "Pipeline-Phase"-Spalte
+  // existiert nicht in lead_columns, ihr Key darf aber nicht vergeben werden,
+  // sonst würde eine echte Spalte fälschlich als System-Spalte behandelt.
+  const key = uniqueKey(
+    slugKey(label),
+    new Set([...cols.map((c) => c.key), PIPELINE_STAGE_KEY]),
+  );
   const position = cols.reduce((m, c) => Math.max(m, c.position), -1) + 1;
 
   await db.insert(leadColumns).values({
@@ -714,12 +808,35 @@ export async function renameListAction(input: {
 
 export async function deleteListAction(input: { id: string }): Promise<void> {
   const org = await requireActiveOrg();
+  // Verbundene Pipeline: Deals der Ordner-Leads vorher entfernen, sonst blieben
+  // beim Kontakt-Cascade verwaiste Deals (deals.contactId → SET NULL) zurück.
+  const pipelineId = await linkedPipelineForList(org.id, input.id);
+  if (pipelineId) {
+    const rows = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.orgId, org.id), eq(contacts.leadListId, input.id)));
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      await db
+        .delete(deals)
+        .where(
+          and(
+            eq(deals.orgId, org.id),
+            eq(deals.pipelineId, pipelineId),
+            inArray(deals.contactId, ids),
+          ),
+        );
+    }
+  }
   // contacts/companies mit dieser lead_list_id werden per ON DELETE CASCADE entfernt.
   await db
     .delete(leadLists)
     .where(and(eq(leadLists.id, input.id), eq(leadLists.orgId, org.id)));
   revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
   revalidatePath("/crm");
+  revalidatePath("/pipelines");
 }
 
 export async function addManualLeadAction(input: {
@@ -745,18 +862,223 @@ export async function addManualLeadAction(input: {
     })
     .returning({ id: companies.id });
 
-  await db.insert(contacts).values({
-    orgId: org.id,
-    leadListId: input.listId,
-    companyId: company.id,
-    phone: input.telefon?.trim() || null,
-    status: "lead" as const,
-    source: "Manuell",
-    customFields: {},
-  });
+  const [contact] = await db
+    .insert(contacts)
+    .values({
+      orgId: org.id,
+      leadListId: input.listId,
+      companyId: company.id,
+      phone: input.telefon?.trim() || null,
+      status: "lead" as const,
+      source: "Manuell",
+      customFields: {},
+    })
+    .returning({ id: contacts.id });
+
+  // Ordner ↔ Pipeline: neuen Lead als Deal spiegeln (falls verbunden).
+  await onContactsAddedToList(org.id, input.listId, [contact.id]);
 
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
+}
+
+// ============================================================================
+// PIPELINE-VERKNÜPFUNG (Ordner ↔ Pipeline — zweiseitig synchron)
+// ============================================================================
+
+export type LinkablePipeline = {
+  id: string;
+  name: string;
+  /** verbunden mit einem (anderen) Ordner? → in der Auswahl gesperrt (1:1). */
+  linkedListId: string | null;
+};
+
+/** Auswahl fürs "Mit Pipeline verbinden"-Modal: bestehende Pipelines + aktueller Link. */
+export async function listLinkablePipelinesAction(input: {
+  listId: string;
+}): Promise<{ pipelines: LinkablePipeline[]; linkedPipelineId: string | null }> {
+  const org = await requireActiveOrg();
+
+  const pls = await db
+    .select({ id: pipelines.id, name: pipelines.name })
+    .from(pipelines)
+    .where(eq(pipelines.orgId, org.id))
+    .orderBy(asc(pipelines.position), asc(pipelines.createdAt));
+
+  const links = await db
+    .select({ listId: leadLists.id, pipelineId: leadLists.pipelineId })
+    .from(leadLists)
+    .where(and(eq(leadLists.orgId, org.id), isNotNull(leadLists.pipelineId)));
+  const listByPipeline = new Map<string, string>();
+  for (const l of links) if (l.pipelineId) listByPipeline.set(l.pipelineId, l.listId);
+
+  const linkedPipelineId = await linkedPipelineForList(org.id, input.listId);
+
+  return {
+    pipelines: pls.map((p) => ({
+      id: p.id,
+      name: p.name,
+      linkedListId: listByPipeline.get(p.id) ?? null,
+    })),
+    linkedPipelineId,
+  };
+}
+
+/**
+ * Verbindet einen Ordner mit einer Pipeline (bestehend ODER neu erstellt) und
+ * befüllt sie erstmalig mit den Ordner-Leads (nur Ordner → Pipeline). 1:1.
+ */
+export async function connectPipelineAction(input: {
+  listId: string;
+  pipelineId?: string;
+  newPipelineName?: string;
+  template?: string;
+}): Promise<{ pipelineId: string | null; error?: string | null }> {
+  const org = await requireActiveOrg();
+  if (!input.listId) return { pipelineId: null, error: "Kein Ordner ausgewählt." };
+
+  const [list] = await db
+    .select({ id: leadLists.id, pipelineId: leadLists.pipelineId })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)))
+    .limit(1);
+  if (!list) return { pipelineId: null, error: "Ordner nicht gefunden." };
+
+  // Ziel-Pipeline: neu erstellen oder bestehende verwenden.
+  let pipelineId: string;
+  if (input.newPipelineName?.trim()) {
+    pipelineId = await createPipeline(
+      input.newPipelineName.trim(),
+      input.template || "standard",
+    );
+  } else if (input.pipelineId) {
+    const [pl] = await db
+      .select({ id: pipelines.id })
+      .from(pipelines)
+      .where(
+        and(eq(pipelines.id, input.pipelineId), eq(pipelines.orgId, org.id)),
+      )
+      .limit(1);
+    if (!pl) return { pipelineId: null, error: "Pipeline nicht gefunden." };
+    pipelineId = pl.id;
+  } else {
+    return {
+      pipelineId: null,
+      error: "Bitte eine Pipeline wählen oder eine neue erstellen.",
+    };
+  }
+
+  // Schon mit genau dieser Pipeline verbunden? Nichts zu tun.
+  if (list.pipelineId === pipelineId) {
+    return { pipelineId, error: null };
+  }
+
+  // 1:1 erzwingen: Pipeline schon mit einem ANDEREN Ordner verbunden?
+  const otherList = await linkedListForPipeline(org.id, pipelineId);
+  if (otherList && otherList !== input.listId) {
+    return {
+      pipelineId: null,
+      error: "Diese Pipeline ist bereits mit einem anderen Ordner verbunden.",
+    };
+  }
+
+  // Umhängen: Ordner-Deals aus der ALTEN Pipeline entfernen, sonst blieben dort
+  // Zombie-Deals zurück (die alte Pipeline ist danach mit keinem Ordner mehr
+  // verbunden, sie ließen sich nicht mehr synchronisieren/aufräumen).
+  if (list.pipelineId) {
+    const rows = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.orgId, org.id), eq(contacts.leadListId, input.listId)));
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      await db
+        .delete(deals)
+        .where(
+          and(
+            eq(deals.orgId, org.id),
+            eq(deals.pipelineId, list.pipelineId),
+            inArray(deals.contactId, ids),
+          ),
+        );
+    }
+  }
+
+  try {
+    await db
+      .update(leadLists)
+      .set({ pipelineId })
+      .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+  } catch {
+    // Race gegen den partiellen Unique-Index auf lead_lists.pipeline_id.
+    return {
+      pipelineId: null,
+      error: "Diese Pipeline ist bereits mit einem anderen Ordner verbunden.",
+    };
+  }
+  await backfillListToPipeline(org.id, input.listId, pipelineId);
+
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
+  return { pipelineId, error: null };
+}
+
+/** Trennt die Verbindung. Deals bleiben in der Pipeline (nicht destruktiv). */
+export async function disconnectPipelineAction(input: {
+  listId: string;
+}): Promise<void> {
+  const org = await requireActiveOrg();
+  await db
+    .update(leadLists)
+    .set({ pipelineId: null })
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
+}
+
+/**
+ * Setzt die Pipeline-Phase eines Ordner-Leads (Zell-Dropdown der "Pipeline-Phase"-
+ * Spalte). Verschiebt den Deal des Leads auf die gewählte Phase.
+ */
+export async function setLeadStageAction(input: {
+  contactId: string;
+  stageId: string;
+}): Promise<{ error?: string | null }> {
+  const org = await requireActiveOrg();
+
+  const [c] = await db
+    .select({ id: contacts.id, leadListId: contacts.leadListId })
+    .from(contacts)
+    .where(and(eq(contacts.id, input.contactId), eq(contacts.orgId, org.id)))
+    .limit(1);
+  if (!c || !c.leadListId) return { error: "Lead nicht gefunden." };
+
+  const pipelineId = await linkedPipelineForList(org.id, c.leadListId);
+  if (!pipelineId)
+    return { error: "Ordner ist mit keiner Pipeline verbunden." };
+
+  // Phase muss zu genau dieser Pipeline gehören (org-scoped).
+  const [stage] = await db
+    .select({ pipelineId: pipelineStages.pipelineId })
+    .from(pipelineStages)
+    .innerJoin(pipelines, eq(pipelineStages.pipelineId, pipelines.id))
+    .where(
+      and(eq(pipelineStages.id, input.stageId), eq(pipelines.orgId, org.id)),
+    )
+    .limit(1);
+  if (!stage || stage.pipelineId !== pipelineId)
+    return { error: "Phase gehört nicht zur verbundenen Pipeline." };
+
+  await setContactDealStage(org.id, input.contactId, pipelineId, input.stageId);
+
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
+  return { error: null };
 }
 
 // ============================================================================

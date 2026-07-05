@@ -17,9 +17,14 @@ import {
   Settings2,
   Check,
   Wand2,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isProtectedColumn, type LeadColumn } from "@/lib/scraping-types";
+import {
+  isProtectedColumn,
+  isPipelineStageColumn,
+  type LeadColumn,
+} from "@/lib/scraping-types";
 
 const COLOR_TOKENS: Record<string, string> = {
   info: "text-info",
@@ -83,6 +88,22 @@ export function ColumnHeader({
 
   function close() {
     setOpen(false);
+  }
+
+  // "Pipeline-Phase": System-Spalte — extra klassifiziert (Akzentfarbe), nicht
+  // umbenennen/einfärben/ausblenden/löschen. Kein Kontextmenü.
+  if (isPipelineStageColumn(column.key)) {
+    return (
+      <div
+        className="flex items-center gap-1.5 w-full rounded-md bg-accent-faint px-1.5 py-0.5"
+        title="Pipeline-Phase — synchron mit der verbundenen Pipeline (nicht bearbeitbar)"
+      >
+        <GitBranch className="h-3.5 w-3.5 shrink-0 text-accent" />
+        <span className="flex-1 truncate text-xs font-semibold text-accent">
+          {column.label}
+        </span>
+      </div>
+    );
   }
 
   if (renaming) {

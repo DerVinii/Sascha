@@ -19,8 +19,13 @@ import {
   editCellAction,
   queueEnrichmentAction,
   enrichmentStatusAction,
+  setLeadStageAction,
 } from "../actions";
-import { ENRICHMENT_KEY } from "@/lib/scraping-types";
+import {
+  ENRICHMENT_KEY,
+  PIPELINE_STAGE_KEY,
+  isPipelineStageColumn,
+} from "@/lib/scraping-types";
 import { useBatchRunner } from "./use-batch-runner";
 import { LeadCellView } from "./lead-cell";
 import { ColumnHeader } from "./column-header";
@@ -32,6 +37,7 @@ import { ColumnConfigModal } from "./column-config-modal";
 import { AiColumnModal } from "./ai-column-modal";
 import { ManualLeadModal } from "./manual-lead-modal";
 import { CampaignSetupModal } from "./campaign-setup-modal";
+import { LinkPipelineModal } from "./link-pipeline-modal";
 import { BulkRunBar } from "./bulk-run-bar";
 import { CsvImportModal } from "../../_components/csv-import-modal";
 
@@ -67,6 +73,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [rows, setRows] = useState<LeadRow[]>(initial.rows);
   const [total, setTotal] = useState(initial.total);
   const [views, setViews] = useState<LeadView[]>(initial.views);
+  const [linkedPipeline, setLinkedPipeline] = useState(initial.linkedPipeline);
 
   const [activeViewId, setActiveViewId] = useState("all");
   const [adHocFilters, setAdHocFilters] = useState<LeadViewFilter[]>([]);
@@ -90,6 +97,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [csvOpen, setCsvOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [campaignOpen, setCampaignOpen] = useState(false);
+  const [linkPipelineOpen, setLinkPipelineOpen] = useState(false);
 
   const refreshing = useRef(false);
 
@@ -113,6 +121,13 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       setRows(data.rows);
       setTotal(data.total);
       setViews(data.views);
+      setLinkedPipeline(data.linkedPipeline);
+      // Ad-hoc-Filter auf verschwundene Spalten (z. B. "Pipeline-Phase" nach dem
+      // Trennen) entfernen — sonst filtert ein toter Key die ganze Liste weg.
+      const presentKeys = new Set(data.columns.map((c) => c.key));
+      setAdHocFilters((prev) =>
+        prev.filter((f) => presentKeys.has(f.columnKey)),
+      );
       setRunningCells(new Set());
     } finally {
       refreshing.current = false;
@@ -350,6 +365,45 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     await refresh();
   };
 
+  // Pipeline-Phase-Zelle: Phase wählen → Deal verschieben (optimistisch + Refresh).
+  const onSelectStage = async (rowId: string, stageId: string) => {
+    setError(null);
+    const stage = columns
+      .find((c) => isPipelineStageColumn(c.key))
+      ?.config.pipeline?.stages.find((s) => s.id === stageId);
+    if (stage) {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === rowId
+            ? {
+                ...r,
+                cells: {
+                  ...r.cells,
+                  [PIPELINE_STAGE_KEY]: {
+                    ...(r.cells[PIPELINE_STAGE_KEY] ?? {}),
+                    value: stage.name,
+                    color: stage.color,
+                    stageId: stage.id,
+                    status: "success" as const,
+                    editable: false,
+                  },
+                },
+              }
+            : r,
+        ),
+      );
+    }
+    try {
+      const res = await setLeadStageAction({ contactId: rowId, stageId });
+      if (res.error) setError(res.error);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Phase konnte nicht gesetzt werden.",
+      );
+    }
+    await refresh();
+  };
+
   // --- Selektion -----------------------------------------------------------
   const allVisibleSelected =
     visibleRows.length > 0 && visibleRows.every((r) => selection.has(r.id));
@@ -390,6 +444,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onAddColumn={() => setAddColumnOpen(true)}
         onUpdateCells={updateCells}
         onSetupCampaign={() => setCampaignOpen(true)}
+        onLinkPipeline={() => setLinkPipelineOpen(true)}
+        linkedPipelineName={linkedPipeline?.name ?? null}
         exportHref="/api/crm/export?status=lead"
         progress={runner.progress}
         onStop={runner.stop}
@@ -507,6 +563,11 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
                               ? (v) => onEditCell(row.id, col.key, v)
                               : undefined
                           }
+                          onSelectStage={
+                            isPipelineStageColumn(col.key)
+                              ? (sid) => onSelectStage(row.id, sid)
+                              : undefined
+                          }
                         />
                       </td>
                     );
@@ -563,8 +624,18 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onClose={() => setCampaignOpen(false)}
         listId={listId}
         listName={initial.listName}
-        columns={columns}
+        columns={columns.filter((c) => !c.config.system)}
         onDone={refresh}
+      />
+      <LinkPipelineModal
+        open={linkPipelineOpen}
+        onClose={() => setLinkPipelineOpen(false)}
+        listId={listId}
+        linkedPipelineName={linkedPipeline?.name ?? null}
+        onDone={() => {
+          setLinkPipelineOpen(false);
+          refresh();
+        }}
       />
       <AddColumnPanel
         open={addColumnOpen}

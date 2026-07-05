@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { contacts, companies, tags } from "@/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
+import { deleteDealsForContacts } from "@/lib/server/pipeline-sync";
 import { getOrgSettings } from "@/lib/server/org-settings";
 import { sendPushToOrg } from "@/lib/server/push";
 import {
@@ -205,10 +206,15 @@ export async function updateContactTagsAction(
 
 export async function deleteContactAction(contactId: string) {
   const org = await requireActiveOrg();
+  // Ordner ↔ Pipeline: zugehörige Deals in verbundenen Pipelines mitlöschen.
+  await deleteDealsForContacts(org.id, [contactId]);
   await db
     .delete(contacts)
     .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
   revalidatePath("/crm");
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/pipelines");
   redirect("/crm");
 }
 
@@ -240,10 +246,15 @@ export async function bulkDeleteContactsAction(
   const org = await requireActiveOrg();
   const clean = cleanIds(ids);
   if (!clean.length) return { ok: true, count: 0 };
+  // Ordner ↔ Pipeline: zugehörige Deals in verbundenen Pipelines mitlöschen.
+  await deleteDealsForContacts(org.id, clean);
   await db
     .delete(contacts)
     .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, clean)));
   revalidatePath("/crm");
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/pipelines");
   return { ok: true, count: clean.length };
 }
 

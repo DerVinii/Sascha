@@ -6,6 +6,17 @@ import { pipelines, pipelineStages, deals, contacts } from "@/db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { PIPELINE_TEMPLATES } from "@/lib/pipeline-templates";
+import {
+  onDealCreated,
+  onDealDeleted,
+  linkedListForPipeline,
+} from "@/lib/server/pipeline-sync";
+
+/** Auch die Vertriebs-Ordner-Ansicht auffrischen (verbundene Pipeline). */
+function revalidateLinkedFolder() {
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+}
 
 // ── Org-Scoping-Helfer ──────────────────────────────────────────────────────
 
@@ -128,8 +139,11 @@ export async function deletePipeline(pipelineId: string) {
       .where(eq(pipelineStages.pipelineId, pipelineId));
     await tx.delete(pipelines).where(eq(pipelines.id, pipelineId));
   });
+  // Ein verbundener Ordner wird durch die FK (ON DELETE SET NULL) automatisch
+  // entkoppelt; die "Pipeline-Phase"-Spalte verschwindet beim nächsten Laden.
   revalidatePath("/crm");
   revalidatePath("/pipelines");
+  revalidateLinkedFolder();
 }
 
 // ── Stages ─────────────────────────────────────────────────────────────────
@@ -256,6 +270,31 @@ export async function createDeal(input: CreateDealInput) {
     if (!c) contactId = null;
   }
 
+  // In einer mit einem Ordner VERBUNDENEN Pipeline gilt max. 1 Deal je Kontakt
+  // (die Ordner-Synchronisation setzt das voraus). Existiert schon einer, keinen
+  // zweiten anlegen — sonst Duplikate und Geister-Deals beim Spiegeln. In nicht
+  // verbundenen Pipelines bleibt das freie Mehrfach-Anlegen unangetastet.
+  if (contactId && (await linkedListForPipeline(org.id, input.pipelineId))) {
+    const [existing] = await db
+      .select({ id: deals.id })
+      .from(deals)
+      .where(
+        and(
+          eq(deals.orgId, org.id),
+          eq(deals.contactId, contactId),
+          eq(deals.pipelineId, input.pipelineId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      await onDealCreated(org.id, contactId, input.pipelineId);
+      revalidatePath("/crm");
+      revalidatePath("/pipelines");
+      revalidateLinkedFolder();
+      return;
+    }
+  }
+
   await db.insert(deals).values({
     orgId: org.id,
     contactId,
@@ -265,8 +304,12 @@ export async function createDeal(input: CreateDealInput) {
     valueEur: input.valueEur ?? null,
     expectedClose: input.expectedClose ? new Date(input.expectedClose) : null,
   });
+  // Pipeline → Ordner: ist die Pipeline mit einem Ordner verbunden, wandert der
+  // Lead in den Ordner (sofern er noch keinem zugeordnet ist).
+  await onDealCreated(org.id, contactId, input.pipelineId);
   revalidatePath("/crm");
   revalidatePath("/pipelines");
+  revalidateLinkedFolder();
 }
 
 export async function moveDealToStage(dealId: string, stageId: string) {
@@ -280,6 +323,7 @@ export async function moveDealToStage(dealId: string, stageId: string) {
     .where(and(eq(deals.id, dealId), eq(deals.orgId, org.id)));
   revalidatePath("/crm");
   revalidatePath("/pipelines");
+  revalidateLinkedFolder();
 }
 
 export async function updateDeal(
@@ -320,13 +364,27 @@ export async function updateDeal(
     .where(and(eq(deals.id, dealId), eq(deals.orgId, org.id)));
   revalidatePath("/crm");
   revalidatePath("/pipelines");
+  revalidateLinkedFolder();
 }
 
 export async function deleteDeal(dealId: string) {
   const org = await requireActiveOrg();
+  // Kontakt + Pipeline des Deals VOR dem Löschen merken (für die Ordner-Spiegelung).
+  const [d] = await db
+    .select({ contactId: deals.contactId, pipelineId: deals.pipelineId })
+    .from(deals)
+    .where(and(eq(deals.id, dealId), eq(deals.orgId, org.id)))
+    .limit(1);
+
   await db
     .delete(deals)
     .where(and(eq(deals.id, dealId), eq(deals.orgId, org.id)));
+
+  // Pipeline → Ordner: ist die Pipeline mit einem Ordner verbunden und der Lead
+  // liegt dort, wird er komplett gelöscht (voll gespiegelt).
+  if (d?.pipelineId) await onDealDeleted(org.id, d.contactId, d.pipelineId);
+
   revalidatePath("/crm");
   revalidatePath("/pipelines");
+  revalidateLinkedFolder();
 }

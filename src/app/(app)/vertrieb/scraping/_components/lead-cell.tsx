@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Play, AlertCircle, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  Play,
+  AlertCircle,
+  ExternalLink,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LeadCell as Cell, LeadColumn } from "@/lib/scraping-types";
+import {
+  isPipelineStageColumn,
+  type LeadCell as Cell,
+  type LeadColumn,
+} from "@/lib/scraping-types";
 
 type Props = {
   column: LeadColumn;
@@ -12,6 +23,8 @@ type Props = {
   onRunCell?: () => void;
   onOpenDetails?: () => void;
   onEdit?: (value: string) => void;
+  /** "Pipeline-Phase"-Zelle: Phase wählen → Deal verschieben. */
+  onSelectStage?: (stageId: string) => void;
 };
 
 function RatingValue({ value }: { value: number }) {
@@ -30,6 +43,7 @@ export function LeadCellView({
   onRunCell,
   onOpenDetails,
   onEdit,
+  onSelectStage,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -42,6 +56,11 @@ export function LeadCellView({
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
+
+  // --- Pipeline-Phase (eigenes Phasen-Dropdown, kein Text-Edit) ------------
+  if (isPipelineStageColumn(column.key)) {
+    return <StageDropdown column={column} cell={cell} onSelect={onSelectStage} />;
+  }
 
   function startEdit() {
     if (!editable) return;
@@ -176,6 +195,78 @@ export function LeadCellView({
       onClick={editable ? startEdit : undefined}
     >
       {inner}
+    </div>
+  );
+}
+
+/** Farbcodiertes Phasen-Dropdown der "Pipeline-Phase"-Spalte. */
+function StageDropdown({
+  column,
+  cell,
+  onSelect,
+}: {
+  column: LeadColumn;
+  cell: Cell;
+  onSelect?: (stageId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const stages = column.config.pipeline?.stages ?? [];
+  // Feste dunkle Schrift: der Hintergrund ist immer eine helle Pastellfarbe aus
+  // der DB — text-ink würde im Dunkelmodus hell und damit unlesbar.
+  const bg = cell.color ?? "#e2e8f0";
+  const hasValue = cell.value != null && cell.value !== "";
+  const disabled = !onSelect;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 text-xs font-medium text-slate-900 disabled:cursor-default",
+          !hasValue && "text-slate-500",
+        )}
+        style={{ background: hasValue ? bg : "transparent" }}
+        title="Pipeline-Phase ändern"
+      >
+        <span className="truncate">
+          {hasValue ? String(cell.value) : "Phase wählen"}
+        </span>
+        {!disabled && <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />}
+      </button>
+
+      {open && !disabled && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-7 z-50 w-48 rounded-lg border border-line bg-surface shadow-xl py-1">
+            {stages.length === 0 ? (
+              <div className="px-3 py-1.5 text-xs text-sub">Keine Phasen.</div>
+            ) : (
+              stages.map((s) => {
+                const active = cell.stageId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setOpen(false);
+                      if (!active) onSelect?.(s.id);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg transition"
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full ring-1 ring-line"
+                      style={{ background: s.color ?? "#e2e8f0" }}
+                    />
+                    <span className="flex-1 truncate">{s.name}</span>
+                    {active && <Check className="h-3.5 w-3.5 text-info" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -18,9 +18,11 @@ export function AiColumnModal({ open, onClose, column, columns, onSave }: Props)
 
   if (!open || !column) return null;
 
-  // Spalten, die die KI als Kontext sieht (alle außer dieser).
+  // Spalten, die die KI als Kontext sieht (alle außer dieser). System-Spalten
+  // wie "Pipeline-Phase" ausschließen: sie existieren serverseitig nicht und
+  // stünden dem Modell ohnehin nicht zur Verfügung.
   const refColumns = columns.filter(
-    (c) => c.key !== column.key && c.kind !== "action",
+    (c) => c.key !== column.key && c.kind !== "action" && !c.config.system,
   );
 
   function save(run: boolean) {

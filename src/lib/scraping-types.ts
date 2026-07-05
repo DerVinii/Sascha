@@ -7,6 +7,19 @@
 export const ENRICHMENT_KEY = "find_dm";
 
 /**
+ * Schlüssel der System-Spalte "Pipeline-Phase". Diese Spalte existiert NICHT in
+ * `lead_columns`, sondern wird beim Laden der Tabelle nur dann synthetisch
+ * eingefügt, wenn der Ordner mit einer Pipeline verbunden ist. Sie ist
+ * schreibgeschützt (nicht umbenennen/einfärben/ausblenden/löschen); die Zelle
+ * öffnet stattdessen ein Phasen-Dropdown, das den Deal in der Pipeline verschiebt.
+ */
+export const PIPELINE_STAGE_KEY = "pipeline_stage";
+
+export function isPipelineStageColumn(key: string): boolean {
+  return key === PIPELINE_STAGE_KEY;
+}
+
+/**
  * Kern-Spalten mit festem Key, die nicht gelöscht werden dürfen — diese Felder
  * werden vom Enrichment zurückgeschrieben und in Instantly-Kampagnen gebraucht.
  */
@@ -53,6 +66,13 @@ export type LeadColumnConfig = {
   options?: string[];
   /** "Mit KI ausfüllen" (Claygent): freier Prompt, pro Zeile von Gemini ausgeführt. */
   ai?: { prompt: string };
+  /** System-Spalte (z. B. "Pipeline-Phase"): nicht bearbeit-/löschbar. */
+  system?: boolean;
+  /** Pipeline-Phase-Spalte: verbundene Pipeline + ihre Phasen (fürs Dropdown). */
+  pipeline?: {
+    pipelineId: string;
+    stages: { id: string; name: string; color: string | null }[];
+  };
 };
 
 export type LeadColumn = {
@@ -78,6 +98,11 @@ export type LeadCell = {
   /** strukturiertes Ergebnis (für den Cell-Details-Drawer). */
   raw?: Record<string, unknown> | null;
   editable?: boolean;
+  /** Roh-Farbe (Hex) der Zelle — genutzt von der "Pipeline-Phase"-Spalte
+   *  (Phasenfarbe aus pipeline_stages.color). Nicht Teil des Token-Systems. */
+  color?: string | null;
+  /** ID der aktuell gewählten Pipeline-Phase (für das Dropdown der Phase-Zelle). */
+  stageId?: string | null;
 };
 
 export type LeadRow = {
@@ -231,4 +256,7 @@ export type LeadTableData = {
   views: LeadView[];
   listId: string;
   listName: string;
+  /** Verbundene Pipeline (null = nicht verbunden) — steuert Button-Zustand
+   *  & Anzeige der "Pipeline-Phase"-Spalte. */
+  linkedPipeline: { id: string; name: string } | null;
 };
