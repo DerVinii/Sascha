@@ -11,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { readableTextColor } from "@/lib/pipeline-templates";
 import {
   isPipelineStageColumn,
   type LeadCell as Cell,
@@ -218,10 +219,11 @@ function StageDropdown({
   } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const stages = column.config.pipeline?.stages ?? [];
-  // Feste dunkle Schrift: der Hintergrund ist immer eine helle Pastellfarbe aus
-  // der DB — text-ink würde im Dunkelmodus hell und damit unlesbar.
   const bg = cell.color ?? "#e2e8f0";
   const hasValue = cell.value != null && cell.value !== "";
+  // Schriftfarbe automatisch je nach Hintergrund-Helligkeit (dunkel/weiß),
+  // damit auch kräftige Phasenfarben lesbar bleiben.
+  const fg = readableTextColor(bg);
   const disabled = !onSelect;
 
   // Menü relativ zum Button per fixed-Position rendern (Portal), sonst würde es
@@ -256,10 +258,13 @@ function StageDropdown({
           setOpen((v) => !v);
         }}
         className={cn(
-          "inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 text-xs font-medium text-slate-900 disabled:cursor-default",
+          "inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 text-xs font-medium disabled:cursor-default",
           !hasValue && "text-slate-500",
         )}
-        style={{ background: hasValue ? bg : "transparent" }}
+        style={{
+          background: hasValue ? bg : "transparent",
+          color: hasValue ? fg : undefined,
+        }}
         title="Pipeline-Phase ändern"
       >
         <span className="truncate">

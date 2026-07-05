@@ -37,6 +37,7 @@ import {
   type ContactFieldType,
   type ContactFieldValue,
 } from "@/lib/contact-fields";
+import { readableTextColor } from "@/lib/pipeline-templates";
 
 export type ContactRow = {
   id: string;
@@ -710,7 +711,7 @@ export function ContactsTable({
                             className="pill"
                             style={{
                               background: tagColors[t] ?? "#e2e8f0",
-                              color: "#0f172a",
+                              color: readableTextColor(tagColors[t]),
                             }}
                           >
                             {t}
@@ -1096,7 +1097,7 @@ function CellValue({
               className="pill"
               style={{
                 background: tagColors[t] ?? "#e2e8f0",
-                color: "#0f172a",
+                color: readableTextColor(tagColors[t]),
               }}
             >
               {t}

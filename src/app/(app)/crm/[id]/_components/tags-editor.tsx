@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { updateContactTagsAction } from "../../actions";
+import { readableTextColor } from "@/lib/pipeline-templates";
 
 export function TagsEditor({
   contactId,
@@ -43,7 +44,7 @@ export function TagsEditor({
         <span
           key={t}
           className="pill"
-          style={{ background: colorFor(t), color: "#0f172a" }}
+          style={{ background: colorFor(t), color: readableTextColor(colorFor(t)) }}
         >
           {t}
           <button

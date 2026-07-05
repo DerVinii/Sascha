@@ -244,7 +244,7 @@ function StageRow({
           aria-label="Farbe wählen"
         />
         {palette && (
-          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg grid grid-cols-5 gap-1 w-[140px]">
+          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-2 shadow-lg grid grid-cols-8 gap-1.5 w-[236px]">
             {STAGE_COLORS.map((c) => (
               <button
                 key={c}
@@ -252,7 +252,7 @@ function StageRow({
                   onColor(c);
                   setPalette(false);
                 }}
-                className="h-5 w-5 rounded-full border border-line"
+                className="h-6 w-6 rounded-full border border-line"
                 style={{ background: c }}
                 aria-label={c}
               />

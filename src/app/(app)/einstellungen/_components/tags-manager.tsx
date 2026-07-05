@@ -247,7 +247,7 @@ function ColorSwatch({
       {open && (
         <>
           <div className="fixed inset-0 z-[5]" onClick={() => setOpen(false)} />
-          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-1.5 shadow-lg grid grid-cols-5 gap-1.5 w-[170px] md:w-[140px]">
+          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-2 shadow-lg grid grid-cols-8 gap-1.5 w-[236px]">
             {STAGE_COLORS.map((c) => (
               <button
                 key={c}
@@ -256,7 +256,7 @@ function ColorSwatch({
                   onSelect(c);
                   setOpen(false);
                 }}
-                className="h-7 w-7 md:h-5 md:w-5 rounded-full border border-line"
+                className="h-6 w-6 rounded-full border border-line"
                 style={{ background: c }}
                 aria-label={c}
               />

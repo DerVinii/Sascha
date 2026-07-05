@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { formatEur } from "@/lib/pipeline-templates";
+import { formatEur, readableTextColor } from "@/lib/pipeline-templates";
 import { moveDealToStage } from "@/app/(app)/crm/pipeline-actions";
 
 export type BoardStage = {
@@ -125,24 +125,31 @@ export function DealBoard({
 function Column({ stage, deals }: { stage: BoardStage; deals: BoardDeal[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const sum = deals.reduce((s, d) => s + (d.valueEur ?? 0), 0);
+  const bg = stage.color ?? "#e2e8f0";
+  // Schriftfarbe je nach Hintergrund-Helligkeit — kräftige Phasen bekommen
+  // weiße Schrift, helle Pastelltöne dunkle.
+  const fg = readableTextColor(bg);
+  const dark = fg === "#ffffff";
 
   return (
     <div className="flex flex-col w-72 shrink-0">
       <div
         className="px-3 py-2 rounded-t-lg border-b-2 border-line flex items-center justify-between"
-        style={{ background: stage.color ?? "#e2e8f0" }}
+        style={{ background: bg, color: fg }}
       >
-        {/* Feste dunkle Schrift: Der Hintergrund ist immer eine helle
-            Pastellfarbe aus der DB — text-ink würde im Dunkelmodus hell. */}
         <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-900 truncate">
+          <div className="text-xs font-semibold uppercase tracking-wide truncate">
             {stage.name}
           </div>
-          <div className="text-[10px] text-slate-900/60">
-            {formatEur(sum)}
-          </div>
+          <div className="text-[10px] opacity-70">{formatEur(sum)}</div>
         </div>
-        <span className="text-[10px] text-slate-900 bg-white/60 rounded-full px-1.5 py-0.5 shrink-0">
+        <span
+          className="text-[10px] rounded-full px-1.5 py-0.5 shrink-0"
+          style={{
+            background: dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.6)",
+            color: fg,
+          }}
+        >
           {deals.length}
         </span>
       </div>
