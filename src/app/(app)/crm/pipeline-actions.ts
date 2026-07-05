@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { pipelines, pipelineStages, deals, contacts } from "@/db/schema";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
-import { PIPELINE_TEMPLATES } from "@/lib/pipeline-templates";
+import { DEFAULT_STAGES } from "@/lib/pipeline-templates";
 import {
   onDealCreated,
   onDealDeleted,
@@ -44,12 +44,8 @@ async function stagePipeline(
 
 // ── Pipelines ────────────────────────────────────────────────────────────────
 
-export async function createPipeline(
-  name: string,
-  template: string = "standard",
-): Promise<string> {
+export async function createPipeline(name: string): Promise<string> {
   const org = await requireActiveOrg();
-  const tpl = PIPELINE_TEMPLATES[template] ?? PIPELINE_TEMPLATES.standard;
 
   const [{ maxPos }] = await db
     .select({ maxPos: sql<number>`coalesce(max(${pipelines.position}), -1)::int` })
@@ -66,7 +62,7 @@ export async function createPipeline(
     .returning({ id: pipelines.id });
 
   await db.insert(pipelineStages).values(
-    tpl.stages.map((s, i) => ({
+    DEFAULT_STAGES.map((s, i) => ({
       pipelineId: pl.id,
       name: s.name,
       position: i,

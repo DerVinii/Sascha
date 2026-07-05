@@ -932,7 +932,6 @@ export async function connectPipelineAction(input: {
   listId: string;
   pipelineId?: string;
   newPipelineName?: string;
-  template?: string;
 }): Promise<{ pipelineId: string | null; error?: string | null }> {
   const org = await requireActiveOrg();
   if (!input.listId) return { pipelineId: null, error: "Kein Ordner ausgewählt." };
@@ -947,10 +946,7 @@ export async function connectPipelineAction(input: {
   // Ziel-Pipeline: neu erstellen oder bestehende verwenden.
   let pipelineId: string;
   if (input.newPipelineName?.trim()) {
-    pipelineId = await createPipeline(
-      input.newPipelineName.trim(),
-      input.template || "standard",
-    );
+    pipelineId = await createPipeline(input.newPipelineName.trim());
   } else if (input.pipelineId) {
     const [pl] = await db
       .select({ id: pipelines.id })

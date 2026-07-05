@@ -8,7 +8,6 @@ import {
   disconnectPipelineAction,
   type LinkablePipeline,
 } from "../actions";
-import { PIPELINE_TEMPLATES } from "@/lib/pipeline-templates";
 
 type Props = {
   open: boolean;
@@ -18,11 +17,6 @@ type Props = {
   linkedPipelineName: string | null;
   onDone: () => void;
 };
-
-const TEMPLATE_OPTIONS = Object.entries(PIPELINE_TEMPLATES).map(([key, t]) => ({
-  key,
-  label: t.label,
-}));
 
 export function LinkPipelineModal({
   open,
@@ -38,7 +32,6 @@ export function LinkPipelineModal({
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [selectedId, setSelectedId] = useState<string>("");
   const [newName, setNewName] = useState("");
-  const [template, setTemplate] = useState("standard");
 
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
@@ -67,7 +60,6 @@ export function LinkPipelineModal({
           setMode("new");
         }
         setNewName("");
-        setTemplate("standard");
       })
       .catch(() =>
         !cancelled ? setError("Pipelines konnten nicht geladen werden.") : null,
@@ -89,7 +81,6 @@ export function LinkPipelineModal({
             ? await connectPipelineAction({
                 listId,
                 newPipelineName: newName.trim(),
-                template,
               })
             : await connectPipelineAction({ listId, pipelineId: selectedId });
         if (res.error) {
@@ -222,18 +213,6 @@ export function LinkPipelineModal({
                     placeholder="Name der Pipeline …"
                     className="w-full h-9 px-3 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
                   />
-                  <select
-                    value={template}
-                    onChange={(e) => setTemplate(e.target.value)}
-                    onFocus={() => setMode("new")}
-                    className="w-full h-9 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
-                  >
-                    {TEMPLATE_OPTIONS.map((t) => (
-                      <option key={t.key} value={t.key}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </label>
 

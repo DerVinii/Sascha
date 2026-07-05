@@ -11,7 +11,6 @@ import {
   ArrowDown,
   X,
 } from "lucide-react";
-import { PIPELINE_TEMPLATES } from "@/lib/pipeline-templates";
 import { createPipeline, reorderPipeline } from "@/app/(app)/crm/pipeline-actions";
 import {
   PipelineManagerModal,
@@ -175,14 +174,13 @@ function NewPipelineCard() {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
-  const [template, setTemplate] = useState("standard");
 
   function submit() {
+    if (!name.trim()) return;
     startTransition(async () => {
-      const id = await createPipeline(name, template);
+      const id = await createPipeline(name);
       setOpen(false);
       setName("");
-      setTemplate("standard");
       router.push(`/pipelines/${id}`);
     });
   }
@@ -225,28 +223,12 @@ function NewPipelineCard() {
                   value={name}
                   autoFocus
                   onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submit();
+                  }}
                   placeholder="z. B. Kaltakquise Q3"
                   className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                 />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-sub mb-1">
-                  Vorlage
-                </label>
-                <select
-                  value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
-                  className="w-full h-9 px-2 border border-line rounded-md text-sm bg-bg"
-                >
-                  {Object.entries(PIPELINE_TEMPLATES).map(([key, t]) => (
-                    <option key={key} value={key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-sub mt-1">
-                  {PIPELINE_TEMPLATES[template]?.description}
-                </p>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-line">
                 <button
@@ -257,7 +239,7 @@ function NewPipelineCard() {
                 </button>
                 <button
                   onClick={submit}
-                  disabled={pending}
+                  disabled={pending || !name.trim()}
                   className="h-9 px-4 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition disabled:opacity-50"
                 >
                   {pending ? "Wird erstellt …" : "Anlegen"}
