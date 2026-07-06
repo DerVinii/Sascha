@@ -9,7 +9,7 @@ import { DEFAULT_STAGES } from "@/lib/pipeline-templates";
 import {
   onDealCreated,
   onDealDeleted,
-  linkedListForPipeline,
+  linkedListsForPipeline,
 } from "@/lib/server/pipeline-sync";
 
 /** Auch die Vertriebs-Ordner-Ansicht auffrischen (verbundene Pipeline). */
@@ -266,11 +266,14 @@ export async function createDeal(input: CreateDealInput) {
     if (!c) contactId = null;
   }
 
-  // In einer mit einem Ordner VERBUNDENEN Pipeline gilt max. 1 Deal je Kontakt
-  // (die Ordner-Synchronisation setzt das voraus). Existiert schon einer, keinen
-  // zweiten anlegen — sonst Duplikate und Geister-Deals beim Spiegeln. In nicht
-  // verbundenen Pipelines bleibt das freie Mehrfach-Anlegen unangetastet.
-  if (contactId && (await linkedListForPipeline(org.id, input.pipelineId))) {
+  // In einer mit mindestens einem Ordner VERBUNDENEN Pipeline gilt max. 1 Deal je
+  // Kontakt (die Ordner-Synchronisation setzt das voraus). Existiert schon einer,
+  // keinen zweiten anlegen — sonst Duplikate und Geister-Deals beim Spiegeln. In
+  // nicht verbundenen Pipelines bleibt das freie Mehrfach-Anlegen unangetastet.
+  if (
+    contactId &&
+    (await linkedListsForPipeline(org.id, input.pipelineId)).length > 0
+  ) {
     const [existing] = await db
       .select({ id: deals.id })
       .from(deals)

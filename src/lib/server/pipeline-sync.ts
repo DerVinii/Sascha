@@ -5,6 +5,10 @@
  * dann entspricht jedem Kontakt des Ordners genau ein Deal in der Pipeline
  * (deals.contactId). Die "Pipeline-Phase" eines Leads = die Stage seines Deals.
  *
+ * n:1 — MEHRERE Ordner dürfen mit DERSELBEN Pipeline verbunden sein; ihre Leads
+ * werden dann alle als Deals in dieselbe Pipeline gespiegelt und dort addiert.
+ * Ein Ordner zeigt weiterhin auf höchstens EINE Pipeline (leadLists.pipelineId).
+ *
  * Richtungen:
  *  - Ordner → Pipeline: Lead anlegen ⇒ Deal anlegen (erste Phase); Lead löschen ⇒ Deal löschen.
  *  - Pipeline → Ordner: Deal anlegen ⇒ Lead in den Ordner (nur wenn Kontakt noch
@@ -34,17 +38,16 @@ export async function linkedPipelineForList(
   return l?.pipelineId ?? null;
 }
 
-/** Ordner, der mit einer Pipeline verbunden ist (null = keiner). 1:1. */
-export async function linkedListForPipeline(
+/** Alle Ordner, die mit einer Pipeline verbunden sind (n:1, leer = keiner). */
+export async function linkedListsForPipeline(
   orgId: string,
   pipelineId: string,
-): Promise<string | null> {
-  const [l] = await db
+): Promise<string[]> {
+  const rows = await db
     .select({ id: leadLists.id })
     .from(leadLists)
-    .where(and(eq(leadLists.orgId, orgId), eq(leadLists.pipelineId, pipelineId)))
-    .limit(1);
-  return l?.id ?? null;
+    .where(and(eq(leadLists.orgId, orgId), eq(leadLists.pipelineId, pipelineId)));
+  return rows.map((r) => r.id);
 }
 
 /** Phasen einer Pipeline (sortiert). */
@@ -238,10 +241,11 @@ export async function deleteDealsForContacts(
 // ── Pipeline → Ordner ────────────────────────────────────────────────────────
 
 /**
- * Hook: ein Deal wurde in einer Pipeline angelegt. Ist die Pipeline mit einem
- * Ordner verbunden UND der Kontakt gehört noch zu keinem Ordner, wird er dem
- * verbundenen Ordner zugeordnet (er erscheint dort als Lead). Kontakte, die schon
- * in einem anderen Ordner liegen, werden NICHT verschoben.
+ * Hook: ein Deal wurde in einer Pipeline angelegt. Ist die Pipeline mit GENAU
+ * EINEM Ordner verbunden UND der Kontakt gehört noch zu keinem Ordner, wird er
+ * diesem Ordner zugeordnet (er erscheint dort als Lead). Kontakte, die schon in
+ * einem Ordner liegen, werden NICHT verschoben. Bei mehreren verbundenen Ordnern
+ * ist die Zuordnung nicht eindeutig → dann wird nichts automatisch zugeordnet.
  */
 export async function onDealCreated(
   orgId: string,
@@ -249,11 +253,11 @@ export async function onDealCreated(
   pipelineId: string,
 ): Promise<void> {
   if (!contactId) return;
-  const listId = await linkedListForPipeline(orgId, pipelineId);
-  if (!listId) return;
+  const listIds = await linkedListsForPipeline(orgId, pipelineId);
+  if (listIds.length !== 1) return;
   await db
     .update(contacts)
-    .set({ leadListId: listId })
+    .set({ leadListId: listIds[0] })
     .where(
       and(
         eq(contacts.id, contactId),
@@ -265,8 +269,9 @@ export async function onDealCreated(
 
 /**
  * Hook: ein Deal wurde in einer Pipeline gelöscht. Ist die Pipeline mit einem
- * Ordner verbunden UND der Kontakt liegt in diesem Ordner, wird der Lead komplett
- * gelöscht (voll gespiegelt). Kontakte aus anderen/keinen Ordnern bleiben.
+ * (oder mehreren) Ordner verbunden UND der Kontakt liegt in EINEM davon, wird der
+ * Lead komplett gelöscht (voll gespiegelt). Kontakte aus anderen/keinen Ordnern
+ * bleiben.
  */
 export async function onDealDeleted(
   orgId: string,
@@ -274,10 +279,10 @@ export async function onDealDeleted(
   pipelineId: string,
 ): Promise<void> {
   if (!contactId) return;
-  const listId = await linkedListForPipeline(orgId, pipelineId);
-  if (!listId) return;
+  const listIds = await linkedListsForPipeline(orgId, pipelineId);
+  if (listIds.length === 0) return;
 
-  // Nur spiegeln, wenn der Lead wirklich in diesem Ordner liegt.
+  // Nur spiegeln, wenn der Lead wirklich in einem der verbundenen Ordner liegt.
   const [c] = await db
     .select({ id: contacts.id })
     .from(contacts)
@@ -285,7 +290,7 @@ export async function onDealDeleted(
       and(
         eq(contacts.id, contactId),
         eq(contacts.orgId, orgId),
-        eq(contacts.leadListId, listId),
+        inArray(contacts.leadListId, listIds),
       ),
     )
     .limit(1);

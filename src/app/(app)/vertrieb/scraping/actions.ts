@@ -20,7 +20,6 @@ import { triggerEnrichmentRun } from "@/lib/server/scraping/enrichment-trigger";
 import { createPipeline } from "@/app/(app)/crm/pipeline-actions";
 import {
   linkedPipelineForList,
-  linkedListForPipeline,
   backfillListToPipeline,
   onContactsAddedToList,
   setContactDealStage,
@@ -890,8 +889,11 @@ export async function addManualLeadAction(input: {
 export type LinkablePipeline = {
   id: string;
   name: string;
-  /** verbunden mit einem (anderen) Ordner? → in der Auswahl gesperrt (1:1). */
-  linkedListId: string | null;
+  /**
+   * Anzahl ANDERER Ordner (nicht dieser), die schon mit dieser Pipeline verbunden
+   * sind. n:1 erlaubt — dient nur der Info in der Auswahl, sperrt nichts.
+   */
+  linkedOtherCount: number;
 };
 
 /** Auswahl fürs "Mit Pipeline verbinden"-Modal: bestehende Pipelines + aktueller Link. */
@@ -910,8 +912,15 @@ export async function listLinkablePipelinesAction(input: {
     .select({ listId: leadLists.id, pipelineId: leadLists.pipelineId })
     .from(leadLists)
     .where(and(eq(leadLists.orgId, org.id), isNotNull(leadLists.pipelineId)));
-  const listByPipeline = new Map<string, string>();
-  for (const l of links) if (l.pipelineId) listByPipeline.set(l.pipelineId, l.listId);
+  // Wie viele ANDERE Ordner hängen je Pipeline (der aktuelle zählt nicht mit)?
+  const otherCountByPipeline = new Map<string, number>();
+  for (const l of links) {
+    if (!l.pipelineId || l.listId === input.listId) continue;
+    otherCountByPipeline.set(
+      l.pipelineId,
+      (otherCountByPipeline.get(l.pipelineId) ?? 0) + 1,
+    );
+  }
 
   const linkedPipelineId = await linkedPipelineForList(org.id, input.listId);
 
@@ -919,7 +928,7 @@ export async function listLinkablePipelinesAction(input: {
     pipelines: pls.map((p) => ({
       id: p.id,
       name: p.name,
-      linkedListId: listByPipeline.get(p.id) ?? null,
+      linkedOtherCount: otherCountByPipeline.get(p.id) ?? 0,
     })),
     linkedPipelineId,
   };
@@ -927,7 +936,8 @@ export async function listLinkablePipelinesAction(input: {
 
 /**
  * Verbindet einen Ordner mit einer Pipeline (bestehend ODER neu erstellt) und
- * befüllt sie erstmalig mit den Ordner-Leads (nur Ordner → Pipeline). 1:1.
+ * befüllt sie erstmalig mit den Ordner-Leads (nur Ordner → Pipeline). n:1 —
+ * mehrere Ordner dürfen dieselbe Pipeline speisen.
  */
 export async function connectPipelineAction(input: {
   listId: string;
@@ -970,14 +980,7 @@ export async function connectPipelineAction(input: {
     return { pipelineId, error: null };
   }
 
-  // 1:1 erzwingen: Pipeline schon mit einem ANDEREN Ordner verbunden?
-  const otherList = await linkedListForPipeline(org.id, pipelineId);
-  if (otherList && otherList !== input.listId) {
-    return {
-      pipelineId: null,
-      error: "Diese Pipeline ist bereits mit einem anderen Ordner verbunden.",
-    };
-  }
+  // n:1 — mehrere Ordner dürfen dieselbe Pipeline speisen; keine 1:1-Sperre mehr.
 
   // Umhängen: Ordner-Deals aus der ALTEN Pipeline entfernen, sonst blieben dort
   // Zombie-Deals zurück (die alte Pipeline ist danach mit keinem Ordner mehr
@@ -1001,18 +1004,10 @@ export async function connectPipelineAction(input: {
     }
   }
 
-  try {
-    await db
-      .update(leadLists)
-      .set({ pipelineId })
-      .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
-  } catch {
-    // Race gegen den partiellen Unique-Index auf lead_lists.pipeline_id.
-    return {
-      pipelineId: null,
-      error: "Diese Pipeline ist bereits mit einem anderen Ordner verbunden.",
-    };
-  }
+  await db
+    .update(leadLists)
+    .set({ pipelineId })
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
   await backfillListToPipeline(org.id, input.listId, pipelineId);
 
   revalidatePath("/vertrieb");

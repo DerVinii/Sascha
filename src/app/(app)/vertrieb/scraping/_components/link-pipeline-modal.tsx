@@ -46,16 +46,14 @@ export function LinkPipelineModal({
         if (cancelled) return;
         setPipelines(res.pipelines);
         setLinkedPipelineId(res.linkedPipelineId);
-        // Vorauswahl: verbundene Pipeline, sonst erste frei wählbare.
-        const selectable = res.pipelines.filter(
-          (p) => !p.linkedListId || p.linkedListId === listId,
-        );
+        // Vorauswahl: verbundene Pipeline, sonst erste vorhandene (n:1 — jede ist
+        // wählbar, auch wenn sie schon mit anderen Ordnern verbunden ist).
         if (res.linkedPipelineId) {
           setMode("existing");
           setSelectedId(res.linkedPipelineId);
-        } else if (selectable.length > 0) {
+        } else if (res.pipelines.length > 0) {
           setMode("existing");
-          setSelectedId(selectable[0].id);
+          setSelectedId(res.pipelines[0].id);
         } else {
           setMode("new");
         }
@@ -180,15 +178,16 @@ export function LinkPipelineModal({
                     {pipelines.length === 0 && (
                       <option value="">Keine Pipeline vorhanden</option>
                     )}
-                    {pipelines.map((p) => {
-                      const blocked = !!p.linkedListId && p.linkedListId !== listId;
-                      return (
-                        <option key={p.id} value={p.id} disabled={blocked}>
-                          {p.name}
-                          {blocked ? " — bereits verbunden" : ""}
-                        </option>
-                      );
-                    })}
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {p.linkedOtherCount > 0
+                          ? ` — ${p.linkedOtherCount} weitere${
+                              p.linkedOtherCount === 1 ? "r" : ""
+                            } Ordner verbunden`
+                          : ""}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </label>
@@ -220,6 +219,8 @@ export function LinkPipelineModal({
                 Alle Leads dieses Ordners werden als Deals in die Pipeline
                 übernommen und bleiben synchron: Hinzufügen & Löschen wirken in
                 beide Richtungen. Es erscheint die Spalte „Pipeline-Phase".
+                Mehrere Ordner können dieselbe Pipeline speisen — ihre Leads
+                werden dort addiert.
               </p>
 
               {error && <p className="text-sm text-err">{error}</p>}
