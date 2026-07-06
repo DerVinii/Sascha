@@ -22,6 +22,7 @@ import {
   linkedPipelineForList,
   backfillListToPipeline,
   onContactsAddedToList,
+  deleteDealsForContacts,
   setContactDealStage,
   pipelineStagesFor,
   dealStageByContact,
@@ -880,6 +881,81 @@ export async function addManualLeadAction(input: {
 
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
+}
+
+/**
+ * Ausgewählte Leads eines Ordners löschen (Sammel-Aktion aus der Lead-Tabelle).
+ * Ein Lead = Kontakt + zugehörige (ordner-eigene) Firma. Es werden gelöscht:
+ *  - die Deals der Kontakte in verbundenen Pipelines (sonst Geister-Deals),
+ *  - die Kontakte selbst,
+ *  - danach deren Firmen, sofern sie zu diesem Ordner gehören und von keinem
+ *    verbleibenden Kontakt mehr genutzt werden (keine verwaisten Firmen-Zeilen).
+ */
+export async function bulkDeleteLeadsAction(input: {
+  listId: string;
+  contactIds: string[];
+}): Promise<{ count: number }> {
+  const org = await requireActiveOrg();
+  const ids = [
+    ...new Set((input.contactIds ?? []).filter((s) => typeof s === "string" && s)),
+  ];
+  if (!input.listId || ids.length === 0) return { count: 0 };
+
+  // Nur Kontakte dieses Ordners (org-scoped) — plus ihre Firmen einsammeln.
+  const rows = await db
+    .select({ id: contacts.id, companyId: contacts.companyId })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.orgId, org.id),
+        eq(contacts.leadListId, input.listId),
+        inArray(contacts.id, ids),
+      ),
+    );
+  if (rows.length === 0) return { count: 0 };
+
+  const contactIds = rows.map((r) => r.id);
+  const companyIds = [
+    ...new Set(rows.map((r) => r.companyId).filter((x): x is string => Boolean(x))),
+  ];
+
+  // 1) Deals in verbundenen Pipelines entfernen (vor dem Kontakt-Löschen).
+  await deleteDealsForContacts(org.id, contactIds);
+
+  // 2) Kontakte löschen.
+  await db
+    .delete(contacts)
+    .where(and(eq(contacts.orgId, org.id), inArray(contacts.id, contactIds)));
+
+  // 3) Nun unbenutzte, ordner-eigene Firmen löschen (nicht solche, die noch ein
+  //    anderer Kontakt referenziert).
+  if (companyIds.length > 0) {
+    const stillUsed = await db
+      .select({ companyId: contacts.companyId })
+      .from(contacts)
+      .where(
+        and(eq(contacts.orgId, org.id), inArray(contacts.companyId, companyIds)),
+      );
+    const used = new Set(stillUsed.map((r) => r.companyId).filter(Boolean));
+    const orphanCompanies = companyIds.filter((id) => !used.has(id));
+    if (orphanCompanies.length > 0) {
+      await db
+        .delete(companies)
+        .where(
+          and(
+            eq(companies.orgId, org.id),
+            eq(companies.leadListId, input.listId),
+            inArray(companies.id, orphanCompanies),
+          ),
+        );
+    }
+  }
+
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/vertrieb");
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
+  return { count: contactIds.length };
 }
 
 // ============================================================================

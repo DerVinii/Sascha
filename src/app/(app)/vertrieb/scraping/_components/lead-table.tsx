@@ -20,6 +20,7 @@ import {
   queueEnrichmentAction,
   enrichmentStatusAction,
   setLeadStageAction,
+  bulkDeleteLeadsAction,
 } from "../actions";
 import {
   ENRICHMENT_KEY,
@@ -84,6 +85,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [runningCells, setRunningCells] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -303,6 +305,28 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       "Auswahl anreichern",
     );
     setSelection(new Set());
+  };
+
+  const deleteSelection = async () => {
+    const ids = [...selection];
+    if (ids.length === 0 || deleting) return;
+    if (
+      !confirm(
+        `${ids.length} Lead${ids.length !== 1 ? "s" : ""} löschen? Zugehörige Deals in verbundenen Pipelines werden mit entfernt. Das kann nicht rückgängig gemacht werden.`,
+      )
+    )
+      return;
+    setError(null);
+    setDeleting(true);
+    try {
+      await bulkDeleteLeadsAction({ listId, contactIds: ids });
+      setSelection(new Set());
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Löschen fehlgeschlagen.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const updateCells = async () => {
@@ -595,8 +619,10 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       <BulkRunBar
         count={selection.size}
         onRun={runSelection}
+        onDelete={deleteSelection}
         onClear={() => setSelection(new Set())}
         disabled={runner.progress.running || !primaryEnrichment}
+        deleting={deleting}
       />
 
       <SourcePanel

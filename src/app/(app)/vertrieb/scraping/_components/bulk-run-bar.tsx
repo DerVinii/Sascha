@@ -1,15 +1,24 @@
 "use client";
 
-import { Sparkles, X } from "lucide-react";
+import { Sparkles, Trash2, X, Loader2 } from "lucide-react";
 
 type Props = {
   count: number;
   onRun: () => void;
+  onDelete: () => void;
   onClear: () => void;
   disabled?: boolean;
+  deleting?: boolean;
 };
 
-export function BulkRunBar({ count, onRun, onClear, disabled }: Props) {
+export function BulkRunBar({
+  count,
+  onRun,
+  onDelete,
+  onClear,
+  disabled,
+  deleting,
+}: Props) {
   if (count === 0) return null;
   return (
     <div className="fixed bottom-6 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 flex justify-center">
@@ -22,7 +31,7 @@ export function BulkRunBar({ count, onRun, onClear, disabled }: Props) {
         </span>
         <button
           onClick={onRun}
-          disabled={disabled}
+          disabled={disabled || deleting}
           className="inline-flex items-center gap-1.5 h-9 sm:h-8 px-3 rounded-full bg-info text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
         >
           <Sparkles className="h-3.5 w-3.5 shrink-0" />
@@ -30,9 +39,23 @@ export function BulkRunBar({ count, onRun, onClear, disabled }: Props) {
           <span className="sm:hidden">GF finden</span>
         </button>
         <button
+          onClick={onDelete}
+          disabled={deleting}
+          title="Ausgewählte Leads löschen"
+          className="inline-flex items-center gap-1.5 h-9 sm:h-8 px-3 rounded-full bg-err text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
+        >
+          {deleting ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+          )}
+          Löschen
+        </button>
+        <button
           onClick={onClear}
+          disabled={deleting}
           title="Auswahl aufheben"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-sidebar-soft"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-sidebar-soft disabled:opacity-50"
         >
           <X className="h-4 w-4" />
         </button>
