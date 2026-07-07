@@ -673,6 +673,42 @@ export type InstantlyLead = {
   custom_variables?: Record<string, string>;
 };
 
+/** Lead-ID zu einer E-Mail finden (Workspace-weit; E-Mail ist eindeutig). */
+export async function findLeadIdByEmail(email: string): Promise<string | null> {
+  const data = await call<{ items?: Array<{ id: string; email?: string }> }>(
+    "/leads/list",
+    { method: "POST", body: JSON.stringify({ search: email, limit: 10 }) },
+  );
+  const items = data.items ?? [];
+  const hit = items.find(
+    (x) => (x.email ?? "").toLowerCase() === email.toLowerCase(),
+  );
+  return hit?.id ?? null;
+}
+
+/**
+ * Bestehenden Lead aktualisieren (PATCH). Wichtig: /leads/add aktualisiert
+ * vorhandene Leads NICHT (meldet sie nur als Duplikat) — nur so bleiben die
+ * Spalten/Variablen in Instantly dauerhaft mit der Tabelle synchron.
+ */
+export async function updateLead(
+  id: string,
+  lead: InstantlyLead,
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (lead.first_name !== undefined) body.first_name = lead.first_name;
+  if (lead.last_name !== undefined) body.last_name = lead.last_name;
+  if (lead.company_name !== undefined) body.company_name = lead.company_name;
+  if (lead.website !== undefined) body.website = lead.website;
+  if (lead.phone !== undefined) body.phone = lead.phone;
+  if (lead.custom_variables !== undefined)
+    body.custom_variables = lead.custom_variables;
+  await call(`/leads/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * Leads in eine Kampagne einspielen (bis zu 1000/Call).
  * `skipIfInCampaign` lässt Instantly selbst deduplizieren.

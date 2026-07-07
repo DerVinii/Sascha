@@ -194,6 +194,8 @@ export type InstantlySendPreview = {
 export type InstantlySendResult = {
   processed: number;
   sent: number;
+  /** bereits vorhandene Leads, deren Spalten/Variablen aufgefrischt wurden. */
+  updated: number;
   skippedNoEmail: number;
   skippedNotEnriched: number;
   skippedAlreadySent: number;
@@ -233,18 +235,25 @@ export type SaveCampaignResult = {
   error?: string | null;
 };
 
-/** Default-Spalten, die auf native Instantly-Lead-Felder mappen. */
+/**
+ * Default-Spalten → Instantly-Template-Token. WICHTIG: Instantly nutzt in der
+ * Sequenz camelCase-Variablen ({{firstName}}, {{lastName}}, {{companyName}}) —
+ * NICHT snake_case. Wird hier falsch gemappt, steht in der Mail z. B. {{first_name}},
+ * was Instantly nicht auflöst (die Lead-Variable heißt firstName). Verifiziert
+ * gegen die echte API/CLI.
+ */
 export const NATIVE_INSTANTLY_TOKENS: Record<string, string> = {
-  company: "company_name",
-  firstName: "first_name",
-  lastName: "last_name",
+  company: "companyName",
+  firstName: "firstName",
+  lastName: "lastName",
   email: "email",
   phone: "phone",
   website: "website",
 };
 
-/** Variablen-Token (für {{…}}) zu einer Spalte. Native Felder werden gemappt,
- *  alle übrigen Spalten laufen als custom_variables unter ihrem Spalten-Key. */
+/** Variablen-Token (für {{…}}) zu einer Spalte. Native Felder werden auf den
+ *  camelCase-Token gemappt, alle übrigen Spalten laufen als custom_variables
+ *  unter ihrem Spalten-Key. */
 export function instantlyVarToken(columnKey: string): string {
   return NATIVE_INSTANTLY_TOKENS[columnKey] ?? columnKey;
 }

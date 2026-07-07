@@ -29,6 +29,8 @@ import {
 } from "@/lib/server/pipeline-sync";
 import {
   bulkAddLeads,
+  findLeadIdByEmail,
+  updateLead,
   listAccounts,
   getCampaign,
   createCampaign,
@@ -58,7 +60,6 @@ import {
 } from "@/lib/server/scraping/enrich-run";
 import {
   instantlyVarToken,
-  NATIVE_INSTANTLY_TOKENS,
   isProtectedColumn,
   PIPELINE_STAGE_KEY,
 } from "@/lib/scraping-types";
@@ -1190,23 +1191,54 @@ function buildInstantlyLead(
   const co = src.company;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cf = (co?.customFields ?? {}) as Record<string, any>;
-  const custom: Record<string, string> = {};
-  if (cf.niche) custom.niche = String(cf.niche);
-  if (cf.city) custom.city = String(cf.city);
-  // Alle Nicht-Native-Spalten als custom_variables (unter ihrem Key), damit im
-  // Editor eingefügte {{spalte}}-Platzhalter in Instantly aufgelöst werden.
   const cells = buildCells(columns, src);
+
+  // Namen robust bestimmen: Kontakt-Feld zuerst, sonst aus der Enrichment-Zelle
+  // ("Geschäftsführer finden") — so gehen Vor-/Nachname NIE verloren, auch wenn
+  // der Rückschreib-Schritt mal nicht griff.
+  const dmRaw = (cells[ENRICHMENT_KEY]?.raw ?? {}) as {
+    vorname?: unknown;
+    nachname?: unknown;
+  };
+  const dmFirst =
+    typeof dmRaw.vorname === "string" && dmRaw.vorname.toUpperCase() !== "NF"
+      ? dmRaw.vorname
+      : "";
+  const dmLast =
+    typeof dmRaw.nachname === "string" && dmRaw.nachname.toUpperCase() !== "NF"
+      ? dmRaw.nachname
+      : "";
+  const firstName = c.firstName || dmFirst || "";
+  const lastName = c.lastName || dmLast || "";
+  const companyName = co?.name ?? "";
+
+  // ALLE Spalten IMMER als custom_variables mitschieben — auch leere (""), damit
+  // jedes {{token}} in Instantly garantiert existiert und keine Variable je still
+  // verloren geht.
+  const custom: Record<string, string> = {};
+  const setVar = (token: string, v: unknown) => {
+    custom[token] = v === null || v === undefined ? "" : String(v);
+  };
   for (const col of columns) {
-    if (NATIVE_INSTANTLY_TOKENS[col.key]) continue; // native Felder via Top-Level
-    const v = cells[col.key]?.value;
-    if (v !== null && v !== undefined && v !== "") {
-      custom[instantlyVarToken(col.key)] = String(v);
-    }
+    setVar(instantlyVarToken(col.key), cells[col.key]?.value);
   }
+  // Name/Firma unter BEIDEN Schreibweisen setzen: Instantly-Standard ist camelCase
+  // ({{firstName}}), ältere App-Copy nutzt aber snake_case ({{first_name}}). So löst
+  // beides zuverlässig auf. Robuster Namenswert (inkl. Enrichment-Fallback) gewinnt.
+  setVar("firstName", firstName);
+  setVar("first_name", firstName);
+  setVar("lastName", lastName);
+  setVar("last_name", lastName);
+  setVar("companyName", companyName);
+  setVar("company_name", companyName);
+  // niche/city aus company-customFields ergänzen, falls keine eigene Spalte.
+  if (cf.niche && !custom.niche) custom.niche = String(cf.niche);
+  if (cf.city && !custom.city) custom.city = String(cf.city);
+
   return {
     email: String(c.email),
-    first_name: c.firstName || undefined,
-    last_name: c.lastName || undefined,
+    first_name: firstName || undefined,
+    last_name: lastName || undefined,
     company_name: co?.name || undefined,
     website: (cf.websiteUri as string) || co?.domain || undefined,
     phone: c.phone || undefined,
@@ -1473,6 +1505,7 @@ export async function sendListToInstantlyAction(input: {
   const base: InstantlySendResult = {
     processed: 0,
     sent: 0,
+    updated: 0,
     skippedNoEmail: 0,
     skippedNotEnriched: 0,
     skippedAlreadySent: 0,
@@ -1495,10 +1528,14 @@ export async function sendListToInstantlyAction(input: {
     const offset = Math.max(0, input.offset ?? 0);
     const slice = all.slice(offset, offset + INSTANTLY_BATCH);
 
-    const toSend: RowSources[] = [];
+    // Neue Leads werden angelegt, bereits vorhandene AUFGEFRISCHT (nicht bloß
+    // übersprungen): so stehen in Instantly IMMER alle Spalten aktuell — auch wenn
+    // ein Lead früher unvollständig eingespielt wurde. /leads/add aktualisiert
+    // bestehende Leads nämlich nicht, deshalb der PATCH-Weg pro vorhandenem Lead.
+    const toAdd: RowSources[] = [];
+    const toUpdate: RowSources[] = [];
     let skippedNoEmail = 0;
     let skippedNotEnriched = 0;
-    let skippedAlreadySent = 0;
     for (const src of slice) {
       if (!rowHasEmail(src)) {
         skippedNoEmail++;
@@ -1508,41 +1545,67 @@ export async function sendListToInstantlyAction(input: {
         skippedNotEnriched++;
         continue;
       }
-      if (input.filter.skipAlreadySent && rowSentTo(src, campaignId)) {
-        skippedAlreadySent++;
-        continue;
-      }
-      toSend.push(src);
+      if (rowSentTo(src, campaignId)) toUpdate.push(src);
+      else toAdd.push(src);
     }
 
     let sent = 0;
+    let updated = 0;
     let failed = 0;
     let error: string | null = null;
 
-    if (toSend.length > 0) {
+    const markSent = async (rows: RowSources[]) => {
+      if (!rows.length) return;
+      await db
+        .update(contacts)
+        .set({ customFields: sentPatch(campaignId, new Date().toISOString()) })
+        .where(
+          and(
+            eq(contacts.orgId, org.id),
+            inArray(
+              contacts.id,
+              rows.map((s) => s.contact.id),
+            ),
+          ),
+        );
+    };
+
+    // 1) Neue Leads einspielen — immer mit ALLEN Spalten (siehe buildInstantlyLead).
+    if (toAdd.length > 0) {
       try {
         await bulkAddLeads(
           campaignId,
-          toSend.map((s) => buildInstantlyLead(s, columns)),
-          { skipIfInCampaign: input.filter.skipAlreadySent },
+          toAdd.map((s) => buildInstantlyLead(s, columns)),
+          { skipIfInCampaign: true },
         );
-        sent = toSend.length;
-        const iso = new Date().toISOString();
-        await db
-          .update(contacts)
-          .set({ customFields: sentPatch(campaignId, iso) })
-          .where(
-            and(
-              eq(contacts.orgId, org.id),
-              inArray(
-                contacts.id,
-                toSend.map((s) => s.contact.id),
-              ),
-            ),
-          );
+        sent = toAdd.length;
+        await markSent(toAdd);
       } catch (e) {
-        failed = toSend.length;
+        failed += toAdd.length;
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      }
+    }
+
+    // 2) Bereits eingespielte Leads auffrischen (Spalten/Variablen per PATCH).
+    if (!error) {
+      for (const src of toUpdate) {
+        const lead = buildInstantlyLead(src, columns);
+        try {
+          const id = await findLeadIdByEmail(lead.email);
+          if (id) {
+            await updateLead(id, lead);
+            updated++;
+          } else {
+            // Laut DB gesendet, in Instantly aber nicht (mehr) vorhanden → neu anlegen.
+            await bulkAddLeads(campaignId, [lead], { skipIfInCampaign: true });
+            sent++;
+            await markSent([src]);
+          }
+        } catch (e) {
+          failed++;
+          error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          break;
+        }
       }
     }
 
@@ -1554,9 +1617,10 @@ export async function sendListToInstantlyAction(input: {
     return {
       processed: slice.length,
       sent,
+      updated,
       skippedNoEmail,
       skippedNotEnriched,
-      skippedAlreadySent,
+      skippedAlreadySent: 0,
       failed,
       remaining,
       error,

@@ -42,6 +42,7 @@ type Props = {
 
 type RunProgress = {
   sent: number;
+  updated: number;
   skipped: number;
   failed: number;
   skippedAlreadySent: number;
@@ -213,6 +214,7 @@ export function CampaignSetupModal({
       // 2) Leads in Chargen senden.
       const acc: RunProgress = {
         sent: 0,
+        updated: 0,
         skipped: 0,
         failed: 0,
         skippedAlreadySent: 0,
@@ -234,6 +236,7 @@ export function CampaignSetupModal({
           break;
         }
         acc.sent += r.sent;
+        acc.updated += r.updated;
         acc.skippedAlreadySent += r.skippedAlreadySent;
         acc.skippedNoEmail += r.skippedNoEmail;
         acc.skippedNotEnriched += r.skippedNotEnriched;
@@ -354,10 +357,12 @@ export function CampaignSetupModal({
                     onChange={(e) => setSkipAlreadySent(e.target.checked)}
                     className="h-3.5 w-3.5 rounded border-line"
                   />
-                  Bereits gesendete überspringen
+                  Bereits Angeschriebene nicht erneut anschreiben
                 </label>
                 <p className="text-[11px] text-sub">
-                  Leads ohne E-Mail werden immer übersprungen.
+                  Schon eingespielte Leads bekommen keine neue Erst-Mail — ihre
+                  Spalten/Variablen in Instantly werden aber immer aktualisiert, damit
+                  nichts veraltet. Leads ohne E-Mail werden übersprungen.
                 </p>
               </div>
 
@@ -542,8 +547,9 @@ export function CampaignSetupModal({
                   <CheckCircle2 className="h-4 w-4 text-ok" />
                 )}
                 <span>
-                  {progress.sent} neu eingespielt · {progress.skipped}{" "}
-                  übersprungen
+                  {progress.sent} neu eingespielt · {progress.updated}{" "}
+                  aktualisiert
+                  {progress.skipped > 0 && ` · ${progress.skipped} übersprungen`}
                   {skipDetail && ` (${skipDetail})`}
                   {progress.failed > 0 && ` · ${progress.failed} fehlgeschlagen`}
                 </span>
