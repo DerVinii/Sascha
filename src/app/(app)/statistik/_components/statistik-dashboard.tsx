@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  ExternalLink,
   Loader2,
   RefreshCw,
   Reply,
@@ -667,13 +666,12 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                 onSort={toggleSort}
                 sortKey="opportunities"
               />
-              <th className="px-3 py-2.5 font-medium text-right">Aktionen</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sub">
+                <td colSpan={5} className="px-4 py-8 text-center text-sub">
                   Noch keine Kampagnen im Instantly-Workspace.
                 </td>
               </tr>
@@ -732,18 +730,6 @@ function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                     >
                       {fmtInt(c.opportunities)}
                     </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <a
-                      href={`https://app.instantly.ai/app/campaign/${c.id}/analytics`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="In Instantly öffnen"
-                      className="h-9 sm:h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs text-sub hover:text-ink hover:bg-bg transition"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Instantly</span>
-                    </a>
                   </td>
                 </tr>
               );
