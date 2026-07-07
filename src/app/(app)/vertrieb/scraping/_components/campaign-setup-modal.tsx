@@ -48,6 +48,7 @@ type RunProgress = {
   skippedAlreadySent: number;
   skippedNoEmail: number;
   skippedNotEnriched: number;
+  skippedDuplicate: number;
 };
 
 export function CampaignSetupModal({
@@ -67,6 +68,8 @@ export function CampaignSetupModal({
 
   const [onlyEnriched, setOnlyEnriched] = useState(false);
   const [skipAlreadySent, setSkipAlreadySent] = useState(true);
+  // Duplikate aus ANDEREN Kampagnen überspringen (gleiche Kampagne: immer dedupliziert).
+  const [skipWorkspaceDuplicates, setSkipWorkspaceDuplicates] = useState(false);
   const [preview, setPreview] = useState<InstantlySendPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -136,7 +139,7 @@ export function CampaignSetupModal({
     setPreviewLoading(true);
     previewInstantlySendAction({
       listId,
-      filter: { onlyEnriched, skipAlreadySent },
+      filter: { onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates },
     })
       .then((p) => !cancelled && setPreview(p))
       .catch(() => {})
@@ -144,7 +147,7 @@ export function CampaignSetupModal({
     return () => {
       cancelled = true;
     };
-  }, [open, listId, onlyEnriched, skipAlreadySent]);
+  }, [open, listId, onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates]);
 
   function updateStep(i: number, patch: Partial<CampaignStep>) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -220,6 +223,7 @@ export function CampaignSetupModal({
         skippedAlreadySent: 0,
         skippedNoEmail: 0,
         skippedNotEnriched: 0,
+        skippedDuplicate: 0,
       };
       setProgress({ ...acc });
       let offset = 0;
@@ -227,7 +231,7 @@ export function CampaignSetupModal({
       for (let i = 0; i < 10000; i++) {
         const r = await sendListToInstantlyAction({
           listId,
-          filter: { onlyEnriched, skipAlreadySent },
+          filter: { onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates },
           offset,
         });
         if (r.error) {
@@ -240,8 +244,12 @@ export function CampaignSetupModal({
         acc.skippedAlreadySent += r.skippedAlreadySent;
         acc.skippedNoEmail += r.skippedNoEmail;
         acc.skippedNotEnriched += r.skippedNotEnriched;
+        acc.skippedDuplicate += r.skippedDuplicate;
         acc.skipped +=
-          r.skippedNoEmail + r.skippedNotEnriched + r.skippedAlreadySent;
+          r.skippedNoEmail +
+          r.skippedNotEnriched +
+          r.skippedAlreadySent +
+          r.skippedDuplicate;
         acc.failed += r.failed;
         offset += r.processed;
         setProgress({ ...acc });
@@ -283,6 +291,9 @@ export function CampaignSetupModal({
           : null,
         progress.skippedNotEnriched > 0
           ? `${progress.skippedNotEnriched} ohne Entscheider`
+          : null,
+        progress.skippedDuplicate > 0
+          ? `${progress.skippedDuplicate} Duplikat(e) aus anderer Kampagne`
           : null,
       ]
         .filter(Boolean)
@@ -359,10 +370,24 @@ export function CampaignSetupModal({
                   />
                   Bereits Angeschriebene nicht erneut anschreiben
                 </label>
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={skipWorkspaceDuplicates}
+                    onChange={(e) =>
+                      setSkipWorkspaceDuplicates(e.target.checked)
+                    }
+                    className="h-3.5 w-3.5 rounded border-line"
+                  />
+                  Auf Duplikate achten (aus anderen Kampagnen)
+                </label>
                 <p className="text-[11px] text-sub">
                   Schon eingespielte Leads bekommen keine neue Erst-Mail — ihre
                   Spalten/Variablen in Instantly werden aber immer aktualisiert, damit
-                  nichts veraltet. Leads ohne E-Mail werden übersprungen.
+                  nichts veraltet. Leads ohne E-Mail werden übersprungen. Angehakt
+                  werden zusätzlich Leads übersprungen, die bereits in einer anderen
+                  Instantly-Kampagne stecken; ohne Haken werden sie trotzdem
+                  eingespielt (Duplikate innerhalb derselben Kampagne entstehen nie).
                 </p>
               </div>
 

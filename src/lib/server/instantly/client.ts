@@ -692,6 +692,23 @@ export async function findLeadIdByEmail(email: string): Promise<string | null> {
 }
 
 /**
+ * Alle Kampagnen-IDs, in denen ein Lead mit dieser E-Mail bereits existiert
+ * (workspace-weit). Für den Duplikat-Check über Kampagnengrenzen hinweg.
+ */
+export async function findLeadCampaignsByEmail(email: string): Promise<string[]> {
+  const data = await call<{
+    items?: Array<{ email?: string; campaign?: string }>;
+  }>("/leads/list", {
+    method: "POST",
+    body: JSON.stringify({ search: email, limit: 10 }),
+  });
+  return (data.items ?? [])
+    .filter((x) => (x.email ?? "").toLowerCase() === email.toLowerCase())
+    .map((x) => x.campaign ?? "")
+    .filter(Boolean);
+}
+
+/**
  * Bestehenden Lead aktualisieren (PATCH). Wichtig: /leads/add aktualisiert
  * vorhandene Leads NICHT (meldet sie nur als Duplikat) — nur so bleiben die
  * Spalten/Variablen in Instantly dauerhaft mit der Tabelle synchron.

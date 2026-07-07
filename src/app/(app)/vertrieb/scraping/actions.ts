@@ -30,6 +30,7 @@ import {
 import {
   bulkAddLeads,
   findLeadIdByEmail,
+  findLeadCampaignsByEmail,
   updateLead,
   listAccounts,
   getCampaign,
@@ -1407,6 +1408,7 @@ export async function getCampaignSetupAction(input: {
   const preview = await computePreview(org.id, input.listId, list.campaignId, {
     onlyEnriched: false,
     skipAlreadySent: true,
+    skipWorkspaceDuplicates: false,
   });
 
   return { campaignId: list.campaignId, status, steps, accounts, preview };
@@ -1533,6 +1535,7 @@ export async function sendListToInstantlyAction(input: {
     skippedNoEmail: 0,
     skippedNotEnriched: 0,
     skippedAlreadySent: 0,
+    skippedDuplicate: 0,
     failed: 0,
     remaining: 0,
     error: null,
@@ -1573,6 +1576,31 @@ export async function sendListToInstantlyAction(input: {
       else toAdd.push(src);
     }
 
+    // Duplikat-Check über Kampagnengrenzen: Leads, die in Instantly schon in
+    // einer ANDEREN Kampagne stecken, werden übersprungen (nur wenn gewünscht).
+    // Innerhalb derselben Kampagne dedupliziert /leads/add ohnehin immer.
+    let skippedDuplicate = 0;
+    let addRows = toAdd;
+    if (input.filter.skipWorkspaceDuplicates && toAdd.length > 0) {
+      const keep: RowSources[] = [];
+      const CHUNK = 10; // parallele Lookups begrenzen (Instantly-Rate-Limit)
+      for (let i = 0; i < toAdd.length; i += CHUNK) {
+        const chunk = toAdd.slice(i, i + CHUNK);
+        const inOther = await Promise.all(
+          chunk.map(async (src) => {
+            const email = src.contact.email ?? "";
+            const campaigns = await findLeadCampaignsByEmail(email);
+            return campaigns.some((c) => c !== campaignId);
+          }),
+        );
+        chunk.forEach((src, j) => {
+          if (inOther[j]) skippedDuplicate++;
+          else keep.push(src);
+        });
+      }
+      addRows = keep;
+    }
+
     let sent = 0;
     let updated = 0;
     let failed = 0;
@@ -1595,17 +1623,21 @@ export async function sendListToInstantlyAction(input: {
     };
 
     // 1) Neue Leads einspielen — immer mit ALLEN Spalten (siehe buildInstantlyLead).
-    if (toAdd.length > 0) {
+    // skipIfInWorkspace doppelt als Server-Absicherung zum obigen Duplikat-Check.
+    if (addRows.length > 0) {
       try {
         await bulkAddLeads(
           campaignId,
-          toAdd.map((s) => buildInstantlyLead(s, columns)),
-          { skipIfInCampaign: true },
+          addRows.map((s) => buildInstantlyLead(s, columns)),
+          {
+            skipIfInCampaign: true,
+            skipIfInWorkspace: input.filter.skipWorkspaceDuplicates,
+          },
         );
-        sent = toAdd.length;
-        await markSent(toAdd);
+        sent = addRows.length;
+        await markSent(addRows);
       } catch (e) {
-        failed += toAdd.length;
+        failed += addRows.length;
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       }
     }
@@ -1645,6 +1677,7 @@ export async function sendListToInstantlyAction(input: {
       skippedNoEmail,
       skippedNotEnriched,
       skippedAlreadySent: 0,
+      skippedDuplicate,
       failed,
       remaining,
       error,

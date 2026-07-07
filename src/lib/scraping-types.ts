@@ -177,6 +177,12 @@ export type InstantlySendFilter = {
   onlyEnriched: boolean;
   /** bereits an diese Kampagne gesendete Leads überspringen. */
   skipAlreadySent: boolean;
+  /**
+   * Duplikate aus ANDEREN Kampagnen überspringen (innerhalb derselben Kampagne
+   * wird immer dedupliziert). false = Lead wird auch dann eingespielt, wenn er
+   * schon in einer anderen Instantly-Kampagne existiert.
+   */
+  skipWorkspaceDuplicates: boolean;
 };
 
 /** Live-Zähler im Modal vor dem Versand. */
@@ -199,6 +205,8 @@ export type InstantlySendResult = {
   skippedNoEmail: number;
   skippedNotEnriched: number;
   skippedAlreadySent: number;
+  /** übersprungen, weil bereits in einer anderen Kampagne vorhanden (Duplikat). */
+  skippedDuplicate: number;
   failed: number;
   remaining: number;
   error?: string | null;
