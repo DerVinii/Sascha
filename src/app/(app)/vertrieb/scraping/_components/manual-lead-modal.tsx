@@ -12,6 +12,9 @@ type Props = {
 };
 
 export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
+  const [vorname, setVorname] = useState("");
+  const [nachname, setNachname] = useState("");
+  const [email, setEmail] = useState("");
   const [firma, setFirma] = useState("");
   const [webseite, setWebseite] = useState("");
   const [telefon, setTelefon] = useState("");
@@ -22,9 +25,25 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
 
   function submit() {
     setError(null);
+    const mail = email.trim();
+    if (mail && !mail.includes("@")) {
+      setError("Bitte eine gültige E-Mail-Adresse eingeben.");
+      return;
+    }
     startTransition(async () => {
       try {
-        await addManualLeadAction({ listId, firma, webseite, telefon });
+        await addManualLeadAction({
+          listId,
+          firma,
+          webseite,
+          telefon,
+          vorname,
+          nachname,
+          email: mail,
+        });
+        setVorname("");
+        setNachname("");
+        setEmail("");
         setFirma("");
         setWebseite("");
         setTelefon("");
@@ -53,10 +72,38 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
         </div>
 
         <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-xs font-medium text-sub">Vorname</span>
+              <input
+                autoFocus
+                value={vorname}
+                onChange={(e) => setVorname(e.target.value)}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none focus:ring-2 focus:ring-info/30"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-sub">Nachname</span>
+              <input
+                value={nachname}
+                onChange={(e) => setNachname(e.target.value)}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none focus:ring-2 focus:ring-info/30"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-xs font-medium text-sub">E-Mail</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@firma.de"
+              className="mt-1 w-full h-9 px-3 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
+            />
+          </label>
           <label className="block">
             <span className="text-xs font-medium text-sub">Firma *</span>
             <input
-              autoFocus
               value={firma}
               onChange={(e) => setFirma(e.target.value)}
               className="mt-1 w-full h-9 px-3 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none focus:ring-2 focus:ring-info/30"
@@ -81,8 +128,8 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
           </label>
           {error && <p className="text-sm text-err">{error}</p>}
           <p className="text-[11px] text-sub">
-            Name & E-Mail des Geschäftsführers kannst du danach per „Geschäftsführer
-            finden" anreichern.
+            Nur die Firma ist Pflicht. Leere Felder (z. B. Name/E-Mail) kannst du
+            später auch per „Geschäftsführer finden" automatisch ergänzen.
           </p>
         </div>
 

@@ -50,6 +50,9 @@ export function LeadCellView({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Verhindert doppeltes Speichern (Enter löst commit + danach den Blur-commit aus)
+  // und ein versehentliches Speichern nach Escape.
+  const committedRef = useRef(false);
 
   const isEnrichment = column.kind === "enrichment" || !!column.config.ai;
   const isRunning = running || cell.status === "running";
@@ -66,13 +69,20 @@ export function LeadCellView({
 
   function startEdit() {
     if (!editable) return;
+    committedRef.current = false;
     setDraft(cell.value == null ? "" : String(cell.value));
     setEditing(true);
   }
   function commit() {
+    if (committedRef.current) return;
+    committedRef.current = true;
     setEditing(false);
     const current = cell.value == null ? "" : String(cell.value);
     if (draft !== current) onEdit?.(draft);
+  }
+  function cancelEdit() {
+    committedRef.current = true; // Blur nach Escape darf nicht mehr speichern
+    setEditing(false);
   }
 
   // --- laufend -------------------------------------------------------------
@@ -95,7 +105,7 @@ export function LeadCellView({
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") commit();
-          if (e.key === "Escape") setEditing(false);
+          if (e.key === "Escape") cancelEdit();
         }}
         className="w-full h-6 px-1 -mx-1 rounded border border-info bg-surface text-sm text-ink focus:outline-none"
       />

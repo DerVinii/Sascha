@@ -852,6 +852,9 @@ export async function addManualLeadAction(input: {
   firma: string;
   webseite?: string;
   telefon?: string;
+  vorname?: string;
+  nachname?: string;
+  email?: string;
 }): Promise<void> {
   const org = await requireActiveOrg();
   const firma = input.firma?.trim();
@@ -876,6 +879,9 @@ export async function addManualLeadAction(input: {
       orgId: org.id,
       leadListId: input.listId,
       companyId: company.id,
+      firstName: input.vorname?.trim() || null,
+      lastName: input.nachname?.trim() || null,
+      email: input.email?.trim() || null,
       phone: input.telefon?.trim() || null,
       status: "lead" as const,
       source: "Manuell",

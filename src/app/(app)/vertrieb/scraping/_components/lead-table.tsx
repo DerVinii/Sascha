@@ -387,8 +387,38 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     await refresh();
   };
   const onEditCell = async (rowId: string, columnKey: string, value: string) => {
-    await editCellAction({ rowId, columnKey, value });
-    await refresh();
+    const trimmed = value.trim();
+    setError(null);
+    // Optimistisch: Wert SOFORT lokal übernehmen. Vorher wurde nur gespeichert und
+    // dann refresh() aufgerufen — wird der Refresh aber durch den Poll-Guard
+    // übersprungen (oder ist langsam), sprang die Zelle auf den alten Wert zurück
+    // ("nicht gespeichert / doppelt eingeben"). Kein Refresh im Erfolgsfall nötig.
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? {
+              ...r,
+              cells: {
+                ...r.cells,
+                [columnKey]: {
+                  ...(r.cells[columnKey] ?? {}),
+                  value: trimmed || null,
+                  status: (trimmed ? "success" : "empty") as
+                    | "success"
+                    | "empty",
+                  editable: true,
+                },
+              },
+            }
+          : r,
+      ),
+    );
+    try {
+      await editCellAction({ rowId, columnKey, value: trimmed });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
+      await refresh(); // bei Fehler Serverstand wiederherstellen
+    }
   };
 
   // Pipeline-Phase-Zelle: Phase wählen → Deal verschieben (optimistisch + Refresh).
