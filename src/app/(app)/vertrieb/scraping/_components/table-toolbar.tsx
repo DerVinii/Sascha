@@ -53,6 +53,8 @@ type Props = {
   onAddColumn: () => void;
   onUpdateCells: () => void;
   onSetupCampaign: () => void;
+  /** true = Kampagne existiert bereits → Button heißt "Kampagne bearbeiten". */
+  hasCampaign: boolean;
   onLinkPipeline: () => void;
   /** Name der verbundenen Pipeline (null = nicht verbunden). */
   linkedPipelineName: string | null;
@@ -83,6 +85,7 @@ export function TableToolbar(props: Props) {
     onAddColumn,
     onUpdateCells,
     onSetupCampaign,
+    hasCampaign,
     onLinkPipeline,
     linkedPipelineName,
     exportHref,
@@ -160,10 +163,16 @@ export function TableToolbar(props: Props) {
           <button
             onClick={onSetupCampaign}
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
-            title="Kampagne einrichten: Copy schreiben & Leads an Instantly senden"
+            title={
+              hasCampaign
+                ? "Kampagne bearbeiten: Copy, Absender & Live-Status ändern"
+                : "Kampagne einrichten: Copy schreiben & Leads an Instantly senden"
+            }
           >
             <Send className="h-3.5 w-3.5 text-info" />
-            <span className="hidden sm:inline">Kampagne einrichten</span>
+            <span className="hidden sm:inline">
+              {hasCampaign ? "Kampagne bearbeiten" : "Kampagne einrichten"}
+            </span>
           </button>
           <button
             onClick={onLinkPipeline}

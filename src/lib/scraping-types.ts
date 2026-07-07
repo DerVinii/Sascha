@@ -259,4 +259,7 @@ export type LeadTableData = {
   /** Verbundene Pipeline (null = nicht verbunden) — steuert Button-Zustand
    *  & Anzeige der "Pipeline-Phase"-Spalte. */
   linkedPipeline: { id: string; name: string } | null;
+  /** true, sobald für diesen Ordner eine Instantly-Kampagne angelegt wurde
+   *  ("Kampagne einrichten" → "Kampagne bearbeiten"). */
+  hasCampaign: boolean;
 };

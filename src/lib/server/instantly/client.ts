@@ -191,6 +191,14 @@ export async function activateCampaign(id: string): Promise<void> {
   });
 }
 
+/** Kampagne pausieren (Status → 2, kein Versand). Für den "Draft"-Zustand. */
+export async function pauseCampaign(id: string): Promise<void> {
+  await call(`/campaigns/${id}/pause`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 // --- Postfach: Accounts-Tracking --------------------------------------------
 
 export type InstantlyAccountFull = {

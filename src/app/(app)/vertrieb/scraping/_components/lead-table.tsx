@@ -75,6 +75,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [total, setTotal] = useState(initial.total);
   const [views, setViews] = useState<LeadView[]>(initial.views);
   const [linkedPipeline, setLinkedPipeline] = useState(initial.linkedPipeline);
+  const [hasCampaign, setHasCampaign] = useState(initial.hasCampaign);
 
   const [activeViewId, setActiveViewId] = useState("all");
   const [adHocFilters, setAdHocFilters] = useState<LeadViewFilter[]>([]);
@@ -124,6 +125,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       setTotal(data.total);
       setViews(data.views);
       setLinkedPipeline(data.linkedPipeline);
+      setHasCampaign(data.hasCampaign);
       // Ad-hoc-Filter auf verschwundene Spalten (z. B. "Pipeline-Phase" nach dem
       // Trennen) entfernen — sonst filtert ein toter Key die ganze Liste weg.
       const presentKeys = new Set(data.columns.map((c) => c.key));
@@ -468,6 +470,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onAddColumn={() => setAddColumnOpen(true)}
         onUpdateCells={updateCells}
         onSetupCampaign={() => setCampaignOpen(true)}
+        hasCampaign={hasCampaign}
         onLinkPipeline={() => setLinkPipelineOpen(true)}
         linkedPipelineName={linkedPipeline?.name ?? null}
         exportHref="/api/crm/export?status=lead"
@@ -651,6 +654,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         listId={listId}
         listName={initial.listName}
         columns={columns.filter((c) => !c.config.system)}
+        hasCampaign={hasCampaign}
         onDone={refresh}
       />
       <LinkPipelineModal

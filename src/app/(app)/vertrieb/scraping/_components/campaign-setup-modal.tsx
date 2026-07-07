@@ -14,6 +14,7 @@ import {
   Mail,
   Braces,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { instantlyVarToken } from "@/lib/scraping-types";
 import type {
   CampaignStep,
@@ -25,7 +26,7 @@ import {
   previewInstantlySendAction,
   saveCampaignAction,
   sendListToInstantlyAction,
-  activateInstantlyCampaignAction,
+  setInstantlyCampaignLiveAction,
 } from "../actions";
 
 type Props = {
@@ -34,6 +35,8 @@ type Props = {
   listId: string;
   listName: string;
   columns: LeadColumn[];
+  /** true = Kampagne existiert bereits → "bearbeiten" statt "einrichten". */
+  hasCampaign?: boolean;
   onDone?: () => void;
 };
 
@@ -45,6 +48,7 @@ export function CampaignSetupModal({
   listId,
   listName,
   columns,
+  hasCampaign = false,
   onDone,
 }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -63,8 +67,9 @@ export function CampaignSetupModal({
   ]);
   // Absender werden ohne UI automatisch gesetzt: alle aktiven Postfächer.
   const [senders, setSenders] = useState<string[]>([]);
-  const [activate, setActivate] = useState(true);
-  const [activated, setActivated] = useState(false);
+  // Live/Draft-Umschalter. Standard: Live. Bei bestehender Kampagne aus dem Status.
+  const [live, setLive] = useState(true);
+  const [finalLive, setFinalLive] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<RunProgress | null>(null);
@@ -96,6 +101,8 @@ export function CampaignSetupModal({
       );
       setSenders(info.accounts.filter((a) => a.active).map((a) => a.email));
       setPreview(info.preview);
+      // Bestehende Kampagne: Toggle spiegelt echten Status (1 = live). Neu: Live.
+      setLive(info.campaignId ? info.status === 1 : true);
     } catch (e) {
       setSetupError(e instanceof Error ? e.message : "Fehler beim Laden.");
     } finally {
@@ -109,8 +116,8 @@ export function CampaignSetupModal({
     setProgress(null);
     setDone(false);
     setRunError(null);
-    setActivate(true);
-    setActivated(false);
+    setLive(true);
+    setFinalLive(false);
     loadSetup();
   }, [open, loadSetup]);
 
@@ -181,7 +188,7 @@ export function CampaignSetupModal({
     setBusy(true);
     setRunError(null);
     setDone(false);
-    setActivated(false);
+    setFinalLive(false);
     try {
       // 1) Copy + Absender + Schedule (8–16 Berlin) speichern — noch nicht live.
       const saved = await saveCampaignAction({
@@ -221,15 +228,18 @@ export function CampaignSetupModal({
         if (r.remaining <= 0 || r.processed === 0) break;
       }
 
-      // 3) Erst mit eingespielten Leads live schalten (sonst startet Instantly leer).
-      if (activate && !sendFailed) {
-        const res = await activateInstantlyCampaignAction({ listId });
-        if (res.activated) {
-          setActivated(true);
-        } else if (res.error) {
+      // 3) Live/Draft anwenden — erst mit eingespielten Leads (sonst startet
+      //    Instantly leer). Bei "Draft" wird pausiert.
+      if (!sendFailed) {
+        const res = await setInstantlyCampaignLiveAction({ listId, live });
+        if (res.error) {
           setRunError(
-            `Leads eingespielt, aber Live-Schaltung fehlgeschlagen: ${res.error}`,
+            `Leads eingespielt, aber ${
+              live ? "Live-Schaltung" : "Auf-Draft-Setzen"
+            } fehlgeschlagen: ${res.error}`,
           );
+        } else {
+          setFinalLive(res.live);
         }
       }
 
@@ -262,7 +272,7 @@ export function CampaignSetupModal({
           <div>
             <h3 className="text-sm font-semibold text-ink inline-flex items-center gap-2">
               <Send className="h-4 w-4 text-info" />
-              Kampagne einrichten
+              {hasCampaign ? "Kampagne bearbeiten" : "Kampagne einrichten"}
             </h3>
             <p className="text-[11px] text-sub mt-0.5">
               {listName} · Schritt {step} von 2 ·{" "}
@@ -438,23 +448,47 @@ export function CampaignSetupModal({
                 </div>
               </div>
 
-              {/* Aktivieren */}
-              <label className="flex items-start gap-2 text-sm text-ink rounded-lg border border-line bg-bg p-3">
-                <input
-                  type="checkbox"
-                  checked={activate}
-                  onChange={(e) => setActivate(e.target.checked)}
-                  className="h-3.5 w-3.5 mt-0.5 rounded border-line"
-                />
-                <span>
-                  Kampagne sofort live schalten
-                  <span className="block text-[11px] text-warn">
-                    Startet den echten Mailversand (Mo–Fr 8–16 Uhr Berliner Zeit),
-                    sobald die Leads eingespielt sind. Haken entfernen, wenn du nur
-                    speichern und den Start selbst in Instantly auslösen willst.
-                  </span>
-                </span>
-              </label>
+              {/* Status: Live / Draft */}
+              <div className="rounded-lg border border-line bg-bg p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-ink">Status</span>
+                  <div className="inline-flex rounded-full border border-line bg-surface p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setLive(true)}
+                      className={cn(
+                        "h-7 px-3.5 rounded-full text-xs font-semibold transition inline-flex items-center gap-1.5",
+                        live ? "bg-ok text-white shadow" : "text-sub hover:text-ink",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          live ? "bg-white" : "bg-sub/60",
+                        )}
+                      />
+                      Live
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLive(false)}
+                      className={cn(
+                        "h-7 px-3.5 rounded-full text-xs font-semibold transition",
+                        !live
+                          ? "bg-sidebar text-white shadow"
+                          : "text-sub hover:text-ink",
+                      )}
+                    >
+                      Draft
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-warn">
+                  {live
+                    ? "Live startet den echten Mailversand (Mo–Fr 8–16 Uhr Berliner Zeit), sobald die Leads eingespielt sind."
+                    : "Draft speichert nur Copy & Leads — es wird nichts versendet. Du kannst jederzeit auf Live umschalten."}
+                </p>
+              </div>
             </>
           )}
 
@@ -484,9 +518,9 @@ export function CampaignSetupModal({
               {done && !runError && (
                 <p className="mt-1 text-[11px] text-sub">
                   Fertig.{" "}
-                  {activated
+                  {finalLive
                     ? "Kampagne ist live — der Versand läuft (Mo–Fr 8–16 Uhr Berlin)."
-                    : "Copy gespeichert & Leads eingespielt. Live schalten kannst du in Instantly."}
+                    : "Als Draft gespeichert & Leads eingespielt — es wird nichts versendet."}
                 </p>
               )}
             </div>
@@ -540,8 +574,10 @@ export function CampaignSetupModal({
                     <Send className="h-4 w-4" />
                   )}
                   {busy
-                    ? "Richte ein …"
-                    : `Einrichten & ${eligible} senden`}
+                    ? hasCampaign
+                      ? "Speichere …"
+                      : "Richte ein …"
+                    : `${hasCampaign ? "Speichern" : "Einrichten"} & ${eligible} senden`}
                 </button>
               )
             )}

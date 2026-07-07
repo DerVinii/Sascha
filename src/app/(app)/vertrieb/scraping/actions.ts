@@ -34,6 +34,7 @@ import {
   createCampaign,
   updateCampaign,
   activateCampaign,
+  pauseCampaign,
   type InstantlyLead,
   type InstantlySequence,
 } from "@/lib/server/instantly/client";
@@ -272,7 +273,11 @@ export async function listLeadTableAction(input: {
   const columns = await ensureDefaultColumns(org.id);
 
   const [listRow] = await db
-    .select({ name: leadLists.name, pipelineId: leadLists.pipelineId })
+    .select({
+      name: leadLists.name,
+      pipelineId: leadLists.pipelineId,
+      instantlyCampaignId: leadLists.instantlyCampaignId,
+    })
     .from(leadLists)
     .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, org.id)))
     .limit(1);
@@ -364,6 +369,7 @@ export async function listLeadTableAction(input: {
     listId,
     listName: listRow.name,
     linkedPipeline,
+    hasCampaign: !!listRow.instantlyCampaignId,
   };
 }
 
@@ -1428,26 +1434,31 @@ export async function saveCampaignAction(input: {
 }
 
 /**
- * Kampagne live schalten. Bewusst getrennt von saveCampaignAction, damit die
- * Aktivierung ERST nach dem Einspielen der Leads passiert (Instantly startet
- * sonst eine leere Kampagne).
+ * Kampagne live schalten (activate) oder auf Draft setzen (pause). Bewusst
+ * getrennt von saveCampaignAction, damit die Aktivierung ERST nach dem Einspielen
+ * der Leads passiert (Instantly startet sonst eine leere Kampagne).
  */
-export async function activateInstantlyCampaignAction(input: {
+export async function setInstantlyCampaignLiveAction(input: {
   listId: string;
-}): Promise<{ activated: boolean; error: string | null }> {
+  live: boolean;
+}): Promise<{ live: boolean; error: string | null }> {
   const org = await requireActiveOrg();
   const list = await getListCampaign(org.id, input.listId);
   if (!list?.campaignId) {
-    return { activated: false, error: "Kampagne wurde noch nicht angelegt." };
+    return { live: false, error: "Kampagne wurde noch nicht angelegt." };
   }
   try {
-    await activateCampaign(list.campaignId);
+    if (input.live) {
+      await activateCampaign(list.campaignId);
+    } else {
+      await pauseCampaign(list.campaignId);
+    }
     revalidatePath("/vertrieb");
     revalidatePath("/vertrieb/scraping");
-    return { activated: true, error: null };
+    return { live: input.live, error: null };
   } catch (e) {
     return {
-      activated: false,
+      live: false,
       error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
     };
   }
