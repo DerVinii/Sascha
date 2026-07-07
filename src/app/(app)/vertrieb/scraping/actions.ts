@@ -39,6 +39,7 @@ import {
   activateCampaign,
   pauseCampaign,
   deleteCampaign,
+  listCampaigns,
   type InstantlyLead,
   type InstantlySequence,
 } from "@/lib/server/instantly/client";
@@ -816,24 +817,67 @@ export async function renameListAction(input: {
   revalidatePath("/vertrieb/scraping");
 }
 
+/**
+ * Löscht die zum Ordner gehörende Instantly-Kampagne. Primär über die
+ * gespeicherte campaignId; ist keine hinterlegt (Verknüpfung nie gesetzt oder
+ * verloren gegangen), wird als Sicherheitsnetz nach einer Kampagne mit EXAKT
+ * gleichem Namen gesucht und diese gelöscht — aber nur, wenn sie eindeutig ist
+ * (genau ein Treffer), damit nie eine fremde/gleichnamige Kampagne erwischt wird.
+ * Alles best effort: Fehler blockieren das lokale Löschen nicht.
+ */
+async function deleteLinkedInstantlyCampaign(
+  folderName: string,
+  storedCampaignId: string | null,
+): Promise<void> {
+  let campaignId = storedCampaignId;
+
+  if (!campaignId) {
+    // Fallback: Kampagne per Name finden (1:1-Modell: Ordnername = Kampagnenname).
+    try {
+      const all = await listCampaigns();
+      const target = folderName.trim().toLowerCase();
+      const matches = all.filter(
+        (c) => (c.name ?? "").trim().toLowerCase() === target,
+      );
+      if (matches.length === 1) {
+        campaignId = matches[0].id;
+      } else if (matches.length > 1) {
+        console.warn(
+          `Instantly: ${matches.length} Kampagnen heißen „${folderName}" — ` +
+            `mehrdeutig, überspringe Namens-Fallback-Löschung.`,
+        );
+      }
+    } catch (err) {
+      console.error("Instantly: Namens-Fallback (listCampaigns) fehlgeschlagen:", err);
+    }
+  }
+
+  if (!campaignId) return;
+
+  try {
+    await deleteCampaign(campaignId);
+  } catch (err) {
+    console.error(
+      `Instantly-Kampagne ${campaignId} konnte nicht gelöscht werden:`,
+      err,
+    );
+  }
+}
+
 export async function deleteListAction(input: { id: string }): Promise<void> {
   const org = await requireActiveOrg();
   // Verknüpfte Instantly-Kampagne mitlöschen — best effort: schlägt der API-Call
   // fehl (Kampagne dort schon weg, Netzfehler), blockiert das nicht das lokale
   // Löschen; der Fehler landet nur im Log.
   const [list] = await db
-    .select({ instantlyCampaignId: leadLists.instantlyCampaignId })
+    .select({
+      name: leadLists.name,
+      instantlyCampaignId: leadLists.instantlyCampaignId,
+    })
     .from(leadLists)
     .where(and(eq(leadLists.id, input.id), eq(leadLists.orgId, org.id)));
-  if (list?.instantlyCampaignId) {
-    try {
-      await deleteCampaign(list.instantlyCampaignId);
-    } catch (err) {
-      console.error(
-        `Instantly-Kampagne ${list.instantlyCampaignId} konnte nicht gelöscht werden:`,
-        err,
-      );
-    }
+  if (list) {
+    await deleteLinkedInstantlyCampaign(list.name, list.instantlyCampaignId);
   }
   // Verbundene Pipeline: Deals der Ordner-Leads vorher entfernen, sonst blieben
   // beim Kontakt-Cascade verwaiste Deals (deals.contactId → SET NULL) zurück.
