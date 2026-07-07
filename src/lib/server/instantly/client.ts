@@ -184,6 +184,11 @@ export async function updateCampaign(
   });
 }
 
+/** Kampagne samt Leads in Instantly löschen. */
+export async function deleteCampaign(id: string): Promise<void> {
+  await call(`/campaigns/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function activateCampaign(id: string): Promise<void> {
   await call(`/campaigns/${id}/activate`, {
     method: "POST",

@@ -37,6 +37,7 @@ import {
   updateCampaign,
   activateCampaign,
   pauseCampaign,
+  deleteCampaign,
   type InstantlyLead,
   type InstantlySequence,
 } from "@/lib/server/instantly/client";
@@ -816,6 +817,23 @@ export async function renameListAction(input: {
 
 export async function deleteListAction(input: { id: string }): Promise<void> {
   const org = await requireActiveOrg();
+  // Verknüpfte Instantly-Kampagne mitlöschen — best effort: schlägt der API-Call
+  // fehl (Kampagne dort schon weg, Netzfehler), blockiert das nicht das lokale
+  // Löschen; der Fehler landet nur im Log.
+  const [list] = await db
+    .select({ instantlyCampaignId: leadLists.instantlyCampaignId })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, input.id), eq(leadLists.orgId, org.id)));
+  if (list?.instantlyCampaignId) {
+    try {
+      await deleteCampaign(list.instantlyCampaignId);
+    } catch (err) {
+      console.error(
+        `Instantly-Kampagne ${list.instantlyCampaignId} konnte nicht gelöscht werden:`,
+        err,
+      );
+    }
+  }
   // Verbundene Pipeline: Deals der Ordner-Leads vorher entfernen, sonst blieben
   // beim Kontakt-Cascade verwaiste Deals (deals.contactId → SET NULL) zurück.
   const pipelineId = await linkedPipelineForList(org.id, input.id);
