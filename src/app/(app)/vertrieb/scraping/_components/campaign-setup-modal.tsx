@@ -40,7 +40,14 @@ type Props = {
   onDone?: () => void;
 };
 
-type RunProgress = { sent: number; skipped: number; failed: number };
+type RunProgress = {
+  sent: number;
+  skipped: number;
+  failed: number;
+  skippedAlreadySent: number;
+  skippedNoEmail: number;
+  skippedNotEnriched: number;
+};
 
 export function CampaignSetupModal({
   open,
@@ -204,7 +211,14 @@ export function CampaignSetupModal({
       setCampaignId(saved.campaignId);
 
       // 2) Leads in Chargen senden.
-      const acc: RunProgress = { sent: 0, skipped: 0, failed: 0 };
+      const acc: RunProgress = {
+        sent: 0,
+        skipped: 0,
+        failed: 0,
+        skippedAlreadySent: 0,
+        skippedNoEmail: 0,
+        skippedNotEnriched: 0,
+      };
       setProgress({ ...acc });
       let offset = 0;
       let sendFailed = false;
@@ -220,6 +234,9 @@ export function CampaignSetupModal({
           break;
         }
         acc.sent += r.sent;
+        acc.skippedAlreadySent += r.skippedAlreadySent;
+        acc.skippedNoEmail += r.skippedNoEmail;
+        acc.skippedNotEnriched += r.skippedNotEnriched;
         acc.skipped +=
           r.skippedNoEmail + r.skippedNotEnriched + r.skippedAlreadySent;
         acc.failed += r.failed;
@@ -253,6 +270,21 @@ export function CampaignSetupModal({
   if (!open) return null;
 
   const eligible = preview?.eligible ?? 0;
+  const skipDetail = progress
+    ? [
+        progress.skippedAlreadySent > 0
+          ? `${progress.skippedAlreadySent} bereits in Kampagne`
+          : null,
+        progress.skippedNoEmail > 0
+          ? `${progress.skippedNoEmail} ohne E-Mail`
+          : null,
+        progress.skippedNotEnriched > 0
+          ? `${progress.skippedNotEnriched} ohne Entscheider`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : "";
   const firstMailFilled =
     steps[0] && (steps[0].subject.trim() || steps[0].body.trim());
   const variables = columns
@@ -510,7 +542,9 @@ export function CampaignSetupModal({
                   <CheckCircle2 className="h-4 w-4 text-ok" />
                 )}
                 <span>
-                  {progress.sent} gesendet · {progress.skipped} übersprungen
+                  {progress.sent} neu eingespielt · {progress.skipped}{" "}
+                  übersprungen
+                  {skipDetail && ` (${skipDetail})`}
                   {progress.failed > 0 && ` · ${progress.failed} fehlgeschlagen`}
                 </span>
               </div>
