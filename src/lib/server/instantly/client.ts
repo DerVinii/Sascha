@@ -128,15 +128,17 @@ export async function getCampaign(id: string): Promise<{
   };
 }
 
-// Die v2-API verlangt campaign_schedule zwingend (Mo–Fr 9–17 Uhr).
-// Instantlys Zeitzonen-Enum akzeptiert "Europe/Berlin" NICHT — für CET/CEST
-// nutzen wir "Europe/Belgrade": identische Uhrzeit + EU-Sommerzeit wie Berlin
-// (gegen die echte API verifiziert; Berlin/Paris/Amsterdam u. v. m. werden abgelehnt).
+// Die v2-API verlangt campaign_schedule zwingend. Fester Standard: Mo–Fr 8–16 Uhr
+// Berliner Zeit. Instantlys Zeitzonen-Enum akzeptiert "Europe/Berlin" NICHT (gegen
+// die echte API verifiziert: 400 „must be equal to one of the allowed values") —
+// für CET/CEST nutzen wir "Europe/Belgrade": exakt derselbe Offset + EU-Sommerzeit
+// wie Berlin, also identische Sendezeiten (nur das Instantly-UI beschriftet die
+// Zeitzone mit „Belgrade, Bratislava …" statt „Berlin").
 const DEFAULT_SCHEDULE = {
   schedules: [
     {
       name: "Default schedule",
-      timing: { from: "09:00", to: "17:00" },
+      timing: { from: "08:00", to: "16:00" },
       days: { 0: false, 1: true, 2: true, 3: true, 4: true, 5: true, 6: false },
       timezone: "Europe/Belgrade",
     },
@@ -163,12 +165,19 @@ export async function createCampaign(input: {
 
 export async function updateCampaign(
   id: string,
-  input: { name?: string; sequences?: InstantlySequence[]; emailList?: string[] },
+  input: {
+    name?: string;
+    sequences?: InstantlySequence[];
+    emailList?: string[];
+    /** Standard-Schedule (Mo–Fr 8–16 Berlin) mit erzwingen. Default: an. */
+    enforceSchedule?: boolean;
+  },
 ): Promise<void> {
   const body: Record<string, unknown> = {};
   if (input.name !== undefined) body.name = input.name;
   if (input.sequences !== undefined) body.sequences = input.sequences;
   if (input.emailList?.length) body.email_list = input.emailList;
+  if (input.enforceSchedule !== false) body.campaign_schedule = DEFAULT_SCHEDULE;
   await call(`/campaigns/${id}`, {
     method: "PATCH",
     body: JSON.stringify(body),

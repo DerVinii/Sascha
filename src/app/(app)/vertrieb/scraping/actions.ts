@@ -1427,6 +1427,32 @@ export async function saveCampaignAction(input: {
   }
 }
 
+/**
+ * Kampagne live schalten. Bewusst getrennt von saveCampaignAction, damit die
+ * Aktivierung ERST nach dem Einspielen der Leads passiert (Instantly startet
+ * sonst eine leere Kampagne).
+ */
+export async function activateInstantlyCampaignAction(input: {
+  listId: string;
+}): Promise<{ activated: boolean; error: string | null }> {
+  const org = await requireActiveOrg();
+  const list = await getListCampaign(org.id, input.listId);
+  if (!list?.campaignId) {
+    return { activated: false, error: "Kampagne wurde noch nicht angelegt." };
+  }
+  try {
+    await activateCampaign(list.campaignId);
+    revalidatePath("/vertrieb");
+    revalidatePath("/vertrieb/scraping");
+    return { activated: true, error: null };
+  } catch (e) {
+    return {
+      activated: false,
+      error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
+}
+
 export async function sendListToInstantlyAction(input: {
   listId: string;
   filter: InstantlySendFilter;

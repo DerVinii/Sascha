@@ -25,6 +25,7 @@ import {
   previewInstantlySendAction,
   saveCampaignAction,
   sendListToInstantlyAction,
+  activateInstantlyCampaignAction,
 } from "../actions";
 
 type Props = {
@@ -62,7 +63,8 @@ export function CampaignSetupModal({
   ]);
   // Absender werden ohne UI automatisch gesetzt: alle aktiven Postfächer.
   const [senders, setSenders] = useState<string[]>([]);
-  const [activate, setActivate] = useState(false);
+  const [activate, setActivate] = useState(true);
+  const [activated, setActivated] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<RunProgress | null>(null);
@@ -107,7 +109,8 @@ export function CampaignSetupModal({
     setProgress(null);
     setDone(false);
     setRunError(null);
-    setActivate(false);
+    setActivate(true);
+    setActivated(false);
     loadSetup();
   }, [open, loadSetup]);
 
@@ -178,12 +181,14 @@ export function CampaignSetupModal({
     setBusy(true);
     setRunError(null);
     setDone(false);
+    setActivated(false);
     try {
+      // 1) Copy + Absender + Schedule (8–16 Berlin) speichern — noch nicht live.
       const saved = await saveCampaignAction({
         listId,
         steps,
         senders,
-        activate,
+        activate: false,
       });
       if (saved.error) {
         setRunError(saved.error);
@@ -191,10 +196,11 @@ export function CampaignSetupModal({
       }
       setCampaignId(saved.campaignId);
 
-      // Leads in Chargen senden.
+      // 2) Leads in Chargen senden.
       const acc: RunProgress = { sent: 0, skipped: 0, failed: 0 };
       setProgress({ ...acc });
       let offset = 0;
+      let sendFailed = false;
       for (let i = 0; i < 10000; i++) {
         const r = await sendListToInstantlyAction({
           listId,
@@ -203,6 +209,7 @@ export function CampaignSetupModal({
         });
         if (r.error) {
           setRunError(r.error);
+          sendFailed = true;
           break;
         }
         acc.sent += r.sent;
@@ -213,6 +220,19 @@ export function CampaignSetupModal({
         setProgress({ ...acc });
         if (r.remaining <= 0 || r.processed === 0) break;
       }
+
+      // 3) Erst mit eingespielten Leads live schalten (sonst startet Instantly leer).
+      if (activate && !sendFailed) {
+        const res = await activateInstantlyCampaignAction({ listId });
+        if (res.activated) {
+          setActivated(true);
+        } else if (res.error) {
+          setRunError(
+            `Leads eingespielt, aber Live-Schaltung fehlgeschlagen: ${res.error}`,
+          );
+        }
+      }
+
       setDone(true);
       onDone?.();
     } finally {
@@ -427,10 +447,11 @@ export function CampaignSetupModal({
                   className="h-3.5 w-3.5 mt-0.5 rounded border-line"
                 />
                 <span>
-                  Kampagne sofort aktivieren
+                  Kampagne sofort live schalten
                   <span className="block text-[11px] text-warn">
-                    Startet den echten Mailversand. Ohne Haken wird nur die Copy
-                    gespeichert und die Leads eingespielt — Start dann in Instantly.
+                    Startet den echten Mailversand (Mo–Fr 8–16 Uhr Berliner Zeit),
+                    sobald die Leads eingespielt sind. Haken entfernen, wenn du nur
+                    speichern und den Start selbst in Instantly auslösen willst.
                   </span>
                 </span>
               </label>
@@ -463,9 +484,9 @@ export function CampaignSetupModal({
               {done && !runError && (
                 <p className="mt-1 text-[11px] text-sub">
                   Fertig.{" "}
-                  {activate
-                    ? "Kampagne ist aktiv — der Versand läuft."
-                    : "Copy gespeichert & Leads eingespielt. Aktivieren kannst du in Instantly."}
+                  {activated
+                    ? "Kampagne ist live — der Versand läuft (Mo–Fr 8–16 Uhr Berlin)."
+                    : "Copy gespeichert & Leads eingespielt. Live schalten kannst du in Instantly."}
                 </p>
               )}
             </div>
