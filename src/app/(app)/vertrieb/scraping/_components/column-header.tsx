@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Type,
   Sparkles,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  isProtectedColumn,
+  isUserColumn,
   isPipelineStageColumn,
   type LeadColumn,
 } from "@/lib/scraping-types";
@@ -77,14 +78,40 @@ export function ColumnHeader({
   onAiFill,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(column.label);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   const runnable = column.kind === "enrichment" || !!column.config.ai;
   // "Mit KI ausfüllen" für eigene Daten-/KI-Spalten (nicht Source, nicht find_dm).
   const canAi = column.kind !== "source" && !column.config.provider;
-  // Kernfelder (Vorname/Nachname/E-Mail) dürfen nicht gelöscht werden.
-  const canDelete = !isProtectedColumn(column.key);
+  // Umbenennen & Löschen nur bei selbst angelegten Spalten (Standard-Spalten wie
+  // Firma/Telefon/Vorname bleiben unverändert).
+  const canEditColumn = isUserColumn(column);
+
+  // Menü relativ zum Pfeil-Button per fixed-Position rendern (Portal), sonst
+  // würde es vom overflow-auto der Tabelle abgeschnitten (nur die obersten
+  // Einträge wären sichtbar).
+  const MENU_WIDTH = 208; // w-52
+  function place() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r)
+      setPos({ top: r.bottom + 4, left: Math.max(8, r.right - MENU_WIDTH) });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const onClose = () => setOpen(false);
+    // Beim Scrollen/Resize schließen (fixed-Menü würde sonst „wegdriften").
+    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [open]);
 
   function close() {
     setOpen(false);
@@ -137,16 +164,25 @@ export function ColumnHeader({
       {sortDir === "asc" && <ArrowUp className="h-3 w-3 text-sub" />}
       {sortDir === "desc" && <ArrowDown className="h-3 w-3 text-sub" />}
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={() => {
+          if (!open) place();
+          setOpen((v) => !v);
+        }}
         className="shrink-0 inline-flex h-8 w-8 md:h-5 md:w-5 items-center justify-center rounded text-sub hover:bg-bg hover:text-ink"
       >
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
 
-      {open && (
+      {open &&
+        pos &&
+        createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={close} />
-          <div className="absolute right-0 top-7 z-50 w-52 rounded-lg border border-line bg-surface shadow-xl py-1 text-sm">
+          <div className="fixed inset-0 z-[60]" onClick={close} />
+          <div
+            className="fixed z-[61] w-52 max-h-[70vh] overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1 text-sm"
+            style={{ top: pos.top, left: pos.left }}
+          >
             <MenuItem
               icon={<ArrowUp className="h-3.5 w-3.5" />}
               label="Aufsteigend sortieren"
@@ -211,14 +247,16 @@ export function ColumnHeader({
               </>
             )}
 
-            <MenuItem
-              icon={<Pencil className="h-3.5 w-3.5" />}
-              label="Umbenennen"
-              onClick={() => {
-                setRenaming(true);
-                close();
-              }}
-            />
+            {canEditColumn && (
+              <MenuItem
+                icon={<Pencil className="h-3.5 w-3.5" />}
+                label="Umbenennen"
+                onClick={() => {
+                  setRenaming(true);
+                  close();
+                }}
+              />
+            )}
 
             <div className="px-3 py-1.5">
               <div className="text-[11px] text-sub mb-1">Farbe</div>
@@ -253,7 +291,7 @@ export function ColumnHeader({
                 close();
               }}
             />
-            {canDelete && (
+            {canEditColumn && (
               <MenuItem
                 icon={<Trash2 className="h-3.5 w-3.5" />}
                 label="Löschen"
@@ -265,8 +303,9 @@ export function ColumnHeader({
               />
             )}
           </div>
-        </>
-      )}
+        </>,
+          document.body,
+        )}
     </div>
   );
 }

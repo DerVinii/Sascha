@@ -63,7 +63,7 @@ import {
 } from "@/lib/server/scraping/enrich-run";
 import {
   instantlyVarToken,
-  isProtectedColumn,
+  isUserColumn,
   PIPELINE_STAGE_KEY,
 } from "@/lib/scraping-types";
 import type {
@@ -613,9 +613,9 @@ export async function deleteColumnAction(input: { id: string }): Promise<void> {
     .where(and(eq(leadColumns.id, input.id), eq(leadColumns.orgId, org.id)))
     .limit(1);
   if (!col) return;
-  if (isProtectedColumn(col.key)) {
+  if (!isUserColumn({ key: col.key })) {
     throw new Error(
-      "Diese Spalte ist ein Kernfeld (Vorname, Nachname oder E-Mail) und kann nicht gelöscht werden.",
+      "Diese Standard-Spalte kann nicht gelöscht werden — nur selbst angelegte Spalten sind löschbar.",
     );
   }
   await db

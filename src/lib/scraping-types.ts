@@ -29,6 +29,38 @@ export function isProtectedColumn(key: string): boolean {
   return (PROTECTED_COLUMN_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * Keys der geseedeten Standard-Spalten (siehe DEFAULT_COLUMNS). Diese sind NICHT
+ * vom Nutzer selbst angelegt und dürfen daher nicht umbenannt oder gelöscht
+ * werden — nur eingefärbt/aus- und eingeblendet.
+ */
+export const BUILTIN_COLUMN_KEYS = [
+  "company",
+  "address",
+  "phone",
+  "website",
+  "rating",
+  "gmaps",
+  ENRICHMENT_KEY,
+  "firstName",
+  "lastName",
+  "email",
+] as const;
+
+/**
+ * true, wenn die Spalte vom Nutzer selbst angelegt wurde (also weder eine
+ * Standard-Spalte noch die synthetische Pipeline-Phase/System-Spalte ist).
+ * Nur solche Spalten dürfen umbenannt und gelöscht werden.
+ */
+export function isUserColumn(col: {
+  key: string;
+  config?: { system?: boolean };
+}): boolean {
+  if (isPipelineStageColumn(col.key)) return false;
+  if (col.config?.system) return false;
+  return !(BUILTIN_COLUMN_KEYS as readonly string[]).includes(col.key);
+}
+
 export type LeadColumnKind = "source" | "data" | "enrichment" | "action";
 
 export type LeadDataType =
