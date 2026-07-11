@@ -24,11 +24,16 @@ function apiKey(): string {
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const hasBody = init?.body != null;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
+      // Content-Type NUR bei vorhandenem Body senden. Bei body-losen DELETEs
+      // (z. B. Kampagne/Lead löschen) lehnt Instantly sonst mit 400 ab:
+      // FST_ERR_CTP_EMPTY_JSON_BODY ("Body cannot be empty when content-type
+      // is set to 'application/json'").
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       // Instantlys WAF blockt Requests ohne/mit generischem User-Agent (403).
       "User-Agent": "sk-kommandozentrale/1.0",
       ...(init?.headers ?? {}),
@@ -729,6 +734,39 @@ export async function updateLead(
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+/** Einen Lead endgültig löschen (workspace-weit, über die Lead-ID). */
+export async function deleteLead(id: string): Promise<void> {
+  await call(`/leads/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/**
+ * Leads anhand ihrer E-Mails in Instantly löschen (Best-Effort). Für jede E-Mail
+ * wird die Lead-ID gesucht und der Lead gelöscht. Einzelne Fehler brechen den
+ * Rest NICHT ab (das lokale Löschen soll nie an Instantly scheitern).
+ * Gibt die Anzahl tatsächlich gelöschter Leads zurück.
+ */
+export async function deleteLeadsByEmails(emails: string[]): Promise<number> {
+  const unique = [
+    ...new Set(
+      emails
+        .map((e) => (e ?? "").trim().toLowerCase())
+        .filter((e) => e.includes("@")),
+    ),
+  ];
+  let deleted = 0;
+  for (const email of unique) {
+    try {
+      const id = await findLeadIdByEmail(email);
+      if (!id) continue;
+      await deleteLead(id);
+      deleted += 1;
+    } catch (err) {
+      console.error(`Instantly: Lead „${email}" konnte nicht gelöscht werden:`, err);
+    }
+  }
+  return deleted;
 }
 
 /**

@@ -32,6 +32,7 @@ import {
   findLeadIdByEmail,
   findLeadCampaignsByEmail,
   updateLead,
+  deleteLeadsByEmails,
   listAccounts,
   getCampaign,
   createCampaign,
@@ -977,9 +978,20 @@ export async function bulkDeleteLeadsAction(input: {
   ];
   if (!input.listId || ids.length === 0) return { count: 0 };
 
-  // Nur Kontakte dieses Ordners (org-scoped) — plus ihre Firmen einsammeln.
+  // Kampagnen-Verknüpfung des Ordners bestimmen (für die Instantly-Löschung).
+  const [listRow] = await db
+    .select({ instantlyCampaignId: leadLists.instantlyCampaignId })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)))
+    .limit(1);
+
+  // Nur Kontakte dieses Ordners (org-scoped) — plus ihre Firmen + E-Mails einsammeln.
   const rows = await db
-    .select({ id: contacts.id, companyId: contacts.companyId })
+    .select({
+      id: contacts.id,
+      companyId: contacts.companyId,
+      email: contacts.email,
+    })
     .from(contacts)
     .where(
       and(
@@ -994,6 +1006,22 @@ export async function bulkDeleteLeadsAction(input: {
   const companyIds = [
     ...new Set(rows.map((r) => r.companyId).filter((x): x is string => Boolean(x))),
   ];
+
+  // 0) Wenn der Ordner eine Instantly-Kampagne hat: dieselben Leads auch in
+  //    Instantly löschen (Best-Effort, VOR dem lokalen Löschen — danach wären
+  //    die E-Mails weg). Fehler dürfen das lokale Löschen nie blockieren.
+  if (listRow?.instantlyCampaignId) {
+    const emails = rows
+      .map((r) => (r.email ?? "").trim())
+      .filter((e) => e.includes("@"));
+    if (emails.length > 0) {
+      try {
+        await deleteLeadsByEmails(emails);
+      } catch (err) {
+        console.error("Instantly: Leads konnten nicht gelöscht werden:", err);
+      }
+    }
+  }
 
   // 1) Deals in verbundenen Pipelines entfernen (vor dem Kontakt-Löschen).
   await deleteDealsForContacts(org.id, contactIds);

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { contacts, companies } from "@/db/schema";
+import { contacts, companies, leadLists } from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import {
   onContactsAddedToList,
   deleteDealsForContacts,
 } from "@/lib/server/pipeline-sync";
+import { deleteLeadsByEmails } from "@/lib/server/instantly/client";
 
 export type ImportRow = {
   firstName?: string | null;
@@ -149,7 +150,11 @@ export async function deleteLeadAction(contactId: string) {
   // + Kontakt im Gleichschritt entfernen. (Deal ZUERST: beim Kontakt-Löschen
   // würde deals.contactId auf NULL gesetzt und ließe sich nicht mehr zuordnen.)
   const [c] = await db
-    .select({ id: contacts.id })
+    .select({
+      id: contacts.id,
+      email: contacts.email,
+      leadListId: contacts.leadListId,
+    })
     .from(contacts)
     .where(
       and(
@@ -160,6 +165,24 @@ export async function deleteLeadAction(contactId: string) {
     )
     .limit(1);
   if (!c) return;
+
+  // Gehört der Lead zu einem Ordner mit Instantly-Kampagne? Dann auch dort löschen
+  // (Best-Effort, vor dem lokalen Löschen). Fehler blockieren das Löschen nicht.
+  const email = (c.email ?? "").trim();
+  if (c.leadListId && email.includes("@")) {
+    const [list] = await db
+      .select({ instantlyCampaignId: leadLists.instantlyCampaignId })
+      .from(leadLists)
+      .where(and(eq(leadLists.id, c.leadListId), eq(leadLists.orgId, org.id)))
+      .limit(1);
+    if (list?.instantlyCampaignId) {
+      try {
+        await deleteLeadsByEmails([email]);
+      } catch (err) {
+        console.error("Instantly: Lead konnte nicht gelöscht werden:", err);
+      }
+    }
+  }
 
   await deleteDealsForContacts(org.id, [contactId]);
   await db
