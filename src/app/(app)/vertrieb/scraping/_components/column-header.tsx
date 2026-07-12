@@ -157,7 +157,9 @@ export function ColumnHeader({
 
   return (
     <div className="relative flex items-center gap-1.5 w-full">
-      <KindIcon column={column} />
+      {/* Symbol (Datenbank/T/Sternchen) nur bei selbst angelegten Spalten —
+          feste Standard-Spalten (Firma … Email_Entscheider) tragen keins. */}
+      {canEditColumn && <KindIcon column={column} />}
       <span className="flex-1 truncate text-xs font-medium text-ink">
         {column.label}
       </span>
