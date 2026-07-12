@@ -9,8 +9,12 @@ export const meta = {
 }
 
 const base = (args && args.base) || 'https://sascha-one.vercel.app'
-// Gate-Token NICHT im Skript (public Repo) — Agenten lesen es zur Laufzeit aus .env.local.
-const ENV_PATH = '/home/vini/Sascha/.env.local'
+// Gate-Token NICHT im Skript (public Repo) — Agenten lesen es zur Laufzeit aus
+// .env.local. Pfad je nach Rechner (Linux-Box oder Mac) — erster Treffer zählt.
+const ENV_PATHS = [
+  '/home/vini/Sascha/.env.local',
+  '/Users/vincentaris/Claude Code/Sascha/.env.local',
+]
 
 const SCENARIOS = [
   { label: 'scrape:Dachdecker Magdeburg', path: `/api/scrape-selftest?niche=Dachdecker&city=Magdeburg` },
@@ -34,7 +38,7 @@ const TEST_SCHEMA = {
 
 function testPrompt(s) {
   return `Führe in Bash GENAU diese Befehle aus (das Gate-Token aus .env.local lesen und an die URL anhängen):
-TOK=$(grep '^SELFTEST_TOKEN=' ${ENV_PATH} | cut -d= -f2-)
+TOK=$(cat ${ENV_PATHS.map((p) => `"${p}"`).join(' ')} 2>/dev/null | grep '^SELFTEST_TOKEN=' | head -1 | cut -d= -f2-)
 curl -s -m 70 -w "\\nHTTP:%{http_code}" "${base}${s.path}&t=$TOK"
 
 Werte die Antwort aus und gib das Ergebnis strukturiert zurück:
