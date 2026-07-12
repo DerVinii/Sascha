@@ -212,10 +212,12 @@ export type InstantlyCampaign = {
   status: number | null;
 };
 
-/** Welche Leads einer Liste in die Kampagne sollen. E-Mail ist immer Pflicht. */
+/**
+ * Welche Leads einer Liste in die Kampagne sollen. Die E-Mail-Regel ist fest:
+ * verifizierte Entscheider-E-Mail (Spalte Email_Entscheider) gewinnt immer,
+ * sonst die normale E-Mail; ohne beides wird der Lead übersprungen.
+ */
 export type InstantlySendFilter = {
-  /** nur Leads mit erfolgreichem Enrichment (Geschäftsführer gefunden). */
-  onlyEnriched: boolean;
   /** bereits an diese Kampagne gesendete Leads überspringen. */
   skipAlreadySent: boolean;
   /**
@@ -229,9 +231,11 @@ export type InstantlySendFilter = {
 /** Live-Zähler im Modal vor dem Versand. */
 export type InstantlySendPreview = {
   total: number;
+  /** Leads mit sendbarer Adresse (Entscheider-E-Mail ODER normale E-Mail). */
   withEmail: number;
   noEmail: number;
-  enriched: number;
+  /** Leads mit verifizierter Entscheider-E-Mail (Email_Entscheider). */
+  withFinderEmail: number;
   alreadySent: number;
   /** Anzahl, die mit dem aktuellen Filter gesendet würde. */
   eligible: number;
@@ -244,7 +248,6 @@ export type InstantlySendResult = {
   /** bereits vorhandene Leads, deren Spalten/Variablen aufgefrischt wurden. */
   updated: number;
   skippedNoEmail: number;
-  skippedNotEnriched: number;
   skippedAlreadySent: number;
   /** übersprungen, weil bereits in einer anderen Kampagne vorhanden (Duplikat). */
   skippedDuplicate: number;

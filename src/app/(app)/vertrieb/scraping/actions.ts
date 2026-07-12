@@ -284,6 +284,16 @@ export async function listLeadTableAction(input: {
   const listId = input.listId;
   const columns = await ensureDefaultColumns(org.id);
 
+  // "Email_Entscheider" steht IMMER direkt rechts von "E-Mail" — Position wird
+  // nur fürs Rendering erzwungen (nicht gespeichert), damit auch Umsortieren
+  // die Regel nicht bricht.
+  const emailCol = columns.find((c) => c.key === "email");
+  const finderCol = columns.find((c) => c.key === EMAIL_FINDER_KEY);
+  if (emailCol && finderCol) {
+    finderCol.position = emailCol.position + 0.5;
+    finderCol.pinned = emailCol.pinned;
+  }
+
   const [listRow] = await db
     .select({
       name: leadLists.name,
@@ -1066,6 +1076,7 @@ export async function bulkDeleteLeadsAction(input: {
       id: contacts.id,
       companyId: contacts.companyId,
       email: contacts.email,
+      customFields: contacts.customFields,
     })
     .from(contacts)
     .where(
@@ -1086,8 +1097,17 @@ export async function bulkDeleteLeadsAction(input: {
   //    Instantly löschen (Best-Effort, VOR dem lokalen Löschen — danach wären
   //    die E-Mails weg). Fehler dürfen das lokale Löschen nie blockieren.
   if (listRow?.instantlyCampaignId) {
+    // Beide möglichen Versand-Adressen je Lead: normale E-Mail UND verifizierte
+    // Entscheider-E-Mail — je nach Zeitpunkt des Einspielens kann der Lead in
+    // Instantly unter beiden stehen.
     const emails = rows
-      .map((r) => (r.email ?? "").trim())
+      .flatMap((r) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cell = ((r.customFields as any)?.cells ?? {})[EMAIL_FINDER_KEY];
+        const fe =
+          cell?.status === "success" ? String(cell.value ?? "").trim() : "";
+        return [(r.email ?? "").trim(), fe];
+      })
       .filter((e) => e.includes("@"));
     if (emails.length > 0) {
       try {
@@ -1336,15 +1356,26 @@ export async function setLeadStageAction(input: {
 
 const INSTANTLY_BATCH = 100; // Leads pro Server-Action-Aufruf (Free-Tier-freundlich)
 
-function rowHasEmail(src: RowSources): boolean {
-  const e = src.contact.email;
-  return !!e && e.includes("@");
-}
-
-function rowEnriched(src: RowSources): boolean {
+/** Verifizierte Entscheider-E-Mail (Spalte Email_Entscheider), falls gefunden. */
+function finderEmail(src: RowSources): string | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cells = (src.contact.customFields?.cells ?? {}) as Record<string, any>;
-  return cells[ENRICHMENT_KEY]?.status === "success";
+  const cell = cells[EMAIL_FINDER_KEY];
+  if (cell?.status !== "success") return null;
+  const v = String(cell.value ?? "").trim();
+  return v.includes("@") ? v.toLowerCase() : null;
+}
+
+/**
+ * Die Adresse, an die gesendet wird — feste Regel:
+ * Entscheider-E-Mail gewinnt immer, sonst die normale E-Mail; ohne beides null
+ * (Lead wird übersprungen).
+ */
+function sendableEmail(src: RowSources): string | null {
+  const fe = finderEmail(src);
+  if (fe) return fe;
+  const e = (src.contact.email ?? "").trim();
+  return e.includes("@") ? e.toLowerCase() : null;
 }
 
 function rowSentTo(src: RowSources, campaignId: string): boolean {
@@ -1403,12 +1434,16 @@ function buildInstantlyLead(
   setVar("last_name", lastName);
   setVar("companyName", companyName);
   setVar("company_name", companyName);
+  // {{email}} zeigt immer die Adresse, an die tatsächlich gesendet wird
+  // (Entscheider-E-Mail vor normaler E-Mail).
+  const sendTo = sendableEmail(src) ?? "";
+  setVar("email", sendTo);
   // niche/city aus company-customFields ergänzen, falls keine eigene Spalte.
   if (cf.niche && !custom.niche) custom.niche = String(cf.niche);
   if (cf.city && !custom.city) custom.city = String(cf.city);
 
   return {
-    email: String(c.email),
+    email: sendTo,
     first_name: firstName || undefined,
     last_name: lastName || undefined,
     company_name: co?.name || undefined,
@@ -1500,24 +1535,31 @@ async function computePreview(
   const all = await loadLeadRows(orgId, listId);
   let withEmail = 0;
   let noEmail = 0;
-  let enriched = 0;
+  let withFinderEmail = 0;
   let alreadySent = 0;
   let eligible = 0;
   for (const src of all) {
-    if (!rowHasEmail(src)) {
+    // Feste Regel: Entscheider-E-Mail gewinnt, sonst normale E-Mail; ohne
+    // beides wird der Lead übersprungen.
+    if (!sendableEmail(src)) {
       noEmail++;
       continue;
     }
     withEmail++;
-    const isEnriched = rowEnriched(src);
-    if (isEnriched) enriched++;
+    if (finderEmail(src)) withFinderEmail++;
     const sent = campaignId ? rowSentTo(src, campaignId) : false;
     if (sent) alreadySent++;
-    if (filter.onlyEnriched && !isEnriched) continue;
     if (filter.skipAlreadySent && sent) continue;
     eligible++;
   }
-  return { total: all.length, withEmail, noEmail, enriched, alreadySent, eligible };
+  return {
+    total: all.length,
+    withEmail,
+    noEmail,
+    withFinderEmail,
+    alreadySent,
+    eligible,
+  };
 }
 
 /** Vorbefüllung für den Assistenten: Copy, Absender, Vorschau. */
@@ -1553,7 +1595,6 @@ export async function getCampaignSetupAction(input: {
   }
 
   const preview = await computePreview(org.id, input.listId, list.campaignId, {
-    onlyEnriched: false,
     skipAlreadySent: true,
     skipWorkspaceDuplicates: false,
   });
@@ -1680,7 +1721,6 @@ export async function sendListToInstantlyAction(input: {
     sent: 0,
     updated: 0,
     skippedNoEmail: 0,
-    skippedNotEnriched: 0,
     skippedAlreadySent: 0,
     skippedDuplicate: 0,
     failed: 0,
@@ -1709,14 +1749,11 @@ export async function sendListToInstantlyAction(input: {
     const toAdd: RowSources[] = [];
     const toUpdate: RowSources[] = [];
     let skippedNoEmail = 0;
-    let skippedNotEnriched = 0;
     for (const src of slice) {
-      if (!rowHasEmail(src)) {
+      // Feste Regel: Entscheider-E-Mail gewinnt, sonst normale E-Mail; ohne
+      // beides wird der Lead übersprungen.
+      if (!sendableEmail(src)) {
         skippedNoEmail++;
-        continue;
-      }
-      if (input.filter.onlyEnriched && !rowEnriched(src)) {
-        skippedNotEnriched++;
         continue;
       }
       if (rowSentTo(src, campaignId)) toUpdate.push(src);
@@ -1735,7 +1772,7 @@ export async function sendListToInstantlyAction(input: {
         const chunk = toAdd.slice(i, i + CHUNK);
         const inOther = await Promise.all(
           chunk.map(async (src) => {
-            const email = src.contact.email ?? "";
+            const email = sendableEmail(src) ?? "";
             const campaigns = await findLeadCampaignsByEmail(email);
             return campaigns.some((c) => c !== campaignId);
           }),
@@ -1822,7 +1859,6 @@ export async function sendListToInstantlyAction(input: {
       sent,
       updated,
       skippedNoEmail,
-      skippedNotEnriched,
       skippedAlreadySent: 0,
       skippedDuplicate,
       failed,

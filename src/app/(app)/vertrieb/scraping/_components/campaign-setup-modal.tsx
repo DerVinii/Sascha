@@ -47,7 +47,6 @@ type RunProgress = {
   failed: number;
   skippedAlreadySent: number;
   skippedNoEmail: number;
-  skippedNotEnriched: number;
   skippedDuplicate: number;
 };
 
@@ -66,7 +65,6 @@ export function CampaignSetupModal({
   const [setupError, setSetupError] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
-  const [onlyEnriched, setOnlyEnriched] = useState(false);
   const [skipAlreadySent, setSkipAlreadySent] = useState(true);
   // Duplikate aus ANDEREN Kampagnen überspringen (gleiche Kampagne: immer dedupliziert).
   const [skipWorkspaceDuplicates, setSkipWorkspaceDuplicates] = useState(false);
@@ -139,7 +137,7 @@ export function CampaignSetupModal({
     setPreviewLoading(true);
     previewInstantlySendAction({
       listId,
-      filter: { onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates },
+      filter: { skipAlreadySent, skipWorkspaceDuplicates },
     })
       .then((p) => !cancelled && setPreview(p))
       .catch(() => {})
@@ -147,7 +145,7 @@ export function CampaignSetupModal({
     return () => {
       cancelled = true;
     };
-  }, [open, listId, onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates]);
+  }, [open, listId, skipAlreadySent, skipWorkspaceDuplicates]);
 
   function updateStep(i: number, patch: Partial<CampaignStep>) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -222,7 +220,6 @@ export function CampaignSetupModal({
         failed: 0,
         skippedAlreadySent: 0,
         skippedNoEmail: 0,
-        skippedNotEnriched: 0,
         skippedDuplicate: 0,
       };
       setProgress({ ...acc });
@@ -231,7 +228,7 @@ export function CampaignSetupModal({
       for (let i = 0; i < 10000; i++) {
         const r = await sendListToInstantlyAction({
           listId,
-          filter: { onlyEnriched, skipAlreadySent, skipWorkspaceDuplicates },
+          filter: { skipAlreadySent, skipWorkspaceDuplicates },
           offset,
         });
         if (r.error) {
@@ -243,13 +240,9 @@ export function CampaignSetupModal({
         acc.updated += r.updated;
         acc.skippedAlreadySent += r.skippedAlreadySent;
         acc.skippedNoEmail += r.skippedNoEmail;
-        acc.skippedNotEnriched += r.skippedNotEnriched;
         acc.skippedDuplicate += r.skippedDuplicate;
         acc.skipped +=
-          r.skippedNoEmail +
-          r.skippedNotEnriched +
-          r.skippedAlreadySent +
-          r.skippedDuplicate;
+          r.skippedNoEmail + r.skippedAlreadySent + r.skippedDuplicate;
         acc.failed += r.failed;
         offset += r.processed;
         setProgress({ ...acc });
@@ -288,9 +281,6 @@ export function CampaignSetupModal({
           : null,
         progress.skippedNoEmail > 0
           ? `${progress.skippedNoEmail} ohne E-Mail`
-          : null,
-        progress.skippedNotEnriched > 0
-          ? `${progress.skippedNotEnriched} ohne Entscheider`
           : null,
         progress.skippedDuplicate > 0
           ? `${progress.skippedDuplicate} Duplikat(e) aus anderer Kampagne`
@@ -355,15 +345,6 @@ export function CampaignSetupModal({
                 <label className="flex items-center gap-2 text-sm text-ink">
                   <input
                     type="checkbox"
-                    checked={onlyEnriched}
-                    onChange={(e) => setOnlyEnriched(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-line"
-                  />
-                  Nur mit gefundenem Entscheider (Enrichment erfolgreich)
-                </label>
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
                     checked={skipAlreadySent}
                     onChange={(e) => setSkipAlreadySent(e.target.checked)}
                     className="h-3.5 w-3.5 rounded border-line"
@@ -382,12 +363,15 @@ export function CampaignSetupModal({
                   Auf Duplikate achten (aus anderen Kampagnen)
                 </label>
                 <p className="text-[11px] text-sub">
+                  Gesendet wird immer an die verifizierte Entscheider-E-Mail
+                  (Spalte Email_Entscheider), falls gefunden — sonst an die
+                  normale E-Mail. Leads ganz ohne E-Mail werden übersprungen.
                   Schon eingespielte Leads bekommen keine neue Erst-Mail — ihre
                   Spalten/Variablen in Instantly werden aber immer aktualisiert, damit
-                  nichts veraltet. Leads ohne E-Mail werden übersprungen. Angehakt
-                  werden zusätzlich Leads übersprungen, die bereits in einer anderen
-                  Instantly-Kampagne stecken; ohne Haken werden sie trotzdem
-                  eingespielt (Duplikate innerhalb derselben Kampagne entstehen nie).
+                  nichts veraltet. Angehakt werden zusätzlich Leads übersprungen, die
+                  bereits in einer anderen Instantly-Kampagne stecken; ohne Haken
+                  werden sie trotzdem eingespielt (Duplikate innerhalb derselben
+                  Kampagne entstehen nie).
                 </p>
               </div>
 
@@ -406,7 +390,8 @@ export function CampaignSetupModal({
                     </div>
                     <div className="text-[11px] text-sub">
                       {preview.total} in Kampagne · {preview.withEmail} mit E-Mail
-                      · {preview.noEmail} ohne · {preview.enriched} angereichert
+                      · {preview.noEmail} ohne · {preview.withFinderEmail} mit
+                      Entscheider-E-Mail
                       {preview.alreadySent > 0 &&
                         ` · ${preview.alreadySent} bereits gesendet`}
                     </div>
