@@ -42,3 +42,7 @@ tsconfig.tsbuildinfo
 # Drizzle migrations (generated)
 drizzle/
 .vercel
+
+# Reacher-Anleitung & alter n8n-Workflow (enthalten Klartext-Secrets) — nie committen
+Reacher - Anleitung fuer andere Projekte.md
+TRW Lg3 - find Emails.json

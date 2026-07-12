@@ -32,7 +32,7 @@ type Callbacks = {
   /** nach jedem Batch (z. B. Tabelle neu laden). */
   onBatch?: (r: RunBatchResult) => void | Promise<void>;
   /** bekannte Zeilen, die gleich laufen (für optimistisches "running"). */
-  onBeforeRows?: (rowIds: string[]) => void;
+  onBeforeRows?: (rowIds: string[], columnKey: string) => void;
   onError?: (msg: string) => void;
 };
 
@@ -137,7 +137,7 @@ export function useBatchRunner(cb: Callbacks) {
   const runRows = useCallback(
     (columnKey: string, rowIds: string[], label = "Zellen ausführen") => {
       let rest = [...rowIds];
-      cb.onBeforeRows?.(rest);
+      cb.onBeforeRows?.(rest, columnKey);
       return loop(label, async () => {
         if (rest.length === 0) return null;
         const r = await runEnrichmentBatchAction({

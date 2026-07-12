@@ -61,10 +61,17 @@ import {
   runEnrichmentForRow,
   pendingCountForList,
   ENRICH_STALE_MS,
+  type RowOutcome,
 } from "@/lib/server/scraping/enrich-run";
+import {
+  emailFinderCellNeedsRun,
+  emailFinderReady,
+  runEmailFinderForRow,
+} from "@/lib/server/scraping/reacher";
 import {
   instantlyVarToken,
   isUserColumn,
+  EMAIL_FINDER_KEY,
   PIPELINE_STAGE_KEY,
 } from "@/lib/scraping-types";
 import type {
@@ -399,14 +406,20 @@ export async function runEnrichmentBatchAction(input: {
 
   const columns = await getColumns(org.id);
   const all = await loadLeadRows(org.id, input.listId);
-  const limit = clamp(
-    ("limit" in input.scope ? input.scope.limit : undefined) ?? 4,
-    1,
-    8,
-  );
+  // Email_Entscheider (Reacher): streng sequenziell — SMTP-Checks dürfen nicht
+  // parallel laufen (Rate-Limit des Verifizierungs-Servers) → 1 Zeile pro Aufruf.
+  const isEmailFinder = column.key === EMAIL_FINDER_KEY;
+  const limit = isEmailFinder
+    ? 1
+    : clamp(("limit" in input.scope ? input.scope.limit : undefined) ?? 4, 1, 8);
 
   let toProcess: RowSources[] = [];
-  let remaining = 0;
+  /** Größe des Gesamt-Scopes (für remaining, das Teil-Läufe berücksichtigt). */
+  let scopeTotal = 0;
+  const offset =
+    !("rowIds" in input.scope) && input.scope.mode === "force"
+      ? Math.max(0, input.scope.offset ?? 0)
+      : 0;
 
   if ("rowIds" in input.scope) {
     const map = new Map(all.map((s) => [s.contact.id, s]));
@@ -414,11 +427,10 @@ export async function runEnrichmentBatchAction(input: {
       .map((id) => map.get(id))
       .filter(Boolean) as RowSources[];
     toProcess = ordered.slice(0, limit);
-    remaining = Math.max(0, input.scope.rowIds.length - toProcess.length);
+    scopeTotal = input.scope.rowIds.length;
   } else if (input.scope.mode === "force") {
-    const offset = Math.max(0, input.scope.offset ?? 0);
     toProcess = all.slice(offset, offset + limit);
-    remaining = Math.max(0, all.length - (offset + toProcess.length));
+    scopeTotal = all.length;
   } else {
     // missing: nur Zellen, die einen Run brauchen + "Only run if".
     // excludeRowIds = in diesem Lauf bereits versuchte Zeilen; nicht erneut ziehen,
@@ -429,15 +441,46 @@ export async function runEnrichmentBatchAction(input: {
     const candidates = all.filter((src) => {
       if (exclude.has(src.contact.id)) return false;
       const cell = buildCells(columns, src)[column.key];
+      if (isEmailFinder) {
+        // Reacher-Spalte: nur Zeilen mit Vorname + Nachname + Webseite; ein
+        // unterbrochener Teil-Lauf ("running") zählt ebenfalls als offen.
+        return (
+          !!cell &&
+          emailFinderCellNeedsRun(cell) &&
+          emailFinderReady(column, src) &&
+          passesOnlyRunIf(onlyRunIf, src.contact)
+        );
+      }
       return cellNeedsRun(cell) && passesOnlyRunIf(onlyRunIf, src.contact);
     });
     toProcess = candidates.slice(0, limit);
-    remaining = Math.max(0, candidates.length - toProcess.length);
+    scopeTotal = candidates.length;
   }
 
-  const results = await Promise.all(
-    toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
-  );
+  let results: RowOutcome[];
+  if (isEmailFinder) {
+    // Sequenziell mit festem Zeitbudget: schafft der Aufruf nicht alle Varianten
+    // einer Zeile, wird der Fortschritt gespeichert ("partial") und der Client
+    // ruft erneut auf — die Zeile macht dann genau dort weiter.
+    const deadline = Date.now() + 25_000;
+    const forceRestart =
+      !("rowIds" in input.scope) && input.scope.mode === "force";
+    results = [];
+    for (const src of toProcess) {
+      // Explizite Zell-Runs auf fertigen Zellen (Treffer/kein Treffer) starten
+      // die Prüfung bewusst von vorn.
+      const cellStatus = buildCells(columns, src)[column.key]?.status;
+      const restart =
+        forceRestart || cellStatus === "success" || cellStatus === "not_found";
+      results.push(
+        await runEmailFinderForRow(org.id, column, src, { deadline, restart }),
+      );
+    }
+  } else {
+    results = await Promise.all(
+      toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
+    );
+  }
 
   let succeeded = 0;
   let notFound = 0;
@@ -446,11 +489,22 @@ export async function runEnrichmentBatchAction(input: {
   for (const r of results) {
     if (r.status === "success") succeeded++;
     else if (r.status === "not_found") notFound++;
-    else {
+    else if (r.status === "error") {
       failed++;
       if (r.rateLimited) rateLimited = true;
     }
+    // "partial" zählt nirgends rein — die Zeile ist schlicht noch nicht fertig.
   }
+
+  // Teil-Läufe gelten nicht als erledigt: nicht in rowIds melden (der Client
+  // schließt gemeldete Zeilen aus) und in remaining weiter mitzählen.
+  const completedIds = toProcess
+    .filter((_, i) => results[i].status !== "partial")
+    .map((s) => s.contact.id);
+  const remaining =
+    !("rowIds" in input.scope) && input.scope.mode === "force"
+      ? Math.max(0, all.length - (offset + toProcess.length))
+      : Math.max(0, scopeTotal - completedIds.length);
 
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
@@ -462,7 +516,7 @@ export async function runEnrichmentBatchAction(input: {
     notFound,
     failed,
     remaining,
-    rowIds: toProcess.map((s) => s.contact.id),
+    rowIds: completedIds,
     rateLimited,
   };
 }
@@ -496,15 +550,21 @@ export async function queueEnrichmentAction(input: {
   // Läuft schon eine lebende Chain (frischer Tick)? Dann Tick NICHT zurücksetzen,
   // sonst würde der neue Anstoß eine zweite, parallele Chain starten.
   const [cur] = await db
-    .select({ tickAt: leadLists.enrichmentTickAt })
+    .select({
+      tickAt: leadLists.enrichmentTickAt,
+      queuedAt: leadLists.enrichmentQueuedAt,
+    })
     .from(leadLists)
     .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)))
     .limit(1);
   const liveChain =
     !!cur?.tickAt && Date.now() - cur.tickAt.getTime() < ENRICH_STALE_MS;
 
+  // Bereits eingereihte Liste behält ihren Queue-Zeitpunkt: Phase 2 (E-Mail-
+  // Verifizierung) nutzt ihn als Referenz „in diesem Lauf schon versucht" —
+  // ein Bump würde Fehler-Zeilen im laufenden Lauf endlos neu anstoßen.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patch: any = { enrichmentQueuedAt: new Date() };
+  const patch: any = { enrichmentQueuedAt: cur?.queuedAt ?? new Date() };
   if (!liveChain) patch.enrichmentTickAt = null; // sofortige Aufnahme erlauben
   await db
     .update(leadLists)

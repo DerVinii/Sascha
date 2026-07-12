@@ -8,9 +8,9 @@
  */
 
 import { db } from "@/db";
-import { leadColumns } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
-import { ENRICHMENT_KEY } from "@/lib/scraping-types";
+import { contacts, leadColumns } from "@/db/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { EMAIL_FINDER_KEY, ENRICHMENT_KEY } from "@/lib/scraping-types";
 import type {
   CellStatus,
   LeadCell,
@@ -20,7 +20,13 @@ import type {
   OnlyRunIf,
 } from "@/lib/scraping-types";
 
-export { ENRICHMENT_KEY };
+export { EMAIL_FINDER_KEY, ENRICHMENT_KEY };
+
+/** jsonb-Merge, der cells[columnKey] setzt und alles andere erhält. */
+export function cellPatch(columnKey: string, cell: Record<string, unknown>) {
+  const patch = JSON.stringify({ [columnKey]: cell });
+  return sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('cells', coalesce(${contacts.customFields} -> 'cells', '{}'::jsonb) || ${patch}::jsonb)`;
+}
 
 type ColumnSeed = Omit<LeadColumn, "id">;
 
@@ -160,6 +166,30 @@ export const DEFAULT_COLUMNS: ColumnSeed[] = [
     hidden: false,
     config: { source: "contact.email" },
   },
+  {
+    key: EMAIL_FINDER_KEY,
+    label: "Email_Entscheider",
+    kind: "enrichment",
+    dataType: "email",
+    position: 10,
+    width: 240,
+    pinned: false,
+    color: null,
+    hidden: false,
+    // Verifizierte Entscheider-E-Mail: testet Namens-Varianten (vorname.nachname@…)
+    // per Reacher-SMTP-Check. Startet automatisch nach "Update cells" für alle
+    // Zeilen mit Vorname + Nachname + Webseite (Engine in reacher.ts).
+    config: {
+      provider: ["reacher"],
+      inputs: {
+        Vorname: "contact.firstName",
+        Nachname: "contact.lastName",
+        Webseite: "company.customFields.websiteUri",
+      },
+      outputs: [{ field: "email", label: "E-Mail", type: "email" }],
+      runSettings: { autoUpdate: false, onlyRunIf: "always" },
+    },
+  },
 ];
 
 export const BUILTIN_VIEWS: LeadView[] = [
@@ -219,14 +249,19 @@ export async function ensureDefaultColumns(
   const missing = DEFAULT_COLUMNS.filter((c) => !existingKeys.has(c.key));
 
   if (missing.length > 0) {
+    // Bei bestehenden Orgs können neue Default-Spalten (z. B. Email_Entscheider)
+    // mit den Positionen selbst angelegter Spalten kollidieren → hinten anhängen,
+    // damit die Reihenfolge deterministisch bleibt. Frische Orgs (leer) behalten
+    // die Seed-Positionen.
+    const maxPos = existing.reduce((m, c) => Math.max(m, c.position), -1);
     await db.insert(leadColumns).values(
-      missing.map((c) => ({
+      missing.map((c, i) => ({
         orgId,
         key: c.key,
         label: c.label,
         kind: c.kind,
         dataType: c.dataType,
-        position: c.position,
+        position: existing.length === 0 ? c.position : maxPos + 1 + i,
         width: c.width,
         pinned: c.pinned,
         color: c.color,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { searchPlaces } from "@/lib/server/scraping/places";
 import { enrichLead } from "@/lib/server/scraping/enrich";
 import { runAiColumn } from "@/lib/server/scraping/ai-column";
+import { checkEmail } from "@/lib/server/scraping/reacher";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -36,6 +37,27 @@ export async function GET(req: Request) {
   };
 
   const mode = url.searchParams.get("mode") ?? "scrape";
+
+  if (mode === "verify") {
+    // testet den Reacher-Pfad (Spalte "Email_Entscheider"): Env-Variablen gesetzt,
+    // Server erreichbar, Antwort parsebar. Keine PII — feste Test-Adresse.
+    out.env.REACHER_SECRET = !!process.env.REACHER_SECRET;
+    try {
+      const email = url.searchParams.get("email") ?? "test@example.com";
+      const v = await checkEmail(email);
+      out.verify = {
+        reachable: v.reachable,
+        catchAll: v.catchAll,
+        mxOk: v.mxOk,
+        timedOut: v.timedOut ?? false,
+      };
+      out.ok = true;
+    } catch (e) {
+      out.ok = false;
+      out.error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    }
+    return NextResponse.json(out);
+  }
 
   try {
     const places = await searchPlaces(niche, city);

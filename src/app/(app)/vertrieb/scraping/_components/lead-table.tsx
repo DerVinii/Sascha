@@ -214,10 +214,10 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const runner = useBatchRunner({
     listId,
     onBatch: refresh,
-    onBeforeRows: (ids) =>
+    onBeforeRows: (ids, columnKey) =>
       setRunningCells((prev) => {
         const next = new Set(prev);
-        const ek = primaryEnrichmentKeyRef.current;
+        const ek = columnKey || primaryEnrichmentKeyRef.current;
         ids.forEach((id) => ek && next.add(`${id}:${ek}`));
         return next;
       }),

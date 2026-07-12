@@ -12,21 +12,31 @@ import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   buildCells,
   cellNeedsRun,
-  getColumnByKey,
+  cellPatch,
   getColumns,
   passesOnlyRunIf,
   resolveRowPath,
+  EMAIL_FINDER_KEY,
   ENRICHMENT_KEY,
   type RowSources,
 } from "./lead-columns";
 import { runProvider } from "./providers";
 import { runAiColumn } from "./ai-column";
+import {
+  emailFinderMissingRows,
+  runEmailFinderForRow,
+  EMAIL_FINDER_MIN_ROW_MS,
+} from "./reacher";
 import type { LeadColumn } from "@/lib/scraping-types";
+
+export { cellPatch };
 
 export const MAX_ROWS = 1000; // Phase-1-Cap (ein Kunde)
 
 export type RowOutcome = {
-  status: "success" | "not_found" | "error";
+  /** "partial" = Zeitbudget innerhalb der Zeile erschöpft (nur Reacher-Spalte) —
+   *  Fortschritt ist gespeichert, der nächste Aufruf setzt fort. */
+  status: "success" | "not_found" | "error" | "partial";
   /** Fehler war ein Gemini-Kontingent-/Rate-Limit-Fehler (429). */
   rateLimited?: boolean;
 };
@@ -81,12 +91,6 @@ export async function loadLeadRows(
         }
       : null,
   }));
-}
-
-/** jsonb-Merge, der cells[columnKey] setzt und alles andere erhält. */
-export function cellPatch(columnKey: string, cell: Record<string, unknown>) {
-  const patch = JSON.stringify({ [columnKey]: cell });
-  return sql`coalesce(${contacts.customFields}, '{}'::jsonb) || jsonb_build_object('cells', coalesce(${contacts.customFields} -> 'cells', '{}'::jsonb) || ${patch}::jsonb)`;
 }
 
 export async function runEnrichmentForRow(
@@ -236,16 +240,26 @@ function missingRows(column: LeadColumn, columns: LeadColumn[], all: RowSources[
   });
 }
 
-/** Wie viele Zeilen einer Liste noch offen sind (für Status/Fortschritt). */
+/**
+ * Wie viele Zeilen einer Liste noch offen sind (für Status/Fortschritt).
+ * Zählt beide Phasen: Geschäftsführer-Suche (find_dm) UND die anschließende
+ * Entscheider-E-Mail-Verifizierung (email_entscheider).
+ */
 export async function pendingCountForList(
   orgId: string,
   listId: string,
 ): Promise<number> {
-  const column = await getColumnByKey(orgId, ENRICHMENT_KEY);
-  if (!column) return 0;
   const columns = await getColumns(orgId);
+  const dmColumn = columns.find((c) => c.key === ENRICHMENT_KEY) ?? null;
+  const emailColumn = columns.find((c) => c.key === EMAIL_FINDER_KEY) ?? null;
+  if (!dmColumn && !emailColumn) return 0;
+
   const all = await loadLeadRows(orgId, listId);
-  return missingRows(column, columns, all).length;
+  let pending = dmColumn ? missingRows(dmColumn, columns, all).length : 0;
+  if (emailColumn) {
+    pending += emailFinderMissingRows(emailColumn, columns, all, null).length;
+  }
+  return pending;
 }
 
 export type DrainSummary = {
@@ -277,6 +291,7 @@ export async function drainQueuedLists(opts: {
       id: leadLists.id,
       orgId: leadLists.orgId,
       tickAt: leadLists.enrichmentTickAt,
+      queuedAt: leadLists.enrichmentQueuedAt,
     })
     .from(leadLists)
     .where(isNotNull(leadLists.enrichmentQueuedAt))
@@ -302,8 +317,11 @@ export async function drainQueuedLists(opts: {
       .set({ enrichmentTickAt: new Date() })
       .where(eq(leadLists.id, list.id));
 
-    const column = await getColumnByKey(list.orgId, ENRICHMENT_KEY);
-    if (!column) {
+    const columns = await getColumns(list.orgId);
+    const dmColumn = columns.find((c) => c.key === ENRICHMENT_KEY) ?? null;
+    const emailColumn =
+      columns.find((c) => c.key === EMAIL_FINDER_KEY) ?? null;
+    if (!dmColumn && !emailColumn) {
       // Keine Engine-Spalte -> Liste aus der Queue nehmen.
       await db
         .update(leadLists)
@@ -311,23 +329,65 @@ export async function drainQueuedLists(opts: {
         .where(eq(leadLists.id, list.id));
       continue;
     }
-    const columns = await getColumns(list.orgId);
-    const all = await loadLeadRows(list.orgId, list.id);
-    const missing = missingRows(column, columns, all);
 
-    let i = 0;
-    for (; i < missing.length; i++) {
-      if (Date.now() >= deadline) break;
-      const outcome = await runEnrichmentForRow(
-        list.orgId,
-        column,
-        missing[i],
+    // true = diese Liste hat noch offene Arbeit (Budget erschöpft).
+    let listRemaining = false;
+
+    // --- Phase 1: Geschäftsführer finden (Gemini) --------------------------
+    if (dmColumn) {
+      const all = await loadLeadRows(list.orgId, list.id);
+      const missing = missingRows(dmColumn, columns, all);
+
+      let i = 0;
+      for (; i < missing.length; i++) {
+        if (Date.now() >= deadline) break;
+        const outcome = await runEnrichmentForRow(
+          list.orgId,
+          dmColumn,
+          missing[i],
+          columns,
+        );
+        processedRows++;
+        if (outcome.rateLimited) {
+          rateLimited = true;
+          break;
+        }
+      }
+      if (i < missing.length && !rateLimited) listRemaining = true;
+    }
+
+    // --- Phase 2: Entscheider-E-Mail verifizieren (Reacher) -----------------
+    // Startet automatisch, sobald Phase 1 für die Liste komplett durch ist —
+    // aber nur für Zeilen mit Vorname + Nachname + Webseite. Zeilen werden
+    // frisch geladen, weil Phase 1 gerade Namen zurückgeschrieben hat.
+    if (emailColumn && !rateLimited && !listRemaining) {
+      const all = await loadLeadRows(list.orgId, list.id);
+      const todo = emailFinderMissingRows(
+        emailColumn,
         columns,
+        all,
+        list.queuedAt,
       );
-      processedRows++;
-      if (outcome.rateLimited) {
-        rateLimited = true;
-        break;
+      for (const src of todo) {
+        // Eine Zeile braucht mind. einen SMTP-Check — ohne Restbudget gar nicht
+        // erst anfangen, der nächste Hop übernimmt.
+        if (Date.now() >= deadline - EMAIL_FINDER_MIN_ROW_MS) {
+          listRemaining = true;
+          break;
+        }
+        const outcome = await runEmailFinderForRow(
+          list.orgId,
+          emailColumn,
+          src,
+          { deadline },
+        );
+        processedRows++;
+        if (outcome.status === "partial") {
+          // Zeit innerhalb der Zeile erschöpft — Fortschritt ist gespeichert,
+          // der nächste Hop macht bei derselben Zeile weiter.
+          listRemaining = true;
+          break;
+        }
       }
     }
 
@@ -345,14 +405,14 @@ export async function drainQueuedLists(opts: {
         .where(eq(leadLists.id, list.id));
       break;
     }
-    if (i >= missing.length) {
-      // Liste fertig -> aus der Queue nehmen.
+    if (listRemaining) {
+      anyRemaining = true; // Budget erschöpft, Zeilen offen
+    } else {
+      // Beide Phasen fertig -> Liste aus der Queue nehmen.
       await db
         .update(leadLists)
         .set({ enrichmentQueuedAt: null })
         .where(eq(leadLists.id, list.id));
-    } else {
-      anyRemaining = true; // Budget erschöpft, Zeilen offen
     }
   }
 

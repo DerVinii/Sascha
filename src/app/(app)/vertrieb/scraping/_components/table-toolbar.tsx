@@ -149,7 +149,7 @@ export function TableToolbar(props: Props) {
             title={
               bgActive
                 ? "Anreicherung läuft bereits im Hintergrund"
-                : "Vorname, Nachname & E-Mail für offene Zeilen finden"
+                : "Vorname, Nachname & E-Mail finden — danach automatisch die Entscheider-E-Mail verifizieren (Spalte Email_Entscheider)"
             }
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
           >

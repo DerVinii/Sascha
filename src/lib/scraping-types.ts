@@ -7,6 +7,14 @@
 export const ENRICHMENT_KEY = "find_dm";
 
 /**
+ * Schlüssel der Spalte "Email_Entscheider": findet die echte E-Mail-Adresse des
+ * Entscheiders, indem Namens-Varianten (vorname.nachname@domain, …) per
+ * Reacher-Server (Live-SMTP-Check) verifiziert werden. Läuft automatisch nach
+ * dem "Update cells"-Workflow für alle Leads mit Vorname + Nachname + Webseite.
+ */
+export const EMAIL_FINDER_KEY = "email_entscheider";
+
+/**
  * Schlüssel der System-Spalte "Pipeline-Phase". Diese Spalte existiert NICHT in
  * `lead_columns`, sondern wird beim Laden der Tabelle nur dann synthetisch
  * eingefügt, wenn der Ordner mit einer Pipeline verbunden ist. Sie ist
@@ -45,6 +53,7 @@ export const BUILTIN_COLUMN_KEYS = [
   "firstName",
   "lastName",
   "email",
+  EMAIL_FINDER_KEY,
 ] as const;
 
 /**
