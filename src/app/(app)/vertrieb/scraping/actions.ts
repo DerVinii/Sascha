@@ -61,12 +61,11 @@ import {
   runEnrichmentForRow,
   pendingCountForList,
   ENRICH_STALE_MS,
-  type RowOutcome,
 } from "@/lib/server/scraping/enrich-run";
 import {
   emailFinderCellNeedsRun,
   emailFinderReady,
-  runEmailFinderForRow,
+  runEmailFinderPool,
 } from "@/lib/server/scraping/reacher";
 import {
   instantlyVarToken,
@@ -418,15 +417,20 @@ export async function runEnrichmentBatchAction(input: {
 
   const columns = await getColumns(org.id, input.listId);
   const all = await loadLeadRows(org.id, input.listId);
-  // Email_Entscheider (Reacher): streng sequenziell — SMTP-Checks dürfen nicht
-  // parallel laufen (Rate-Limit des Verifizierungs-Servers) → 1 Zeile pro Aufruf.
-  const isEmailFinder = column.key === EMAIL_FINDER_KEY;
-  const limit = isEmailFinder
-    ? 1
-    : clamp(("limit" in input.scope ? input.scope.limit : undefined) ?? 4, 1, 8);
+
+  // Email_Entscheider (Reacher): eigener Sliding-Window-Pool mit eigener
+  // Abrechnung (Teil-Läufe fortsetzen statt neu starten) — siehe unten.
+  if (column.key === EMAIL_FINDER_KEY) {
+    return runEmailFinderBatch(org.id, column, columns, all, input.scope);
+  }
+
+  const limit = clamp(
+    ("limit" in input.scope ? input.scope.limit : undefined) ?? 4,
+    1,
+    8,
+  );
 
   let toProcess: RowSources[] = [];
-  /** Größe des Gesamt-Scopes (für remaining, das Teil-Läufe berücksichtigt). */
   let scopeTotal = 0;
   const offset =
     !("rowIds" in input.scope) && input.scope.mode === "force"
@@ -453,46 +457,15 @@ export async function runEnrichmentBatchAction(input: {
     const candidates = all.filter((src) => {
       if (exclude.has(src.contact.id)) return false;
       const cell = buildCells(columns, src)[column.key];
-      if (isEmailFinder) {
-        // Reacher-Spalte: nur Zeilen mit Vorname + Nachname + Webseite; ein
-        // unterbrochener Teil-Lauf ("running") zählt ebenfalls als offen.
-        return (
-          !!cell &&
-          emailFinderCellNeedsRun(cell) &&
-          emailFinderReady(column, src) &&
-          passesOnlyRunIf(onlyRunIf, src.contact)
-        );
-      }
       return cellNeedsRun(cell) && passesOnlyRunIf(onlyRunIf, src.contact);
     });
     toProcess = candidates.slice(0, limit);
     scopeTotal = candidates.length;
   }
 
-  let results: RowOutcome[];
-  if (isEmailFinder) {
-    // Sequenziell mit festem Zeitbudget: schafft der Aufruf nicht alle Varianten
-    // einer Zeile, wird der Fortschritt gespeichert ("partial") und der Client
-    // ruft erneut auf — die Zeile macht dann genau dort weiter.
-    const deadline = Date.now() + 25_000;
-    const forceRestart =
-      !("rowIds" in input.scope) && input.scope.mode === "force";
-    results = [];
-    for (const src of toProcess) {
-      // Explizite Zell-Runs auf fertigen Zellen (Treffer/kein Treffer) starten
-      // die Prüfung bewusst von vorn.
-      const cellStatus = buildCells(columns, src)[column.key]?.status;
-      const restart =
-        forceRestart || cellStatus === "success" || cellStatus === "not_found";
-      results.push(
-        await runEmailFinderForRow(org.id, column, src, { deadline, restart }),
-      );
-    }
-  } else {
-    results = await Promise.all(
-      toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
-    );
-  }
+  const results = await Promise.all(
+    toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
+  );
 
   let succeeded = 0;
   let notFound = 0;
@@ -505,18 +478,12 @@ export async function runEnrichmentBatchAction(input: {
       failed++;
       if (r.rateLimited) rateLimited = true;
     }
-    // "partial" zählt nirgends rein — die Zeile ist schlicht noch nicht fertig.
   }
 
-  // Teil-Läufe gelten nicht als erledigt: nicht in rowIds melden (der Client
-  // schließt gemeldete Zeilen aus) und in remaining weiter mitzählen.
-  const completedIds = toProcess
-    .filter((_, i) => results[i].status !== "partial")
-    .map((s) => s.contact.id);
   const remaining =
     !("rowIds" in input.scope) && input.scope.mode === "force"
       ? Math.max(0, all.length - (offset + toProcess.length))
-      : Math.max(0, scopeTotal - completedIds.length);
+      : Math.max(0, scopeTotal - toProcess.length);
 
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
@@ -528,8 +495,110 @@ export async function runEnrichmentBatchAction(input: {
     notFound,
     failed,
     remaining,
-    rowIds: completedIds,
+    rowIds: toProcess.map((s) => s.contact.id),
     rateLimited,
+  };
+}
+
+/**
+ * Foreground-Batch für die Spalte Email_Entscheider: verarbeitet die offenen
+ * Zeilen mit einem Sliding-Window-Pool (bis zu EMAIL_FINDER_CONCURRENCY Zeilen
+ * gleichzeitig, siehe reacher.ts) und einem festen Zeitbudget. Schafft der
+ * Aufruf nicht alle Varianten einer Zeile, sichert die Zeile ihren Fortschritt
+ * ("partial") und der Client ruft erneut auf — dann geht es genau dort weiter.
+ */
+async function runEmailFinderBatch(
+  orgId: string,
+  column: LeadColumn,
+  columns: LeadColumn[],
+  all: RowSources[],
+  scope: RunScope,
+): Promise<RunBatchResult> {
+  // Seite läuft mit maxDuration=60 → 45 s Arbeitsbudget, Rest für die Antwort.
+  const deadline = Date.now() + 45_000;
+  const onlyRunIf = column.config.runSettings?.onlyRunIf;
+
+  let workingSet: RowSources[] = [];
+  let scopeTotal = 0;
+  const offset =
+    !("rowIds" in scope) && scope.mode === "force"
+      ? Math.max(0, scope.offset ?? 0)
+      : 0;
+  let restart: boolean | ((src: RowSources) => boolean) = false;
+
+  if ("rowIds" in scope) {
+    const map = new Map(all.map((s) => [s.contact.id, s]));
+    workingSet = scope.rowIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as RowSources[];
+    scopeTotal = scope.rowIds.length;
+    // Expliziter Zell-Run auf einer fertigen Zelle (Treffer/kein Treffer) startet
+    // bewusst neu; ein unterbrochener Teil-Lauf ("running") wird fortgesetzt.
+    restart = (src) => {
+      const s = buildCells(columns, src)[column.key]?.status;
+      return s === "success" || s === "not_found";
+    };
+  } else if (scope.mode === "force") {
+    workingSet = all.slice(offset);
+    scopeTotal = all.length;
+    restart = true;
+  } else {
+    // missing: nur Zeilen mit Vorname + Nachname + Webseite, die einen Run
+    // brauchen (leer/Fehler/unterbrochen). excludeRowIds = in diesem Lauf schon
+    // erledigte Zeilen; nicht erneut ziehen (Endlosschleife bei Fehler-Zellen).
+    const exclude = new Set(scope.excludeRowIds ?? []);
+    workingSet = all.filter((src) => {
+      if (exclude.has(src.contact.id)) return false;
+      const cell = buildCells(columns, src)[column.key];
+      return (
+        !!cell &&
+        emailFinderCellNeedsRun(cell) &&
+        emailFinderReady(column, src) &&
+        passesOnlyRunIf(onlyRunIf, src.contact)
+      );
+    });
+    scopeTotal = workingSet.length;
+  }
+
+  const pool = await runEmailFinderPool(orgId, column, workingSet, {
+    deadline,
+    restart,
+  });
+
+  let succeeded = 0;
+  let notFound = 0;
+  let failed = 0;
+  const completedIds: string[] = [];
+  for (const { src, outcome } of pool.results) {
+    if (outcome.status === "success") succeeded++;
+    else if (outcome.status === "not_found") notFound++;
+    else if (outcome.status === "error") failed++;
+    // "partial" gilt nicht als erledigt — nicht melden, damit der Client die
+    // Zeile erneut zieht und der Pool sie fortsetzt.
+    if (outcome.status !== "partial") completedIds.push(src.contact.id);
+  }
+
+  // processed = tatsächlich BEGONNENE Zeilen (Pool bricht bei Zeitablauf ab).
+  // Force-Modus rückt den Offset genau um diese vor; nicht begonnene Zeilen
+  // werden im nächsten Aufruf erneut abgedeckt.
+  const processed = pool.results.length;
+  const remaining =
+    !("rowIds" in scope) && scope.mode === "force"
+      ? Math.max(0, all.length - (offset + processed))
+      : Math.max(0, scopeTotal - completedIds.length);
+
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath("/vertrieb");
+  revalidatePath("/crm");
+
+  return {
+    processed,
+    succeeded,
+    notFound,
+    failed,
+    remaining,
+    rowIds: completedIds,
+    rateLimited: false,
   };
 }
 

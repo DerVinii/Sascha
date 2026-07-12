@@ -192,27 +192,10 @@ export const DEFAULT_COLUMNS: ColumnSeed[] = [
   },
 ];
 
-export const BUILTIN_VIEWS: LeadView[] = [
-  { id: "all", name: "Alle", filters: [], builtin: true },
-  {
-    id: "enriched",
-    name: "Angereichert",
-    filters: [{ columnKey: ENRICHMENT_KEY, op: "status_is", value: "success" }],
-    builtin: true,
-  },
-  {
-    id: "not_found",
-    name: "Nicht gefunden",
-    filters: [{ columnKey: ENRICHMENT_KEY, op: "status_is", value: "not_found" }],
-    builtin: true,
-  },
-  {
-    id: "ready",
-    name: "Push-bereit",
-    filters: [{ columnKey: "email", op: "not_empty" }],
-    builtin: true,
-  },
-];
+// Keine Standard-Filter mehr: Die früheren Tabs "Alle", "Angereichert",
+// "Nicht gefunden" und "Push-bereit" wurden auf Wunsch entfernt. Nur noch
+// selbst gespeicherte Views (getOrgViews) erscheinen als Tabs.
+export const BUILTIN_VIEWS: LeadView[] = [];
 
 // ----------------------------------------------------------------------------
 // Seeding / Laden

@@ -22,11 +22,7 @@ import {
 } from "./lead-columns";
 import { runProvider } from "./providers";
 import { runAiColumn } from "./ai-column";
-import {
-  emailFinderMissingRows,
-  runEmailFinderForRow,
-  EMAIL_FINDER_MIN_ROW_MS,
-} from "./reacher";
+import { emailFinderMissingRows, runEmailFinderPool } from "./reacher";
 import type { LeadColumn } from "@/lib/scraping-types";
 
 export { cellPatch };
@@ -368,27 +364,15 @@ export async function drainQueuedLists(opts: {
         all,
         list.queuedAt,
       );
-      for (const src of todo) {
-        // Eine Zeile braucht mind. einen SMTP-Check — ohne Restbudget gar nicht
-        // erst anfangen, der nächste Hop übernimmt.
-        if (Date.now() >= deadline - EMAIL_FINDER_MIN_ROW_MS) {
-          listRemaining = true;
-          break;
-        }
-        const outcome = await runEmailFinderForRow(
-          list.orgId,
-          emailColumn,
-          src,
-          { deadline },
-        );
-        processedRows++;
-        if (outcome.status === "partial") {
-          // Zeit innerhalb der Zeile erschöpft — Fortschritt ist gespeichert,
-          // der nächste Hop macht bei derselben Zeile weiter.
-          listRemaining = true;
-          break;
-        }
-      }
+      // Sliding-Window-Pool: bis zu EMAIL_FINDER_CONCURRENCY Zeilen gleichzeitig.
+      // Rückt eine Zeile weg (fertig/partial), zieht der Pool sofort die nächste,
+      // bis das Zeitbudget für eine neue Zeile nicht mehr reicht. Teil-Läufe
+      // sichern ihren Fortschritt selbst und laufen im nächsten Hop weiter.
+      const pool = await runEmailFinderPool(list.orgId, emailColumn, todo, {
+        deadline,
+      });
+      processedRows += pool.results.length;
+      if (pool.remaining) listRemaining = true;
     }
 
     // Heartbeat nachziehen.

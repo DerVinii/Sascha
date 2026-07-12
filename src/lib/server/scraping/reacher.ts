@@ -44,6 +44,15 @@ const CHECK_HEADROOM_MS = CHECK_TIMEOUT_MS + 1_000;
 /** Mindest-Restbudget, um eine NEUE Zeile überhaupt anzufangen (Drain). */
 export const EMAIL_FINDER_MIN_ROW_MS = 20_000;
 
+/**
+ * Wie viele Leads gleichzeitig gesucht werden (Sliding-Window-Pool). Jede Zeile
+ * prüft ihre ~21 Varianten weiterhin sequenziell mit Abstand (SPACING_MS) — der
+ * Abstand schützt EINE Domain vor Rapid-Fire. Die Parallelität liegt ZWISCHEN
+ * den Zeilen (i. d. R. verschiedene Domains), es sind also stets bis zu 10
+ * Suchen aktiv; wird eine fertig, rückt sofort die nächste nach.
+ */
+export const EMAIL_FINDER_CONCURRENCY = 10;
+
 /** Konfigurations-/Auth-Fehler — sofort abbrechen, Wiederholen bringt nichts. */
 class ReacherConfigError extends Error {}
 
@@ -509,4 +518,76 @@ export async function runEmailFinderForRow(
     state,
     domain,
   });
+}
+
+// ----------------------------------------------------------------------------
+// Sliding-Window-Pool (mehrere Zeilen gleichzeitig)
+// ----------------------------------------------------------------------------
+
+export type EmailFinderPoolResult = {
+  /** Ergebnis je tatsächlich begonnener Zeile (inkl. "partial"). */
+  results: { src: RowSources; outcome: EmailFinderOutcome }[];
+  /** true = es ist noch Arbeit offen (Teil-Lauf ODER nicht begonnene Zeilen). */
+  remaining: boolean;
+};
+
+/**
+ * Verarbeitet Leads mit einem Sliding-Window-Pool: es sind stets bis zu
+ * `concurrency` Suchen gleichzeitig aktiv. Sobald eine Zeile fertig ist
+ * (Treffer, kein Treffer oder Fehler), zieht derselbe Worker sofort die nächste
+ * offene Zeile — so bleiben durchgehend `concurrency` Suchen in Arbeit, ohne auf
+ * die langsamste Zeile einer Charge zu warten.
+ *
+ * Gestoppt wird, wenn `rows` erschöpft ist oder das Restbudget für eine NEUE
+ * Zeile nicht mehr reicht (`EMAIL_FINDER_MIN_ROW_MS`). Bereits laufende Zeilen
+ * sichern bei Zeitablauf selbst ihren Fortschritt ("partial") und werden beim
+ * nächsten Aufruf/Hop fortgesetzt.
+ *
+ * `restart` kann pro Zeile entschieden werden (Prädikat) — nötig, weil ein
+ * expliziter Zell-Run auf einer fertigen Zelle neu startet, ein Teil-Lauf aber
+ * fortgesetzt wird.
+ */
+export async function runEmailFinderPool(
+  orgId: string,
+  column: LeadColumn,
+  rows: RowSources[],
+  opts: {
+    deadline: number;
+    concurrency?: number;
+    restart?: boolean | ((src: RowSources) => boolean);
+  },
+): Promise<EmailFinderPoolResult> {
+  const concurrency = Math.max(1, opts.concurrency ?? EMAIL_FINDER_CONCURRENCY);
+  const results: { src: RowSources; outcome: EmailFinderOutcome }[] = [];
+  let idx = 0;
+  let remaining = false;
+
+  const worker = async () => {
+    for (;;) {
+      // Nur eine neue Zeile beginnen, wenn genug Restbudget da ist.
+      if (Date.now() >= opts.deadline - EMAIL_FINDER_MIN_ROW_MS) {
+        if (idx < rows.length) remaining = true;
+        return;
+      }
+      // idx++ ist synchron → in JS' Single-Thread-Modell bekommt jede Zeile
+      // genau einen Worker (keine Doppelverarbeitung).
+      const i = idx++;
+      if (i >= rows.length) return;
+      const src = rows[i];
+      const restart =
+        typeof opts.restart === "function" ? opts.restart(src) : opts.restart;
+      const outcome = await runEmailFinderForRow(orgId, column, src, {
+        deadline: opts.deadline,
+        restart,
+      });
+      results.push({ src, outcome });
+      if (outcome.status === "partial") remaining = true;
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, rows.length) }, () => worker()),
+  );
+
+  return { results, remaining };
 }
