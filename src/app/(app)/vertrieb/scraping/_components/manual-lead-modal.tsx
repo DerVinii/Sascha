@@ -30,6 +30,13 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
       setError("Bitte eine gültige E-Mail-Adresse eingeben.");
       return;
     }
+    const anyFilled = [vorname, nachname, mail, firma, webseite, telefon].some(
+      (v) => v.trim(),
+    );
+    if (!anyFilled) {
+      setError("Bitte mindestens ein Feld ausfüllen.");
+      return;
+    }
     startTransition(async () => {
       try {
         await addManualLeadAction({
@@ -102,7 +109,7 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-sub">Firma *</span>
+            <span className="text-xs font-medium text-sub">Firma</span>
             <input
               value={firma}
               onChange={(e) => setFirma(e.target.value)}
@@ -128,8 +135,9 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
           </label>
           {error && <p className="text-sm text-err">{error}</p>}
           <p className="text-[11px] text-sub">
-            Nur die Firma ist Pflicht. Leere Felder (z. B. Name/E-Mail) kannst du
-            später auch per „Geschäftsführer finden" automatisch ergänzen.
+            Alle Felder sind optional — fülle einfach aus, was du hast. Leere
+            Felder (z. B. Name/E-Mail) kannst du später auch per „Geschäftsführer
+            finden" automatisch ergänzen.
           </p>
         </div>
 
@@ -139,7 +147,7 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
           </button>
           <button
             onClick={submit}
-            disabled={pending || !firma.trim()}
+            disabled={pending}
             className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />

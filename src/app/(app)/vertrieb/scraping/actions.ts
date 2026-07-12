@@ -913,7 +913,7 @@ export async function deleteListAction(input: { id: string }): Promise<void> {
 
 export async function addManualLeadAction(input: {
   listId: string;
-  firma: string;
+  firma?: string;
   webseite?: string;
   telefon?: string;
   vorname?: string;
@@ -921,32 +921,47 @@ export async function addManualLeadAction(input: {
   email?: string;
 }): Promise<void> {
   const org = await requireActiveOrg();
-  const firma = input.firma?.trim();
-  if (!firma || !input.listId)
-    throw new Error("Firma und Kampagne erforderlich.");
-  const webseite = input.webseite?.trim() || null;
+  if (!input.listId) throw new Error("Kampagne erforderlich.");
 
-  const [company] = await db
-    .insert(companies)
-    .values({
-      orgId: org.id,
-      leadListId: input.listId,
-      name: firma,
-      domain: extractDomain(webseite),
-      customFields: { websiteUri: webseite },
-    })
-    .returning({ id: companies.id });
+  const firma = input.firma?.trim() || "";
+  const webseite = input.webseite?.trim() || null;
+  const vorname = input.vorname?.trim() || null;
+  const nachname = input.nachname?.trim() || null;
+  const email = input.email?.trim() || null;
+  const telefon = input.telefon?.trim() || null;
+
+  // Alle Felder sind optional — aber ein komplett leerer Lead ergibt keinen Sinn.
+  if (!firma && !webseite && !vorname && !nachname && !email && !telefon)
+    throw new Error("Bitte mindestens ein Feld ausfüllen.");
+
+  // Firma ist optional. Eine Firmen-Zeile nur anlegen, wenn Firma ODER Webseite
+  // angegeben wurde (die Webseite lebt in company.customFields.websiteUri);
+  // sonst gehört der Kontakt zu keiner Firma (companyId bleibt null).
+  let companyId: string | null = null;
+  if (firma || webseite) {
+    const [company] = await db
+      .insert(companies)
+      .values({
+        orgId: org.id,
+        leadListId: input.listId,
+        name: firma,
+        domain: extractDomain(webseite),
+        customFields: { websiteUri: webseite },
+      })
+      .returning({ id: companies.id });
+    companyId = company.id;
+  }
 
   const [contact] = await db
     .insert(contacts)
     .values({
       orgId: org.id,
       leadListId: input.listId,
-      companyId: company.id,
-      firstName: input.vorname?.trim() || null,
-      lastName: input.nachname?.trim() || null,
-      email: input.email?.trim() || null,
-      phone: input.telefon?.trim() || null,
+      companyId,
+      firstName: vorname,
+      lastName: nachname,
+      email,
+      phone: telefon,
       status: "lead" as const,
       source: "Manuell",
       customFields: {},
