@@ -32,10 +32,6 @@ export default async function ScrapingPage({
         <h2 className="text-base font-semibold text-ink mt-2">
           {data.listName}
         </h2>
-        <p className="text-xs text-sub mt-0.5">
-          Scrapen, importieren oder manuell hinzufügen — pro Zeile mit Gemini
-          anreichern, dann „Kampagne einrichten" für den Mailversand.
-        </p>
       </div>
 
       <LeadTable initial={data} />
