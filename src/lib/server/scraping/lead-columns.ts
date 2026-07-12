@@ -413,6 +413,9 @@ export function buildCells(
             email: src.contact.email,
           };
       }
+      // Enrichment-/KI-Zellen dürfen manuell korrigiert werden (wie normale
+      // Zellen) — reine Aktions-Spalten (kind "action") jedoch nicht.
+      base.editable = col.kind === "enrichment" || !!col.config.ai;
       cells[col.key] = base;
       continue;
     }

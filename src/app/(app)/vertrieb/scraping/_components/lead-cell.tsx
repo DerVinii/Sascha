@@ -56,7 +56,9 @@ export function LeadCellView({
 
   const isEnrichment = column.kind === "enrichment" || !!column.config.ai;
   const isRunning = running || cell.status === "running";
-  const editable = !!onEdit && cell.editable && !isEnrichment;
+  // Enrichment-/KI-Zellen sind jetzt ebenfalls manuell editierbar (cell.editable
+  // wird serverseitig für sie gesetzt) — der grüne Punkt öffnet weiter die Details.
+  const editable = !!onEdit && cell.editable;
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -129,8 +131,14 @@ export function LeadCellView({
   // --- nicht gefunden ------------------------------------------------------
   if (cell.status === "not_found") {
     return (
-      <div className="group/cell flex items-center justify-between">
-        <span className="text-sub" title="Kein Treffer">
+      <div
+        className="group/cell flex items-center justify-between h-full"
+        onClick={editable ? startEdit : undefined}
+      >
+        <span
+          className={cn("text-sub", editable && "cursor-text")}
+          title={editable ? "Zum Bearbeiten klicken" : "Kein Treffer"}
+        >
           —
         </span>
         {isEnrichment && onRunCell && (
@@ -189,15 +197,33 @@ export function LeadCellView({
   }
 
   if (isEnrichment) {
+    // Grüner Punkt = Enrichment-Details öffnen; Text = manuell bearbeiten (wie
+    // eine normale Zelle). So bleiben beide Aktionen erreichbar.
     return (
-      <button
-        onClick={onOpenDetails}
-        className="group/cell flex w-full items-center gap-1.5 text-left hover:underline"
-        title="Details ansehen"
-      >
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok" />
-        <span className="truncate">{inner}</span>
-      </button>
+      <div className="group/cell flex w-full items-center gap-1.5">
+        {onOpenDetails ? (
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            title="Enrichment-Details ansehen"
+            className="shrink-0 -m-1 p-1"
+          >
+            <span className="block h-1.5 w-1.5 rounded-full bg-ok" />
+          </button>
+        ) : (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok" />
+        )}
+        <div
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            editable ? "cursor-text" : "cursor-default",
+          )}
+          onClick={editable ? startEdit : onOpenDetails}
+          title={editable ? "Zum Bearbeiten klicken" : undefined}
+        >
+          {inner}
+        </div>
+      </div>
     );
   }
 

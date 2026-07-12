@@ -738,7 +738,16 @@ export async function editCellAction(input: {
 }): Promise<void> {
   const org = await requireActiveOrg();
   const col = await getColumnByKey(org.id, input.columnKey);
-  if (!col || col.kind !== "data" || col.config.derivedFrom) {
+  // Editierbar: manuelle Daten-Spalten, Standard-Kontaktfelder (Vorname/…/E-Mail)
+  // und Enrichment-/KI-Spalten (manuelle Korrektur eines angereicherten Werts).
+  // NICHT editierbar: Source-Spalten (Firma … Rating), abgeleitete & Aktions-Spalten.
+  const isEnrichmentCol = !!col && (col.kind === "enrichment" || !!col.config.ai);
+  if (
+    !col ||
+    col.config.derivedFrom ||
+    col.kind === "source" ||
+    col.kind === "action"
+  ) {
     throw new Error("Diese Zelle ist nicht editierbar.");
   }
   const value = input.value.trim();
@@ -756,10 +765,27 @@ export async function editCellAction(input: {
     }
   }
 
-  // Manuelle Daten-Spalte → Wert in cells[key].
+  // Enrichment/KI ODER manuelle Daten-Spalte → Wert in cells[key].
+  // Bei Enrichment: vorhandene Struktur (raw/provider) aus der Zelle erhalten und
+  // eine leere Eingabe als "" speichern — sonst würde die Anzeige auf den aus `raw`
+  // abgeleiteten Namen zurückfallen (find_dm) und „löschen" bliebe wirkungslos.
+  let prev: Record<string, unknown> = {};
+  if (isEnrichmentCol) {
+    const [row] = await db
+      .select({ customFields: contacts.customFields })
+      .from(contacts)
+      .where(and(eq(contacts.id, input.rowId), eq(contacts.orgId, org.id)))
+      .limit(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cells = (row?.customFields as any)?.cells as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    prev = cells?.[col.key] ?? {};
+  }
   const cell = {
+    ...prev,
     status: value ? "success" : "empty",
-    value: value || null,
+    value: value || (isEnrichmentCol ? "" : null),
     runAt: new Date().toISOString(),
   };
   await db
