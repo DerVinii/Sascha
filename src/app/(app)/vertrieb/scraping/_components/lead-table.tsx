@@ -365,7 +365,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     await refresh();
   };
   const onCreateColumn = async (input: NewColumnInput) => {
-    await createColumnAction(input);
+    // Spalte nur in DIESEM Ordner anlegen (nicht mehr org-weit in allen Ordnern).
+    await createColumnAction({ ...input, listId });
     await refresh();
   };
   const onDeleteColumn = async (id: string) => {
@@ -383,6 +384,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       sourceColumnKey: details.column.key,
       field,
       label,
+      listId,
     });
     await refresh();
   };

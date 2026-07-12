@@ -9,7 +9,7 @@
 
 import { db } from "@/db";
 import { contacts, leadColumns } from "@/db/schema";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { EMAIL_FINDER_KEY, ENRICHMENT_KEY } from "@/lib/scraping-types";
 import type {
   CellStatus,
@@ -235,9 +235,15 @@ function rowToColumn(r: any): LeadColumn {
   };
 }
 
-/** Legt fehlende Default-Spalten an (idempotent über `key`) und gibt alle zurück. */
+/**
+ * Legt fehlende Default-Spalten an (idempotent über `key`, immer global —
+ * `leadListId` NULL) und gibt die für den Ordner `listId` sichtbaren Spalten
+ * zurück (global + nur diesem Ordner zugeordnete). Ohne `listId`: alle Spalten
+ * der Org (z. B. für Schlüssel-Eindeutigkeit).
+ */
 export async function ensureDefaultColumns(
   orgId: string,
+  listId?: string,
 ): Promise<LeadColumn[]> {
   const existing = await db
     .select()
@@ -257,6 +263,8 @@ export async function ensureDefaultColumns(
     await db.insert(leadColumns).values(
       missing.map((c, i) => ({
         orgId,
+        // Standard-Spalten sind IMMER global (leadListId NULL) → in jedem Ordner.
+        leadListId: null,
         key: c.key,
         label: c.label,
         kind: c.kind,
@@ -269,17 +277,34 @@ export async function ensureDefaultColumns(
         config: c.config,
       })),
     );
-    return getColumns(orgId);
   }
 
-  return existing.map(rowToColumn);
+  return getColumns(orgId, listId);
 }
 
-export async function getColumns(orgId: string): Promise<LeadColumn[]> {
+/**
+ * Spalten der Org. Mit `listId`: nur die in diesem Ordner sichtbaren — globale
+ * Spalten (leadListId NULL) plus die, die genau diesem Ordner zugeordnet sind.
+ * Ohne `listId`: alle Spalten der Org (Schlüssel-Eindeutigkeit / Engine).
+ */
+export async function getColumns(
+  orgId: string,
+  listId?: string,
+): Promise<LeadColumn[]> {
   const rows = await db
     .select()
     .from(leadColumns)
-    .where(eq(leadColumns.orgId, orgId))
+    .where(
+      listId
+        ? and(
+            eq(leadColumns.orgId, orgId),
+            or(
+              isNull(leadColumns.leadListId),
+              eq(leadColumns.leadListId, listId),
+            ),
+          )
+        : eq(leadColumns.orgId, orgId),
+    )
     .orderBy(asc(leadColumns.position));
   return rows.map(rowToColumn);
 }

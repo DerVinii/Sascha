@@ -209,6 +209,13 @@ export const leadColumns = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    // Ordner-Zuordnung: NULL = globale Spalte (in JEDEM Ordner sichtbar — alle
+    // Standard-Spalten). Gesetzt = selbst angelegte Spalte, die NUR in dem Ordner
+    // erscheint, in dem sie erstellt wurde. ON DELETE CASCADE räumt die Spalten
+    // eines gelöschten Ordners mit auf.
+    leadListId: uuid("lead_list_id").references(() => leadLists.id, {
+      onDelete: "cascade",
+    }),
     key: text("key").notNull(), // stabiler Schlüssel, z. B. "find_dm", "email"
     label: text("label").notNull(),
     kind: leadColumnKindEnum("kind").notNull(),
@@ -223,7 +230,10 @@ export const leadColumns = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [index("lead_columns_org_idx").on(t.orgId)],
+  (t) => [
+    index("lead_columns_org_idx").on(t.orgId),
+    index("lead_columns_list_idx").on(t.leadListId),
+  ],
 );
 
 // ============================================================================

@@ -282,7 +282,9 @@ export async function listLeadTableAction(input: {
 }): Promise<LeadTableData> {
   const org = await requireActiveOrg();
   const listId = input.listId;
-  const columns = await ensureDefaultColumns(org.id);
+  // Nur global + diesem Ordner zugeordnete Spalten laden (selbst angelegte Spalten
+  // erscheinen ausschließlich in ihrem eigenen Ordner).
+  const columns = await ensureDefaultColumns(org.id, listId);
 
   // "Email_Entscheider" steht IMMER direkt rechts von "E-Mail" — Position wird
   // nur fürs Rendering erzwungen (nicht gespeichert), damit auch Umsortieren
@@ -414,7 +416,7 @@ export async function runEnrichmentBatchAction(input: {
     throw new Error("Spalte ist keine Enrichment-/KI-Spalte.");
   }
 
-  const columns = await getColumns(org.id);
+  const columns = await getColumns(org.id, input.listId);
   const all = await loadLeadRows(org.id, input.listId);
   // Email_Entscheider (Reacher): streng sequenziell — SMTP-Checks dürfen nicht
   // parallel laufen (Rate-Limit des Verifizierungs-Servers) → 1 Zeile pro Aufruf.
@@ -616,9 +618,14 @@ export async function createColumnAction(input: {
   dataType: LeadDataType;
   config?: LeadColumnConfig;
   color?: string | null;
+  /** Ordner, in dem die Spalte angelegt wird — sie erscheint NUR dort. Fehlt der
+   *  Wert, wird die Spalte global (in jedem Ordner sichtbar) angelegt. */
+  listId?: string;
 }): Promise<string> {
   const org = await requireActiveOrg();
   const label = input.label?.trim() || "Neue Spalte";
+  // Schlüssel org-weit eindeutig halten (Zellwerte liegen in customFields.cells[key]
+  // und getColumnByKey löst org-weit auf) → alle Spalten der Org einbeziehen.
   const cols = await getColumns(org.id);
   // PIPELINE_STAGE_KEY reservieren: die synthetische "Pipeline-Phase"-Spalte
   // existiert nicht in lead_columns, ihr Key darf aber nicht vergeben werden,
@@ -631,6 +638,7 @@ export async function createColumnAction(input: {
 
   await db.insert(leadColumns).values({
     orgId: org.id,
+    leadListId: input.listId ?? null,
     key,
     label,
     kind: input.kind,
@@ -716,6 +724,8 @@ export async function addAsColumnAction(input: {
   field: string;
   label: string;
   dataType?: LeadDataType;
+  /** Ordner, in dem die Spalte erscheinen soll (nur dort). */
+  listId?: string;
 }): Promise<string> {
   return createColumnAction({
     label: input.label,
@@ -724,6 +734,7 @@ export async function addAsColumnAction(input: {
     config: {
       derivedFrom: { column: input.sourceColumnKey, field: input.field },
     },
+    listId: input.listId,
   });
 }
 
@@ -1764,7 +1775,7 @@ export async function sendListToInstantlyAction(input: {
   try {
     // offset läuft stabil über ALLE Zeilen (Markieren verschiebt das Slicing nicht).
     const all = await loadLeadRows(org.id, input.listId);
-    const columns = await getColumns(org.id);
+    const columns = await getColumns(org.id, input.listId);
     const offset = Math.max(0, input.offset ?? 0);
     const slice = all.slice(offset, offset + INSTANTLY_BATCH);
 
