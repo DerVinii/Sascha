@@ -1,5 +1,7 @@
 /**
- * Instantly-Webhook-Empfänger (reply_received u. a.).
+ * Instantly-Webhook-Empfänger (reply_received, email_sent, campaign_completed,
+ * lead_interested, lead_not_interested — je Event ein eigener Webhook bei
+ * Instantly, alle zeigen auf diese Route).
  *
  * Auth: Instantly kann Webhook-Deliveries nicht signieren — der Webhook wird
  * bei Instantly mit einem Custom-Header registriert (x-webhook-secret), den
@@ -8,6 +10,11 @@
  * Wichtig: Nach bestandener Auth antworten wir auch bei Verarbeitungsfehlern
  * mit 200 — Instantly deaktiviert Webhooks nach wiederholten Zustellfehlern
  * (Status -1), und der Poll-Backfill fängt verpasste Events ohnehin auf.
+ *
+ * Zwei Aufgaben:
+ *  1) Unibox-Spiegel: Antworten (reply_*) in instantly_emails upserten.
+ *  2) Pipeline-Automatik: Events auf Pipeline-Phasen der Ordner-Leads mappen
+ *     (siehe EVENT_STAGE + pipeline-auto.ts; nur vorwärts, manuelle Phasen tabu).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,8 +26,30 @@ import {
   upsertInstantlyEmails,
 } from "@/lib/server/instantly/sync";
 import { sendPushToOrg } from "@/lib/server/push";
+import {
+  autoAdvanceByInstantlyEvent,
+  type AutoStageName,
+} from "@/lib/server/pipeline-auto";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Event → Ziel-Phase der Pipeline-Automatik.
+ *  - email_sent: Instantly hat (irgendeine) Mail an den Lead gesendet →
+ *    "angeschrieben" (Follow-ups stufen dank Vorwärts-Regel nie zurück).
+ *  - campaign_completed: Sequenz für den Lead fertig → "Kampagne fertig".
+ *  - reply_received / lead_interested: Antwort (unklassifiziert oder
+ *    Interessiert) → "geantwortet".
+ *  - lead_not_interested: als "kein Interesse" eingestuft → "Lost".
+ * auto_reply_received (Abwesenheitsnotizen) ist bewusst NICHT gemappt.
+ */
+const EVENT_STAGE: Record<string, AutoStageName> = {
+  email_sent: "angeschrieben",
+  campaign_completed: "Kampagne fertig",
+  reply_received: "geantwortet",
+  lead_interested: "geantwortet",
+  lead_not_interested: "Lost",
+};
 
 export async function GET() {
   return NextResponse.json({ ok: true, service: "instantly-webhook" });
@@ -44,10 +73,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "no org" }, { status: 503 });
   }
 
+  const eventType =
+    typeof payload?.event_type === "string" ? payload.event_type : "";
+  const stageTarget = EVENT_STAGE[eventType];
+
+  // Reine Status-Events (email_sent, campaign_completed, lead_*) brauchen
+  // keinen Unibox-Sync — Mail-Inhalte kommen weiterhin über reply_received.
+  // Spart bei jeder gesendeten Mail einen Instantly-API-Call (Rate-Limit).
+  const skipUniboxSync = Boolean(stageTarget) && eventType !== "reply_received";
+
   try {
     const emailId =
       typeof payload?.email_id === "string" ? payload.email_id : null;
-    if (emailId) {
+    if (skipUniboxSync) {
+      // nichts zu spiegeln
+    } else if (emailId) {
       // Autoritatives Objekt holen statt den Payload-Feldern zu vertrauen
       // (email_id ist laut Doku direkt als reply_to_uuid nutzbar).
       const raw = await getEmail(emailId);
@@ -68,10 +108,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Pipeline-Automatik: Lead über Kampagne + Versand-Adresse auflösen und
+  // seine Pipeline-Phase vorwärts schieben (Ordner muss verbunden sein).
+  try {
+    const campaignId =
+      typeof payload?.campaign_id === "string" ? payload.campaign_id : null;
+    const leadEmail =
+      typeof payload?.lead_email === "string" ? payload.lead_email : null;
+    if (stageTarget && campaignId && leadEmail) {
+      const moved = await autoAdvanceByInstantlyEvent(
+        org.id,
+        campaignId,
+        leadEmail,
+        stageTarget,
+      );
+      if (moved > 0) {
+        revalidatePath("/vertrieb/scraping");
+        revalidatePath("/pipelines", "layout");
+      }
+    }
+  } catch (err) {
+    console.error(
+      "instantly-webhook: Pipeline-Automatik fehlgeschlagen",
+      payload?.event_type,
+      err,
+    );
+  }
+
   // Push-Benachrichtigung bei eingehenden Antworten (Lead reagiert).
   try {
-    const eventType =
-      typeof payload?.event_type === "string" ? payload.event_type : "";
     if (eventType.includes("reply")) {
       const leadEmail =
         typeof payload?.lead_email === "string" ? payload.lead_email : null;

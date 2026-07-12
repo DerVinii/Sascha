@@ -27,6 +27,7 @@ import {
   pipelineStagesFor,
   dealStageByContact,
 } from "@/lib/server/pipeline-sync";
+import { autoAdvanceListLeads } from "@/lib/server/pipeline-auto";
 import {
   bulkAddLeads,
   findLeadIdByEmail,
@@ -1895,6 +1896,8 @@ export async function sendListToInstantlyAction(input: {
     let updated = 0;
     let failed = 0;
     let error: string | null = null;
+    // Erfolgreich eingespielte/aufgefrischte Leads — für die Pipeline-Automatik.
+    const pushedIds: string[] = [];
 
     const markSent = async (rows: RowSources[]) => {
       if (!rows.length) return;
@@ -1926,6 +1929,7 @@ export async function sendListToInstantlyAction(input: {
         );
         sent = addRows.length;
         await markSent(addRows);
+        pushedIds.push(...addRows.map((s) => s.contact.id));
       } catch (e) {
         failed += addRows.length;
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
@@ -1941,17 +1945,30 @@ export async function sendListToInstantlyAction(input: {
           if (id) {
             await updateLead(id, lead);
             updated++;
+            pushedIds.push(src.contact.id);
           } else {
             // Laut DB gesendet, in Instantly aber nicht (mehr) vorhanden → neu anlegen.
             await bulkAddLeads(campaignId, [lead], { skipIfInCampaign: true });
             sent++;
             await markSent([src]);
+            pushedIds.push(src.contact.id);
           }
         } catch (e) {
           failed++;
           error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           break;
         }
+      }
+    }
+
+    // Automatik: tatsächlich in die Kampagne geschobene Leads → Pipeline-Phase
+    // "in Kampagne" (nur wenn der Ordner verbunden ist; best effort, blockiert
+    // den Push nie).
+    if (pushedIds.length > 0) {
+      try {
+        await autoAdvanceListLeads(org.id, input.listId, pushedIds, "in Kampagne");
+      } catch (e) {
+        console.error("Pipeline-Phase 'in Kampagne' setzen fehlgeschlagen:", e);
       }
     }
 
