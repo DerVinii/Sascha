@@ -1592,19 +1592,42 @@ function textToHtml(text: string): string {
     .join("");
 }
 
-/** HTML → Plaintext für das Prefill des Editors. */
+/**
+ * HTML → Plaintext für das Prefill des Editors (invers zu textToHtml).
+ *
+ * textToHtml schreibt jede Zeile als eigenen <div>-Block, Leerzeilen als
+ * <div><br></div>. Jeder Block ist also GENAU eine Zeile — so lesen wir zurück.
+ * Wichtig: NICHT sequenziell erst Leerzeilen-Divs → \n und dann </div><div> → \n
+ * ersetzen. Der zweite Schritt mit \s* frisst sonst das \n der Leerzeile mit auf,
+ * wodurch aus zwei Zeilenumbrüchen (Leerzeile) nur einer wird.
+ */
 function htmlToText(html: string): string {
   if (!html) return "";
-  return html
-    .replace(/<div><br\s*\/?><\/div>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/div>\s*<div>/gi, "\n")
-    .replace(/<\/?div[^>]*>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .trim();
+  const unescape = (s: string): string =>
+    s
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+  const normalized = html.replace(/\r\n?/g, "\n");
+  const blocks = normalized.match(/<(div|p)\b[^>]*>[\s\S]*?<\/\1>/gi);
+  if (blocks && blocks.length) {
+    return blocks
+      .map((block) => {
+        const inner = block
+          .replace(/^<(div|p)\b[^>]*>/i, "")
+          .replace(/<\/(div|p)>$/i, "");
+        // Block ohne echten Text (nur <br>/Whitespace) = Leerzeile.
+        if (unescape(inner.replace(/<br\s*\/?>/gi, "")).trim() === "") return "";
+        // Zeilenumbrüche innerhalb eines Blocks bleiben erhalten.
+        return unescape(inner.replace(/<br\s*\/?>/gi, "\n"));
+      })
+      .join("\n")
+      .trim();
+  }
+  // Fallback: kein Block-Markup, nur <br>/Klartext.
+  return unescape(normalized.replace(/<br\s*\/?>/gi, "\n")).trim();
 }
 
 function buildSequences(steps: CampaignStep[]): InstantlySequence[] {
