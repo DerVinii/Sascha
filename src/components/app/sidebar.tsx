@@ -36,6 +36,7 @@ const BOTTOM_AFTER_POSTFACH: NavItem[] = [
 ];
 
 const POSTFACH_SUB: { href: string; label: string }[] = [
+  { href: "/postfach", label: "E-Mail-Postfach" },
   { href: "/postfach/unibox", label: "Unibox" },
   { href: "/postfach/accounts", label: "Sending-Accounts" },
 ];
