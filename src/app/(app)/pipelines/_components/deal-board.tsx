@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useContactDrawer } from "@/components/crm/contact-drawer";
 import {
   DndContext,
   DragOverlay,
@@ -177,6 +177,7 @@ function Card({
   deal: BoardDeal;
   dragging?: boolean;
 }) {
+  const { open: openContact } = useContactDrawer();
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: deal.id });
   const style = transform
@@ -204,14 +205,21 @@ function Card({
         )}
       </div>
       {deal.contactId ? (
-        <Link
-          href={`/crm/${deal.contactId}`}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="text-xs text-sub mt-1 block truncate hover:text-ink hover:underline"
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openContact(deal.contactId as string);
+          }}
+          // dnd-kit lauscht auf mousedown/touchstart (Maus-/Touch-Sensor) —
+          // genau diese hier stoppen, damit ein Klick auf den Namen keinen Drag
+          // startet, sondern das Kontakt-Panel öffnet.
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          className="text-xs text-sub mt-1 block truncate text-left hover:text-ink hover:underline"
         >
           {deal.contactName || deal.companyName || "(ohne Namen)"}
-        </Link>
+        </button>
       ) : (
         <span className="text-xs text-sub mt-1 block">(kein Kontakt)</span>
       )}

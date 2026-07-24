@@ -6,8 +6,19 @@ import { MailboxView } from "./_components/mailbox-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function PostfachPage() {
+export default async function PostfachPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ compose?: string | string[] }>;
+}) {
   const cfg = getMailboxConfig();
+  const sp = await searchParams;
+  // Wird aus dem Kontakt-Panel („E-Mail schreiben") gesetzt: öffnet direkt
+  // den Verfassen-Dialog mit vorausgefülltem Empfänger.
+  const composeTo =
+    typeof sp.compose === "string" && sp.compose.trim()
+      ? sp.compose.trim()
+      : undefined;
 
   if (!cfg) {
     return (
@@ -32,6 +43,7 @@ export default async function PostfachPage() {
         initialFolder={overview.inboxPath}
         initialList={overview.list}
         senderEmail={cfg.email}
+        initialComposeTo={composeTo}
       />
     );
   } catch (err) {

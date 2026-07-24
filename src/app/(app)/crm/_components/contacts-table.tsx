@@ -38,6 +38,10 @@ import {
   type ContactFieldValue,
 } from "@/lib/contact-fields";
 import { readableTextColor } from "@/lib/pipeline-templates";
+import {
+  ContactDrawerProvider,
+  useContactDrawer,
+} from "@/components/crm/contact-drawer";
 
 export type ContactRow = {
   id: string;
@@ -257,7 +261,20 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function ContactsTable({
+export function ContactsTable(props: {
+  contacts: ContactRow[];
+  customColumns: CustomColumn[];
+  tagColors: Record<string, string | null>;
+}) {
+  // Provider mountet das Kontakt-Einschiebefenster; Zeilen öffnen es per Kontext.
+  return (
+    <ContactDrawerProvider>
+      <ContactsTableInner {...props} />
+    </ContactDrawerProvider>
+  );
+}
+
+function ContactsTableInner({
   contacts,
   customColumns,
   tagColors,
@@ -267,6 +284,7 @@ export function ContactsTable({
   tagColors: Record<string, string | null>;
 }) {
   const router = useRouter();
+  const { open: openContact } = useContactDrawer();
   const [pending, startTransition] = useTransition();
 
   const [query, setQuery] = useState("");
@@ -818,11 +836,28 @@ export function ContactsTable({
                 rows.map((c) => (
                   <tr
                     key={c.id}
-                    className={`hover:bg-bg/50 transition ${
+                    onClick={() => openContact(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openContact(c.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Kontakt ${
+                      [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                      c.email ||
+                      ""
+                    } öffnen`}
+                    className={`cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 transition ${
                       selected.has(c.id) ? "bg-accent/5" : ""
                     }`}
                   >
-                    <td className="px-4 py-3">
+                    <td
+                      className="px-4 py-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={selected.has(c.id)}
@@ -1039,12 +1074,9 @@ function CellValue({
   switch (col) {
     case "firstName":
       return (
-        <Link
-          href={`/crm/${contact.id}`}
-          className="font-medium text-ink hover:underline"
-        >
+        <span className="font-medium text-ink hover:underline">
           {contact.firstName || "—"}
-        </Link>
+        </span>
       );
     case "lastName":
       return <span className="text-ink">{contact.lastName || "—"}</span>;
@@ -1052,6 +1084,7 @@ function CellValue({
       return contact.phone ? (
         <a
           href={`tel:${contact.phone}`}
+          onClick={(e) => e.stopPropagation()}
           className="text-accent-ink hover:underline"
         >
           {contact.phone}
@@ -1061,7 +1094,11 @@ function CellValue({
       );
     case "email":
       return contact.email ? (
-        <a href={`mailto:${contact.email}`} className="text-ink hover:underline">
+        <a
+          href={`mailto:${contact.email}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-ink hover:underline"
+        >
           {contact.email}
         </a>
       ) : (
@@ -1081,6 +1118,7 @@ function CellValue({
           }
           target="_blank"
           rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="text-sub hover:text-ink hover:underline"
         >
           {contact.domain}
@@ -1137,6 +1175,7 @@ function CustomCellValue({
           href={href.startsWith("http") ? href : `https://${href}`}
           target="_blank"
           rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="text-sub hover:text-ink hover:underline"
         >
           {href}
@@ -1147,6 +1186,7 @@ function CustomCellValue({
       return (
         <a
           href={`tel:${String(value)}`}
+          onClick={(e) => e.stopPropagation()}
           className="text-accent-ink hover:underline"
         >
           {String(value)}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Search,
   SlidersHorizontal,
@@ -18,6 +17,10 @@ import {
   PipelineManagerModal,
   type ManagerStage,
 } from "@/app/(app)/crm/_components/pipeline-manager-modal";
+import {
+  ContactDrawerProvider,
+  useContactDrawer,
+} from "@/components/crm/contact-drawer";
 import { DealBoard } from "./deal-board";
 
 export type DetailStage = {
@@ -59,7 +62,23 @@ function fmtDateTime(iso: string | null) {
     .replace(", ", " - ");
 }
 
-export function PipelineDetail({
+export function PipelineDetail(props: {
+  pipelineId: string;
+  pipelineName: string;
+  stages: DetailStage[];
+  deals: DetailDeal[];
+  contacts: ContactOption[];
+  pipelineCount: number;
+}) {
+  // Provider mountet das Kontakt-Einschiebefenster für Tabelle & Board.
+  return (
+    <ContactDrawerProvider>
+      <PipelineDetailInner {...props} />
+    </ContactDrawerProvider>
+  );
+}
+
+function PipelineDetailInner({
   pipelineId,
   pipelineName,
   stages,
@@ -74,6 +93,7 @@ export function PipelineDetail({
   contacts: ContactOption[];
   pipelineCount: number;
 }) {
+  const { open: openContact } = useContactDrawer();
   const ordered = useMemo(
     () => [...stages].sort((a, b) => a.position - b.position),
     [stages],
@@ -343,8 +363,42 @@ export function PipelineDetail({
                     </tr>
                   ) : (
                     rows.map((d) => (
-                      <tr key={d.id} className="hover:bg-bg/50 transition">
-                        <td className="px-4 py-3">
+                      <tr
+                        key={d.id}
+                        onClick={() => d.contactId && openContact(d.contactId)}
+                        onKeyDown={
+                          d.contactId
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  openContact(d.contactId as string);
+                                }
+                              }
+                            : undefined
+                        }
+                        tabIndex={d.contactId ? 0 : undefined}
+                        role={d.contactId ? "button" : undefined}
+                        aria-label={
+                          d.contactId
+                            ? `Kontakt ${
+                                [d.firstName, d.lastName]
+                                  .filter(Boolean)
+                                  .join(" ") ||
+                                d.email ||
+                                ""
+                              } öffnen`
+                            : undefined
+                        }
+                        className={`hover:bg-bg/50 transition ${
+                          d.contactId
+                            ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
+                            : ""
+                        }`}
+                      >
+                        <td
+                          className="px-4 py-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <input type="checkbox" aria-label="Auswählen" />
                         </td>
                         {cols.map((col) => (
@@ -429,15 +483,10 @@ function DealCell({
 }) {
   switch (col) {
     case "firstName":
-      return deal.contactId ? (
-        <Link
-          href={`/crm/${deal.contactId}`}
-          className="font-medium text-ink hover:underline"
-        >
+      return (
+        <span className="font-medium text-ink hover:underline">
           {deal.firstName || "—"}
-        </Link>
-      ) : (
-        <span className="text-ink">{deal.firstName || "—"}</span>
+        </span>
       );
     case "lastName":
       return <span className="text-ink">{deal.lastName || "—"}</span>;
@@ -449,7 +498,11 @@ function DealCell({
       return <span className="text-sub">{fmtDateTime(deal.createdAt)}</span>;
     case "phone":
       return deal.phone ? (
-        <a href={`tel:${deal.phone}`} className="text-accent-ink hover:underline">
+        <a
+          href={`tel:${deal.phone}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-accent-ink hover:underline"
+        >
           {deal.phone}
         </a>
       ) : (
@@ -457,7 +510,11 @@ function DealCell({
       );
     case "email":
       return deal.email ? (
-        <a href={`mailto:${deal.email}`} className="text-ink hover:underline">
+        <a
+          href={`mailto:${deal.email}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-ink hover:underline"
+        >
           {deal.email}
         </a>
       ) : (

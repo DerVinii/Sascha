@@ -3,14 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { contacts, companies, tags } from "@/db/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import {
+  contacts,
+  companies,
+  tags,
+  pipelines,
+  pipelineStages,
+  deals,
+} from "@/db/schema";
+import { eq, and, sql, inArray, desc, asc } from "drizzle-orm";
 import { requireActiveOrg, assertOrgAccess } from "@/lib/server/active-org";
 import { deleteDealsForContacts } from "@/lib/server/pipeline-sync";
 import { getOrgSettings } from "@/lib/server/org-settings";
 import { sendPushToOrg } from "@/lib/server/push";
 import {
   parseContactFieldDefs,
+  parseContactFieldValues,
+  type ContactFieldDef,
   type ContactFieldValue,
 } from "@/lib/contact-fields";
 
@@ -216,6 +225,192 @@ export async function deleteContactAction(contactId: string) {
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/pipelines");
   redirect("/crm");
+}
+
+// ============================================================================
+// KONTAKT-SCHNELLANSICHT (Einschiebe-Panel in Kontakte & Pipelines)
+// ============================================================================
+
+/** Alle Daten, die das Kontakt-Panel zum Anzeigen & Bearbeiten braucht. */
+export type ContactDrawerDetail = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  status: ContactStatus;
+  companyName: string | null;
+  tags: string[];
+  fieldDefs: ContactFieldDef[];
+  fieldValues: Record<string, ContactFieldValue>;
+  orgTags: { name: string; color: string | null }[];
+  deals: {
+    id: string;
+    title: string;
+    valueEur: number | null;
+    pipelineId: string;
+    pipelineName: string;
+    stageName: string;
+    stageColor: string | null;
+  }[];
+};
+
+/**
+ * Lädt einen Kontakt inkl. individueller Felder, Tags und Deals für das
+ * Einschiebe-Panel. Bewusst schlank gehalten (keine Notizen/Aktivitäten/
+ * Mail-Historie) — die stehen weiterhin auf der vollständigen Detailseite.
+ */
+export async function getContactDetailAction(
+  contactId: string,
+): Promise<ContactDrawerDetail> {
+  const org = await requireActiveOrg();
+
+  const [contact] = await db
+    .select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+      email: contacts.email,
+      phone: contacts.phone,
+      source: contacts.source,
+      status: contacts.status,
+      tags: contacts.tags,
+      customFields: contacts.customFields,
+      companyName: companies.name,
+    })
+    .from(contacts)
+    .leftJoin(companies, eq(contacts.companyId, companies.id))
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)))
+    .limit(1);
+
+  if (!contact) throw new Error("Kontakt nicht gefunden.");
+
+  const [orgSettings, orgTags, contactDeals] = await Promise.all([
+    getOrgSettings(org.id),
+    db
+      .select({ name: tags.name, color: tags.color })
+      .from(tags)
+      .where(eq(tags.orgId, org.id))
+      .orderBy(asc(tags.name)),
+    db
+      .select({
+        id: deals.id,
+        title: deals.title,
+        valueEur: deals.valueEur,
+        pipelineId: deals.pipelineId,
+        pipelineName: pipelines.name,
+        stageName: pipelineStages.name,
+        stageColor: pipelineStages.color,
+      })
+      .from(deals)
+      .innerJoin(pipelines, eq(deals.pipelineId, pipelines.id))
+      .innerJoin(pipelineStages, eq(deals.stageId, pipelineStages.id))
+      .where(and(eq(deals.contactId, contactId), eq(deals.orgId, org.id)))
+      .orderBy(desc(deals.createdAt)),
+  ]);
+
+  return {
+    id: contact.id,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    phone: contact.phone,
+    source: contact.source,
+    status: contact.status,
+    companyName: contact.companyName,
+    tags: contact.tags,
+    fieldDefs: parseContactFieldDefs(orgSettings),
+    fieldValues: parseContactFieldValues(contact.customFields),
+    orgTags,
+    deals: contactDeals,
+  };
+}
+
+/**
+ * Speichert die Stammdaten eines Kontakts (Name, E-Mail, Telefon, Quelle,
+ * Firma). Die Firma wird — wie beim Anlegen — anhand des Namens
+ * wiederverwendet oder neu erstellt; ein leerer Name löst die Verknüpfung.
+ */
+export async function updateContactCoreAction(
+  contactId: string,
+  patch: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+    source: string | null;
+    companyName: string | null;
+  },
+): Promise<void> {
+  const org = await requireActiveOrg();
+
+  const norm = (v: string | null, max = 500): string | null => {
+    const s = (v ?? "").trim();
+    return s ? s.slice(0, max) : null;
+  };
+
+  // Aktuellen Stand laden (auch für die Org-Prüfung).
+  const [current] = await db
+    .select({
+      companyId: contacts.companyId,
+      companyName: companies.name,
+    })
+    .from(contacts)
+    .leftJoin(companies, eq(contacts.companyId, companies.id))
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)))
+    .limit(1);
+  if (!current) throw new Error("Kontakt nicht gefunden.");
+
+  const desiredName = (patch.companyName ?? "").trim();
+  let companyId: string | null;
+  if (!desiredName) {
+    // Firma bewusst entfernt → Verknüpfung lösen.
+    companyId = null;
+  } else if (
+    current.companyName &&
+    current.companyName.trim() === desiredName
+  ) {
+    // Name unverändert → bestehende Verknüpfung behalten. Wichtig: sonst würde
+    // jede Bearbeitung eines anderen Feldes (z. B. Telefon) die Firma neu
+    // auflösen und könnte bei gleichnamigen Firmen die falsche verknüpfen oder
+    // eine neue anlegen.
+    companyId = current.companyId;
+  } else {
+    // Name geändert → vorhandene Firma wiederverwenden oder neu anlegen.
+    const existing = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(and(eq(companies.orgId, org.id), eq(companies.name, desiredName)))
+      .limit(1);
+    if (existing[0]) {
+      companyId = existing[0].id;
+    } else {
+      const [c] = await db
+        .insert(companies)
+        .values({ orgId: org.id, name: desiredName })
+        .returning({ id: companies.id });
+      companyId = c.id;
+    }
+  }
+
+  await db
+    .update(contacts)
+    .set({
+      firstName: norm(patch.firstName, 200),
+      lastName: norm(patch.lastName, 200),
+      email: norm(patch.email, 320),
+      phone: norm(patch.phone, 100),
+      source: norm(patch.source, 200),
+      companyId,
+    })
+    .where(and(eq(contacts.id, contactId), eq(contacts.orgId, org.id)));
+
+  revalidatePath("/crm");
+  revalidatePath("/pipelines");
+  revalidatePath("/vertrieb");
+  revalidatePath("/vertrieb/scraping");
+  revalidatePath(`/crm/${contactId}`);
 }
 
 // ============================================================================

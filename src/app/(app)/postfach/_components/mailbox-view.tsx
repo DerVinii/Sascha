@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Inbox,
   Send,
@@ -107,11 +107,14 @@ export function MailboxView({
   initialFolder,
   initialList,
   senderEmail,
+  initialComposeTo,
 }: {
   folders: MailboxFolder[];
   initialFolder: string;
   initialList: { items: MailboxListItem[]; total: number };
   senderEmail: string;
+  /** Aus dem Kontakt-Panel: Verfassen-Dialog direkt mit diesem Empfänger öffnen. */
+  initialComposeTo?: string;
 }) {
   const [folders, setFolders] = useState(initialFolders);
   const [activeFolder, setActiveFolder] = useState(initialFolder);
@@ -132,6 +135,30 @@ export function MailboxView({
     () => folders.find((f) => f.path === activeFolder) ?? null,
     [folders, activeFolder],
   );
+
+  // Aus dem Kontakt-Panel angesprungen (?compose=…): Verfassen-Dialog mit
+  // vorausgefülltem Empfänger öffnen und den Parameter danach entfernen, damit
+  // ein Reload den Dialog nicht erneut aufmacht. Das Strippen läuft bewusst
+  // clientseitig über history.replaceState — router.replace würde die
+  // force-dynamic-Seite neu rendern und einen zweiten (verworfenen) IMAP-Abruf
+  // auslösen.
+  const composedRef = useRef(false);
+  useEffect(() => {
+    if (initialComposeTo && !composedRef.current) {
+      composedRef.current = true;
+      setComposer({
+        title: "Neue E-Mail",
+        to: initialComposeTo,
+        cc: "",
+        bcc: "",
+        subject: "",
+        body: "",
+        inReplyTo: null,
+        references: null,
+      });
+      window.history.replaceState(window.history.state, "", "/postfach");
+    }
+  }, [initialComposeTo]);
 
   function bumpUnread(folderPath: string, delta: number) {
     setFolders((prev) =>
