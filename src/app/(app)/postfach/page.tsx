@@ -1,6 +1,6 @@
 import { Inbox, AlertTriangle } from "lucide-react";
 import { getMailboxConfig } from "@/lib/server/mailbox/config";
-import { listFolders, listMessages } from "@/lib/server/mailbox/imap";
+import { getMailboxOverview } from "@/lib/server/mailbox/imap";
 import { folderSortRank } from "@/lib/mailbox-ui";
 import { MailboxView } from "./_components/mailbox-view";
 
@@ -20,19 +20,17 @@ export default async function PostfachPage() {
   }
 
   try {
-    const folders = (await listFolders()).sort(
+    // Ordner + erste Inbox-Seite kommen in EINER IMAP-Verbindung.
+    const overview = await getMailboxOverview();
+    const folders = overview.folders.sort(
       (a, b) => folderSortRank(a) - folderSortRank(b) || a.name.localeCompare(b.name),
     );
-    const inbox = folders.find((f) => f.specialUse === "\\Inbox") ?? folders[0];
-    const initialList = inbox
-      ? await listMessages(inbox.path, {})
-      : { items: [], total: 0 };
 
     return (
       <MailboxView
         folders={folders}
-        initialFolder={inbox?.path ?? "INBOX"}
-        initialList={initialList}
+        initialFolder={overview.inboxPath}
+        initialList={overview.list}
         senderEmail={cfg.email}
       />
     );

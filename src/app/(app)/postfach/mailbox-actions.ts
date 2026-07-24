@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import {
   deleteMessage,
   getMessage,
@@ -16,6 +15,11 @@ import type {
   MailboxListItem,
   MailboxMessage,
 } from "@/lib/mailbox-ui";
+
+// Bewusst KEIN revalidatePath in diesen Actions: die Client-Komponente hält
+// ihren Zustand selbst aktuell (optimistische Updates + gezieltes Nachladen).
+// revalidatePath würde bei jedem Klick die komplette Seite serverseitig neu
+// rendern — inklusive erneutem Ordner- und Inbox-Abruf über IMAP.
 
 export async function listFoldersAction(): Promise<MailboxFolder[]> {
   return listFolders();
@@ -36,9 +40,7 @@ export async function openMessageAction(input: {
   folder: string;
   uid: number;
 }): Promise<MailboxMessage> {
-  const msg = await getMessage(input.folder, input.uid);
-  revalidatePath("/postfach");
-  return msg;
+  return getMessage(input.folder, input.uid);
 }
 
 export async function setSeenAction(input: {
@@ -47,7 +49,6 @@ export async function setSeenAction(input: {
   seen: boolean;
 }): Promise<void> {
   await setSeen(input.folder, input.uid, input.seen);
-  revalidatePath("/postfach");
 }
 
 export async function toggleFlagAction(input: {
@@ -56,7 +57,6 @@ export async function toggleFlagAction(input: {
   flagged: boolean;
 }): Promise<void> {
   await setFlagged(input.folder, input.uid, input.flagged);
-  revalidatePath("/postfach");
 }
 
 export async function moveMessageAction(input: {
@@ -65,7 +65,6 @@ export async function moveMessageAction(input: {
   target: string;
 }): Promise<void> {
   await moveMessage(input.folder, input.uid, input.target);
-  revalidatePath("/postfach");
 }
 
 export async function deleteMessageAction(input: {
@@ -73,7 +72,6 @@ export async function deleteMessageAction(input: {
   uid: number;
 }): Promise<void> {
   await deleteMessage(input.folder, input.uid);
-  revalidatePath("/postfach");
 }
 
 /** Plain-Text → schlichtes, escaptes HTML (wie in der Unibox). */
@@ -125,6 +123,4 @@ export async function sendMailAction(formData: FormData): Promise<void> {
     references,
     attachments: attachments.length ? attachments : undefined,
   });
-
-  revalidatePath("/postfach");
 }

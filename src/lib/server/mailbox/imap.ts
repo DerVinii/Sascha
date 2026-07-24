@@ -1,13 +1,18 @@
 /**
- * IMAP-Zugriff auf das echte Postfach (Webador). Serverless-tauglich:
- * pro Aufruf verbinden → Operation → trennen. Kein DB-Spiegel, alles live.
+ * IMAP-Zugriff auf das echte Postfach (Webador). Kein DB-Spiegel, alles live.
+ *
+ * Performance: Die Verbindung wird über einen kleinen Pool zwischen Requests
+ * wiederverwendet (spart TLS-Handshake + Login ≈ 6–8 Roundtrips pro Aufruf).
+ * Vor der Wiederverwendung wird sie per NOOP geprüft; ist sie tot oder gerade
+ * belegt, wird transparent eine frische Verbindung geöffnet. Verhalten und
+ * Semantik bleiben identisch zur Verbindung-pro-Request-Variante.
  *
  * Nur serverseitig importieren (liest die Zugangsdaten aus config.ts).
  */
 
 import { ImapFlow, type ListResponse } from "imapflow";
 import { simpleParser, type AddressObject } from "mailparser";
-import { requireMailboxConfig } from "./config";
+import { requireMailboxConfig, type MailboxConfig } from "./config";
 import type {
   MailAddress,
   MailAttachment,
@@ -18,9 +23,53 @@ import type {
 
 const PAGE_SIZE = 30;
 
-/** Öffnet eine IMAP-Verbindung, führt `fn` aus und trennt sicher wieder. */
-export async function withImap<T>(fn: (c: ImapFlow) => Promise<T>): Promise<T> {
-  const cfg = requireMailboxConfig();
+// --- Verbindungs-Pool --------------------------------------------------------
+
+type Pooled = {
+  client: ImapFlow;
+  busy: boolean;
+  lastUsed: number;
+  connectedAt: number;
+  key: string;
+};
+
+let pool: Pooled | null = null;
+
+/** NOOP-Check nur, wenn die Verbindung länger als so viele ms unbenutzt war. */
+const VERIFY_AFTER_MS = 10_000;
+/** Verbindung vor einem möglichen Server-Autologout proaktiv recyceln. */
+const MAX_AGE_MS = 20 * 60_000;
+
+function poolKey(cfg: MailboxConfig): string {
+  return `${cfg.email}@${cfg.imapHost}:${cfg.imapPort}`;
+}
+
+function closeQuiet(client: ImapFlow) {
+  try {
+    client.close();
+  } catch {
+    /* schon zu */
+  }
+}
+
+async function verifyAlive(client: ImapFlow): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.noop(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("noop timeout")), 1500);
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function createClient(cfg: MailboxConfig): Promise<ImapFlow> {
   const client = new ImapFlow({
     host: cfg.imapHost,
     port: cfg.imapPort,
@@ -30,17 +79,87 @@ export async function withImap<T>(fn: (c: ImapFlow) => Promise<T>): Promise<T> {
     logger: false,
     emitLogs: false,
   });
+  // Fehler-/Close-Events dürfen den Prozess nicht crashen; toten Pool leeren.
+  client.on("error", () => {
+    if (pool?.client === client && !pool.busy) pool = null;
+  });
+  client.on("close", () => {
+    if (pool?.client === client && !pool.busy) pool = null;
+  });
   await client.connect();
+  return client;
+}
+
+/**
+ * Führt `fn` mit einer verbundenen IMAP-Session aus. Reihenfolge:
+ * 1. gesunde Leerlauf-Verbindung aus dem Pool, sonst
+ * 2. frische Verbindung (wird zum neuen Pool-Eintrag, wenn der Slot frei ist;
+ *    parallel laufende Requests bekommen eine Wegwerf-Verbindung).
+ */
+export async function withImap<T>(fn: (c: ImapFlow) => Promise<T>): Promise<T> {
+  const cfg = requireMailboxConfig();
+  const key = poolKey(cfg);
+
+  const p = pool;
+  if (p && !p.busy && p.key === key) {
+    p.busy = true;
+    const aged = Date.now() - p.connectedAt > MAX_AGE_MS;
+    const idle = Date.now() - p.lastUsed > VERIFY_AFTER_MS;
+    const alive =
+      !aged && p.client.usable && (!idle || (await verifyAlive(p.client)));
+    if (alive) {
+      try {
+        return await fn(p.client);
+      } finally {
+        if (pool === p) {
+          if (p.client.usable) {
+            p.busy = false;
+            p.lastUsed = Date.now();
+          } else {
+            pool = null;
+            closeQuiet(p.client);
+          }
+        }
+      }
+    }
+    // Verbindung ist tot/überaltert → verwerfen und unten frisch verbinden.
+    if (pool === p) pool = null;
+    closeQuiet(p.client);
+  }
+
+  const client = await createClient(cfg);
+  const mine: Pooled = {
+    client,
+    busy: true,
+    lastUsed: Date.now(),
+    connectedAt: Date.now(),
+    key,
+  };
+  const adopt = pool === null;
+  if (adopt) pool = mine;
   try {
     return await fn(client);
   } finally {
-    try {
-      await client.logout();
-    } catch {
-      /* Verbindung war schon zu — egal */
+    if (adopt && pool === mine) {
+      if (client.usable) {
+        mine.busy = false;
+        mine.lastUsed = Date.now();
+      } else {
+        pool = null;
+        closeQuiet(client);
+      }
+    } else if (!adopt) {
+      // Wegwerf-Verbindung (Pool war belegt) sauber schließen.
+      try {
+        await client.logout();
+      } catch {
+        /* Verbindung war schon zu — egal */
+      }
     }
   }
 }
+
+// --- Mapping-Helfer ----------------------------------------------------------
 
 function mapAddr(list: unknown): MailAddress[] {
   if (!Array.isArray(list)) return [];
@@ -94,32 +213,48 @@ function specialUseOf(f: ListResponse): string | null {
   return null;
 }
 
-export async function listFolders(): Promise<MailboxFolder[]> {
-  return withImap(async (c) => {
-    const list = await c.list();
-    const out: MailboxFolder[] = [];
-    for (const f of list) {
-      if (f.flags?.has("\\Noselect")) continue;
-      let total = 0;
-      let unread = 0;
+// --- Ordner ------------------------------------------------------------------
+
+async function listFoldersOn(c: ImapFlow): Promise<MailboxFolder[]> {
+  // LIST-STATUS liefert die Zähler aller Ordner in EINEM Roundtrip mit;
+  // Fallback (Server ohne Extension): STATUS je Ordner wie früher.
+  let list: ListResponse[];
+  try {
+    list = await c.list({ statusQuery: { messages: true, unseen: true } });
+  } catch {
+    list = await c.list();
+  }
+  const out: MailboxFolder[] = [];
+  for (const f of list) {
+    if (f.flags?.has("\\Noselect")) continue;
+    let total = f.status?.messages ?? null;
+    let unread = f.status?.unseen ?? null;
+    if (total === null || unread === null) {
       try {
         const st = await c.status(f.path, { messages: true, unseen: true });
         total = st.messages ?? 0;
         unread = st.unseen ?? 0;
       } catch {
-        /* manche Ordner lassen sich nicht statusen — mit 0 anzeigen */
+        total = total ?? 0;
+        unread = unread ?? 0;
       }
-      out.push({
-        path: f.path,
-        name: f.name,
-        specialUse: specialUseOf(f),
-        total,
-        unread,
-      });
     }
-    return out;
-  });
+    out.push({
+      path: f.path,
+      name: f.name,
+      specialUse: specialUseOf(f),
+      total,
+      unread,
+    });
+  }
+  return out;
 }
+
+export async function listFolders(): Promise<MailboxFolder[]> {
+  return withImap(listFoldersOn);
+}
+
+// --- Nachrichtenliste --------------------------------------------------------
 
 const QUERY = {
   uid: true,
@@ -129,56 +264,84 @@ const QUERY = {
   bodyStructure: true,
 };
 
-export async function listMessages(
+async function listMessagesOn(
+  c: ImapFlow,
   folder: string,
   opts: { offset?: number; search?: string } = {},
 ): Promise<{ items: MailboxListItem[]; total: number }> {
   const offset = opts.offset ?? 0;
   const search = opts.search?.trim();
-  return withImap(async (c) => {
-    const lock = await c.getMailboxLock(folder);
-    try {
-      if (search) {
-        const found = await c.search(
-          {
-            or: [
-              { subject: search },
-              { from: search },
-              { to: search },
-              { body: search },
-            ],
-          },
-          { uid: true },
-        );
-        const uids = (Array.isArray(found) ? found : []).slice().reverse();
-        const page = uids.slice(offset, offset + PAGE_SIZE);
-        if (page.length === 0) return { items: [], total: uids.length };
-        const items: MailboxListItem[] = [];
-        for await (const msg of c.fetch(page.join(","), QUERY, { uid: true })) {
-          items.push(mapListItem(msg));
-        }
-        items.sort((a, b) => b.uid - a.uid);
-        return { items, total: uids.length };
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mailbox = c.mailbox as any;
-      const total: number = mailbox?.exists ?? 0;
-      if (total === 0) return { items: [], total: 0 };
-      const end = total - offset;
-      if (end < 1) return { items: [], total };
-      const start = Math.max(1, end - PAGE_SIZE + 1);
+  const lock = await c.getMailboxLock(folder);
+  try {
+    if (search) {
+      const found = await c.search(
+        {
+          or: [
+            { subject: search },
+            { from: search },
+            { to: search },
+            { body: search },
+          ],
+        },
+        { uid: true },
+      );
+      const uids = (Array.isArray(found) ? found : []).slice().reverse();
+      const page = uids.slice(offset, offset + PAGE_SIZE);
+      if (page.length === 0) return { items: [], total: uids.length };
       const items: MailboxListItem[] = [];
-      for await (const msg of c.fetch(`${start}:${end}`, QUERY)) {
+      for await (const msg of c.fetch(page.join(","), QUERY, { uid: true })) {
         items.push(mapListItem(msg));
       }
-      items.sort((a, b) => b.date.localeCompare(a.date));
-      return { items, total };
-    } finally {
-      lock.release();
+      items.sort((a, b) => b.uid - a.uid);
+      return { items, total: uids.length };
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mailbox = c.mailbox as any;
+    const total: number = mailbox?.exists ?? 0;
+    if (total === 0) return { items: [], total: 0 };
+    const end = total - offset;
+    if (end < 1) return { items: [], total };
+    const start = Math.max(1, end - PAGE_SIZE + 1);
+    const items: MailboxListItem[] = [];
+    for await (const msg of c.fetch(`${start}:${end}`, QUERY)) {
+      items.push(mapListItem(msg));
+    }
+    items.sort((a, b) => b.date.localeCompare(a.date));
+    return { items, total };
+  } finally {
+    lock.release();
+  }
+}
+
+export async function listMessages(
+  folder: string,
+  opts: { offset?: number; search?: string } = {},
+): Promise<{ items: MailboxListItem[]; total: number }> {
+  return withImap((c) => listMessagesOn(c, folder, opts));
+}
+
+/**
+ * Seitenladen von /postfach: Ordnerliste + erste Inbox-Seite in EINER
+ * Verbindung (statt zwei getrennten Connects).
+ */
+export async function getMailboxOverview(): Promise<{
+  folders: MailboxFolder[];
+  inboxPath: string;
+  list: { items: MailboxListItem[]; total: number };
+}> {
+  return withImap(async (c) => {
+    const folders = await listFoldersOn(c);
+    const inbox =
+      folders.find((f) => f.specialUse === "\\Inbox") ?? folders[0] ?? null;
+    const list = inbox
+      ? await listMessagesOn(c, inbox.path, {})
+      : { items: [], total: 0 };
+    return { folders, inboxPath: inbox?.path ?? "INBOX", list };
   });
 }
+
+// --- Einzelne Nachricht ------------------------------------------------------
 
 function addrObjToList(a: AddressObject | AddressObject[] | undefined): MailAddress[] {
   if (!a) return [];
@@ -208,11 +371,13 @@ export async function getMessage(
       if (!msg || !msg.source) throw new Error("E-Mail nicht gefunden");
       const parsed = await simpleParser(msg.source);
 
-      // Als gelesen markieren (best effort).
-      try {
-        await c.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
-      } catch {
-        /* egal */
+      // Als gelesen markieren (best effort) — nur wenn noch ungelesen.
+      if (!msg.flags?.has("\\Seen")) {
+        try {
+          await c.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
+        } catch {
+          /* egal */
+        }
       }
 
       const attachments: MailAttachment[] = (parsed.attachments ?? []).map(
@@ -288,6 +453,8 @@ export async function getAttachment(
   });
 }
 
+// --- Flags / Verschieben / Löschen ------------------------------------------
+
 export async function setSeen(
   folder: string,
   uid: number,
@@ -347,8 +514,7 @@ export async function deleteMessage(
   await withImap(async (c) => {
     const list = await c.list();
     const trash = list.find((f) => f.specialUse === "\\Trash");
-    const inTrash =
-      trash && trash.path === folder;
+    const inTrash = trash && trash.path === folder;
     const lock = await c.getMailboxLock(folder);
     try {
       if (!trash || inTrash) {
