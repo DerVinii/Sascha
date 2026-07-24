@@ -13,8 +13,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  EVENT_TYPE_META,
-  EVENT_TYPE_ORDER,
   addDays,
   addMonths,
   dayKey,
@@ -33,13 +31,11 @@ import {
   startOfDay,
   weekDays,
   weekdayHeaders,
-  type CalendarEventType,
   type CalendarItem,
 } from "@/lib/kalender";
 import { EventDialog, type ContactOption, type DialogTarget } from "./event-dialog";
 
 type ViewMode = "month" | "week";
-type TypeFilter = CalendarEventType | "all";
 
 export function CalendarView({
   items,
@@ -63,14 +59,12 @@ export function CalendarView({
   const [view, setView] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState<Date>(anchor);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [dialogTarget, setDialogTarget] = useState<DialogTarget | null>(null);
 
   // Items nach lokalem Tag gruppieren (nach Filter), pro Tag chronologisch.
   const itemsByDay = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
     for (const it of items) {
-      if (typeFilter !== "all" && it.type !== typeFilter) continue;
       const key = dayKey(new Date(it.start));
       const arr = map.get(key);
       if (arr) arr.push(it);
@@ -85,7 +79,7 @@ export function CalendarView({
       });
     }
     return map;
-  }, [items, typeFilter]);
+  }, [items]);
 
   function eventsOf(d: Date): CalendarItem[] {
     return itemsByDay.get(dayKey(d)) ?? [];
@@ -182,20 +176,6 @@ export function CalendarView({
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 ml-auto">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="h-9 px-2 rounded-md border border-line text-sm bg-surface text-ink"
-            aria-label="Nach Art filtern"
-          >
-            <option value="all">Alle Arten</option>
-            {EVENT_TYPE_ORDER.map((t) => (
-              <option key={t} value={t}>
-                {EVENT_TYPE_META[t].label}
-              </option>
-            ))}
-          </select>
-
           <div className="inline-flex rounded-md border border-line overflow-hidden">
             <button
               onClick={() => setView("week")}
