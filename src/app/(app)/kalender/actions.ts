@@ -6,6 +6,17 @@ import { db } from "@/db";
 import { calendarEvents } from "@/db/schema";
 import { requireActiveOrg } from "@/lib/server/active-org";
 import type { CalendarEventType } from "@/lib/kalender";
+import {
+  disconnectGoogle,
+  getGoogleAccount,
+} from "@/lib/server/google/oauth";
+import {
+  pullFromGoogle,
+  pushCreateToGoogle,
+  pushDeleteToGoogle,
+  pushUpdateToGoogle,
+  type PullResult,
+} from "@/lib/server/google/calendar";
 
 const VALID_TYPES: CalendarEventType[] = [
   "meeting",
@@ -59,7 +70,24 @@ function normalize(input: EventInput) {
 export async function createEventAction(input: EventInput): Promise<void> {
   const org = await requireActiveOrg();
   const v = normalize(input);
-  await db.insert(calendarEvents).values({ orgId: org.id, ...v });
+  const [row] = await db
+    .insert(calendarEvents)
+    .values({ orgId: org.id, ...v })
+    .returning({ id: calendarEvents.id });
+
+  // App → Google: Termin bei verbundenem Konto anlegen, ID zurückschreiben.
+  const account = await getGoogleAccount(org.id);
+  if (account && row) {
+    try {
+      const googleEventId = await pushCreateToGoogle(account, v);
+      await db
+        .update(calendarEvents)
+        .set({ googleEventId })
+        .where(eq(calendarEvents.id, row.id));
+    } catch (e) {
+      console.error("[google] Push (create) fehlgeschlagen:", e);
+    }
+  }
   revalidatePath("/kalender");
 }
 
@@ -69,17 +97,62 @@ export async function updateEventAction(
 ): Promise<void> {
   const org = await requireActiveOrg();
   const v = normalize(input);
-  await db
+  const [row] = await db
     .update(calendarEvents)
     .set(v)
-    .where(and(eq(calendarEvents.orgId, org.id), eq(calendarEvents.id, id)));
+    .where(and(eq(calendarEvents.orgId, org.id), eq(calendarEvents.id, id)))
+    .returning({ googleEventId: calendarEvents.googleEventId });
+
+  const account = await getGoogleAccount(org.id);
+  if (account && row) {
+    try {
+      if (row.googleEventId) {
+        await pushUpdateToGoogle(account, row.googleEventId, v);
+      } else {
+        // Lokal entstandener Termin wird beim ersten Edit nach Google gehoben.
+        const googleEventId = await pushCreateToGoogle(account, v);
+        await db
+          .update(calendarEvents)
+          .set({ googleEventId })
+          .where(eq(calendarEvents.id, id));
+      }
+    } catch (e) {
+      console.error("[google] Push (update) fehlgeschlagen:", e);
+    }
+  }
   revalidatePath("/kalender");
 }
 
 export async function deleteEventAction(id: string): Promise<void> {
   const org = await requireActiveOrg();
-  await db
+  const [row] = await db
     .delete(calendarEvents)
-    .where(and(eq(calendarEvents.orgId, org.id), eq(calendarEvents.id, id)));
+    .where(and(eq(calendarEvents.orgId, org.id), eq(calendarEvents.id, id)))
+    .returning({ googleEventId: calendarEvents.googleEventId });
+
+  const account = await getGoogleAccount(org.id);
+  if (account && row?.googleEventId) {
+    try {
+      await pushDeleteToGoogle(account, row.googleEventId);
+    } catch (e) {
+      console.error("[google] Push (delete) fehlgeschlagen:", e);
+    }
+  }
   revalidatePath("/kalender");
+}
+
+/** Manueller/automatischer Abgleich Google → App (aus dem Kalender-UI). */
+export async function syncGoogleAction(): Promise<PullResult> {
+  const org = await requireActiveOrg();
+  const result = await pullFromGoogle(org.id);
+  revalidatePath("/kalender");
+  return result;
+}
+
+/** Google-Verbindung trennen (Tokens löschen). Lokale Termine bleiben. */
+export async function disconnectGoogleAction(): Promise<void> {
+  const org = await requireActiveOrg();
+  await disconnectGoogle(org.id);
+  revalidatePath("/kalender");
+  revalidatePath("/einstellungen/kalender");
 }

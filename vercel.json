@@ -2,6 +2,7 @@
   "framework": "nextjs",
   "regions": ["fra1"],
   "crons": [
-    { "path": "/api/enrichment/run", "schedule": "0 4 * * *" }
+    { "path": "/api/enrichment/run", "schedule": "0 4 * * *" },
+    { "path": "/api/google/sync", "schedule": "0 5 * * *" }
   ]
 }

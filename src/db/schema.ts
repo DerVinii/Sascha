@@ -495,6 +495,12 @@ export const calendarEvents = pgTable(
     contactId: uuid("contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),
+    /**
+     * Verknüpfung mit dem Google-Kalender-Termin. Gesetzt, wenn dieser Termin
+     * aus Google importiert oder von uns nach Google gepusht wurde — verhindert
+     * Doppelanlage und erlaubt gezieltes Patch/Delete beim Sync.
+     */
+    googleEventId: text("google_event_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -502,8 +508,36 @@ export const calendarEvents = pgTable(
   (t) => [
     index("calendar_events_org_idx").on(t.orgId),
     index("calendar_events_start_idx").on(t.startAt),
+    index("calendar_events_google_idx").on(t.googleEventId),
   ],
 );
+
+/**
+ * OAuth-Verbindung zum Google-Kalender (pro Organisation genau eine).
+ * Speichert die Tokens (AES-256-GCM-verschlüsselt via GOOGLE_TOKEN_SECRET),
+ * den gewählten Kalender und den `syncToken` für inkrementellen Abgleich.
+ */
+export const googleAccounts = pgTable("google_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  email: text("email"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  calendarId: text("calendar_id").default("primary").notNull(),
+  syncToken: text("sync_token"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 // ============================================================================
 // HOOKS für spätere Phasen (Schema angelegt, in Phase 1 ungenutzt)

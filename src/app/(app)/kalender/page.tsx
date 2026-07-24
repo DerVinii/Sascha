@@ -8,7 +8,9 @@ import {
   type CalendarEventType,
   type CalendarItem,
 } from "@/lib/kalender";
+import { getGoogleAccount } from "@/lib/server/google/oauth";
 import { CalendarView } from "./_components/calendar-view";
+import { GoogleSyncBar } from "./_components/google-sync-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -137,12 +139,26 @@ export default async function KalenderPage({
     name: contactName(c.firstName, c.lastName) ?? "(ohne Namen)",
   }));
 
+  const googleAccount = await getGoogleAccount(org.id);
+
   return (
-    <CalendarView
-      items={items}
-      contactOptions={contactOptions}
-      anchorMonth={`${year}-${String(month + 1).padStart(2, "0")}`}
-      todayIso={today.toISOString()}
-    />
+    <div>
+      <div className="px-4 pt-4 md:px-6">
+        <GoogleSyncBar
+          connected={Boolean(googleAccount)}
+          lastSyncedAt={
+            googleAccount?.lastSyncedAt
+              ? googleAccount.lastSyncedAt.toISOString()
+              : null
+          }
+        />
+      </div>
+      <CalendarView
+        items={items}
+        contactOptions={contactOptions}
+        anchorMonth={`${year}-${String(month + 1).padStart(2, "0")}`}
+        todayIso={today.toISOString()}
+      />
+    </div>
   );
 }
