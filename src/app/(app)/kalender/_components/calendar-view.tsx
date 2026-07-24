@@ -15,19 +15,20 @@ import {
 import {
   EVENT_TYPE_META,
   EVENT_TYPE_ORDER,
-  TONE_CLASSES,
   addDays,
   addMonths,
   dayKey,
+  eventColor,
   fmtDayLong,
+  fmtMonthShort,
   fmtMonthYear,
   fmtTime,
   fmtWeekdayShort,
   itemLabel,
-  itemTone,
   monthGridDays,
   monthParam,
   parseMonthParam,
+  readableOn,
   sameDay,
   startOfDay,
   weekDays,
@@ -307,12 +308,12 @@ function MonthGrid({
 }) {
   return (
     <div>
-      {/* Wochentagsleiste */}
-      <div className="grid grid-cols-7 border-b border-line bg-bg/40">
+      {/* Wochentagsleiste (Google-Stil: schlicht, zentriert, Sonntag zuerst) */}
+      <div className="grid grid-cols-7 border-b border-line">
         {weekdayHeaders().map((w) => (
           <div
             key={w}
-            className="px-2 py-2 text-[11px] font-medium text-sub tracking-wide text-center md:text-left"
+            className="px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-sub text-center"
           >
             {w}
           </div>
@@ -323,55 +324,73 @@ function MonthGrid({
         {days.map((d) => {
           const inMonth = d.getMonth() === cursor.getMonth();
           const isToday = sameDay(d, today);
+          const isFirst = d.getDate() === 1;
           const dayItems = eventsOf(d);
           return (
             <div
               key={dayKey(d)}
+              role="button"
+              tabIndex={0}
+              aria-label={fmtDayLong(d)}
               onClick={() => onSelectDay(d)}
-              className={`min-h-[84px] md:min-h-[104px] border-b border-r border-line p-1.5 cursor-pointer transition hover:bg-bg/60 ${
-                inMonth ? "" : "bg-bg/30"
-              }`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectDay(d);
+                }
+              }}
+              className="min-h-[96px] md:min-h-[120px] border-b border-r border-line px-1 pt-1.5 pb-1 cursor-pointer transition hover:bg-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
             >
-              <div className="flex items-center justify-between">
+              {/* Tageszahl oben zentriert */}
+              <div className="flex justify-center">
                 <span
-                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                  className={`inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1.5 text-xs leading-none ${
                     isToday
-                      ? "bg-brand text-white font-semibold"
+                      ? "bg-accent text-white font-semibold"
                       : inMonth
                         ? "text-ink"
                         : "text-sub"
                   }`}
                 >
-                  {d.getDate()}
+                  {!isToday && isFirst
+                    ? `${d.getDate()}. ${fmtMonthShort(d)}`
+                    : d.getDate()}
                 </span>
-                {dayItems.length > 0 && (
-                  <span className="md:hidden text-[10px] text-sub">
-                    {dayItems.length}
-                  </span>
-                )}
               </div>
 
-              {/* Desktop: Event-Chips */}
-              <div className="hidden md:block mt-1 space-y-0.5">
+              {/* Desktop: Events im Google-Stil */}
+              <div className="hidden md:block mt-1 space-y-[2px]">
                 {dayItems.slice(0, 3).map((it) => (
                   <EventChip key={it.id} item={it} onOpen={onOpenItem} />
                 ))}
                 {dayItems.length > 3 && (
-                  <div className="px-1 text-[11px] text-sub">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectDay(d);
+                    }}
+                    className="w-full text-left px-1.5 text-[11px] font-medium text-sub hover:text-ink"
+                  >
                     +{dayItems.length - 3} mehr
-                  </div>
+                  </button>
                 )}
               </div>
 
-              {/* Mobile: farbige Punkte */}
+              {/* Mobile: farbige Punkte (+ Überlauf-Zähler ab 5 Terminen) */}
               {dayItems.length > 0 && (
-                <div className="md:hidden mt-1 flex flex-wrap gap-0.5">
+                <div className="md:hidden mt-1 flex flex-wrap items-center justify-center gap-0.5">
                   {dayItems.slice(0, 4).map((it) => (
                     <span
                       key={it.id}
-                      className={`h-1.5 w-1.5 rounded-full ${TONE_CLASSES[itemTone(it)].dot}`}
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: eventColor(it) }}
                     />
                   ))}
+                  {dayItems.length > 4 && (
+                    <span className="ml-0.5 text-[9px] leading-none text-sub">
+                      +{dayItems.length - 4}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -389,7 +408,26 @@ function EventChip({
   item: CalendarItem;
   onOpen: (i: CalendarItem) => void;
 }) {
-  const tone = TONE_CLASSES[itemTone(item)];
+  const color = eventColor(item);
+
+  // Ganztägig → gefüllter Balken (wie in Google Calendar).
+  if (item.allDay) {
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen(item);
+        }}
+        title={item.title}
+        className="w-full flex items-center rounded px-1.5 py-[3px] text-left transition hover:brightness-95"
+        style={{ backgroundColor: color, color: readableOn(color) }}
+      >
+        <span className="text-[11px] font-medium truncate">{item.title}</span>
+      </button>
+    );
+  }
+
+  // Mit Uhrzeit → Punkt + Zeit + Titel, ohne Füllung (wie in Google Calendar).
   return (
     <button
       onClick={(e) => {
@@ -397,15 +435,16 @@ function EventChip({
         onOpen(item);
       }}
       title={item.title}
-      className={`w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-left ${tone.chipBg} ${tone.chipText} hover:opacity-80 transition`}
+      className="w-full flex items-center gap-1.5 rounded px-1.5 py-[2px] text-left transition hover:bg-bg/70"
     >
-      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
-      {!item.allDay && (
-        <span className="text-[10px] tabular-nums shrink-0 opacity-80">
-          {fmtTime(item.start)}
-        </span>
-      )}
-      <span className="text-[11px] font-medium truncate">{item.title}</span>
+      <span
+        className="h-2 w-2 rounded-full shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      <span className="text-[11px] tabular-nums text-sub shrink-0">
+        {fmtTime(item.start)}
+      </span>
+      <span className="text-[11px] text-ink truncate">{item.title}</span>
     </button>
   );
 }
@@ -437,25 +476,25 @@ function WeekGrid({
             <div key={dayKey(d)} className="border-r border-line last:border-r-0 min-h-[360px]">
               <button
                 onClick={() => onSelectDay(d)}
-                className="w-full px-2 py-2 border-b border-line text-left hover:bg-bg/60 transition"
+                className="w-full px-2 py-2 border-b border-line text-center hover:bg-bg/50 transition"
               >
                 <div className="text-[11px] text-sub uppercase">
                   {fmtWeekdayShort(d)}
                 </div>
                 <div
-                  className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${
-                    isToday ? "bg-brand text-white font-semibold" : "text-ink"
+                  className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-sm ${
+                    isToday ? "bg-accent text-white font-semibold" : "text-ink"
                   }`}
                 >
                   {d.getDate()}
                 </div>
               </button>
-              <div className="p-1.5 space-y-1">
+              <div className="p-1.5 space-y-[3px]">
                 {dayItems.length === 0 ? (
-                  <div className="px-1 py-2 text-[11px] text-sub/70">—</div>
+                  <div className="px-1 py-2 text-[11px] text-sub/60 text-center">—</div>
                 ) : (
                   dayItems.map((it) => (
-                    <WeekChip key={it.id} item={it} onOpen={onOpenItem} />
+                    <EventChip key={it.id} item={it} onOpen={onOpenItem} />
                   ))
                 )}
               </div>
@@ -464,33 +503,6 @@ function WeekGrid({
         })}
       </div>
     </div>
-  );
-}
-
-function WeekChip({
-  item,
-  onOpen,
-}: {
-  item: CalendarItem;
-  onOpen: (i: CalendarItem) => void;
-}) {
-  const tone = TONE_CLASSES[itemTone(item)];
-  return (
-    <button
-      onClick={() => onOpen(item)}
-      className={`w-full text-left rounded-md border-l-2 pl-1.5 pr-1 py-1 ${tone.chipBg} hover:opacity-80 transition`}
-      style={{ borderLeftColor: "currentColor" }}
-    >
-      <div className={`flex items-center gap-1 ${tone.chipText}`}>
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
-        <span className="text-[10px] tabular-nums">
-          {item.allDay ? "Ganztägig" : fmtTime(item.start)}
-        </span>
-      </div>
-      <div className="text-[11px] font-medium text-ink truncate">
-        {item.title}
-      </div>
-    </button>
   );
 }
 
@@ -576,16 +588,21 @@ function DayRow({
   item: CalendarItem;
   onOpen: (i: CalendarItem) => void;
 }) {
-  const tone = TONE_CLASSES[itemTone(item)];
+  const color = eventColor(item);
   return (
     <button
       onClick={() => onOpen(item)}
       className="w-full text-left rounded-lg border border-line bg-bg/40 hover:bg-bg transition p-3 flex gap-3"
     >
-      <div className={`w-1 rounded-full shrink-0 ${tone.bar}`} />
+      <div
+        className="w-1 rounded-full shrink-0"
+        style={{ backgroundColor: color }}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className={`text-[11px] font-medium ${tone.chipText}`}>
+          {/* Typ-Label bewusst in Theme-Grau — der farbige Balken links trägt
+              die Event-Farbe; Roh-Hex als Text wäre auf hellem Grund unlesbar. */}
+          <span className="text-[11px] font-medium text-sub">
             {itemLabel(item)}
           </span>
         </div>

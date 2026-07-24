@@ -28,55 +28,12 @@ export type CalendarItem = {
   contactName: string | null;
 };
 
-export type Tone = "accent" | "ok" | "warn" | "info" | "sub" | "err";
-
-/** Statische (Tailwind-scannbare) Klassen je Farbton. */
-export const TONE_CLASSES: Record<
-  Tone,
-  { dot: string; chipBg: string; chipText: string; bar: string }
-> = {
-  accent: {
-    dot: "bg-accent",
-    chipBg: "bg-accent-faint",
-    chipText: "text-accent-ink",
-    bar: "bg-accent",
-  },
-  ok: { dot: "bg-ok", chipBg: "bg-ok/10", chipText: "text-ok", bar: "bg-ok" },
-  warn: {
-    dot: "bg-warn",
-    chipBg: "bg-warn/10",
-    chipText: "text-warn",
-    bar: "bg-warn",
-  },
-  info: {
-    dot: "bg-info",
-    chipBg: "bg-info/10",
-    chipText: "text-info",
-    bar: "bg-info",
-  },
-  err: {
-    dot: "bg-err",
-    chipBg: "bg-err/10",
-    chipText: "text-err",
-    bar: "bg-err",
-  },
-  sub: {
-    dot: "bg-sub",
-    chipBg: "bg-bg",
-    chipText: "text-sub",
-    bar: "bg-sub",
-  },
-};
-
-export const EVENT_TYPE_META: Record<
-  CalendarEventType,
-  { label: string; tone: Tone }
-> = {
-  meeting: { label: "Meeting", tone: "accent" },
-  call: { label: "Telefonat", tone: "ok" },
-  task: { label: "Aufgabe", tone: "warn" },
-  reminder: { label: "Erinnerung", tone: "info" },
-  other: { label: "Sonstiges", tone: "sub" },
+export const EVENT_TYPE_META: Record<CalendarEventType, { label: string }> = {
+  meeting: { label: "Meeting" },
+  call: { label: "Telefonat" },
+  task: { label: "Aufgabe" },
+  reminder: { label: "Erinnerung" },
+  other: { label: "Sonstiges" },
 };
 
 /** Reihenfolge für das Typ-Auswahlmenü / Filter. */
@@ -88,29 +45,66 @@ export const EVENT_TYPE_ORDER: CalendarEventType[] = [
   "other",
 ];
 
-export function itemTone(item: CalendarItem): Tone {
-  // CRM-Aktivitäten immer in Rosé, damit sie sich von Terminen abheben.
-  if (item.source === "activity") return "err";
-  return EVENT_TYPE_META[item.type].tone;
-}
-
 export function itemLabel(item: CalendarItem): string {
   if (item.source === "activity") return "Aufgabe (CRM)";
   return EVENT_TYPE_META[item.type].label;
 }
 
 // ---------------------------------------------------------------------------
+// Google-Kalender-Farbpalette (fixe Hex-Werte, theme-unabhängig — genau wie in
+// Google Calendar, wo Event-Farben in Hell/Dunkel gleich bleiben). Standard-
+// Termine erscheinen in „Lavender", exakt wie in Saschas Google-Kalender.
+// ---------------------------------------------------------------------------
+
+export const GCAL_PALETTE = {
+  lavender: "#7986CB",
+  peacock: "#039BE5",
+  basil: "#0B8043",
+  tangerine: "#F4511E",
+  banana: "#F6BF26",
+  graphite: "#616161",
+} as const;
+
+/** Event-Farbe im Stil von Google Calendar (Hex). */
+export function eventColor(item: CalendarItem): string {
+  // CRM-Aufgaben liegen wie ein eigener „Tasks"-Kalender in Google → eigenes Blau.
+  if (item.source === "activity") return GCAL_PALETTE.peacock;
+  switch (item.type) {
+    case "call":
+      return GCAL_PALETTE.basil;
+    case "task":
+      return GCAL_PALETTE.tangerine;
+    case "reminder":
+      return GCAL_PALETTE.banana;
+    case "other":
+      return GCAL_PALETTE.graphite;
+    default:
+      return GCAL_PALETTE.lavender; // meeting = Standard
+  }
+}
+
+/** Gut lesbare Textfarbe (dunkel/weiß) auf einer gefüllten Event-Fläche. */
+export function readableOn(hex: string): "#ffffff" | "#3c4043" {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000; // wahrgenommene Helligkeit
+  return yiq >= 150 ? "#3c4043" : "#ffffff";
+}
+
+// ---------------------------------------------------------------------------
 // Datums-Helfer (lokale Zeit)
 // ---------------------------------------------------------------------------
 
-const WEEKDAYS_SHORT = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"];
+// Sonntag zuerst — wie in Google Calendar (SO MO DI MI DO FR SA).
+const WEEKDAYS_SHORT = ["SO", "MO", "DI", "MI", "DO", "FR", "SA"];
 export function weekdayHeaders(): string[] {
   return WEEKDAYS_SHORT;
 }
 
-/** Montag=0 … Sonntag=6 (statt JS-Standard Sonntag=0). */
+/** JS-Standard: Sonntag=0 … Samstag=6. */
 export function isoWeekday(d: Date): number {
-  return (d.getDay() + 6) % 7;
+  return d.getDay();
 }
 
 export function startOfDay(d: Date): Date {
@@ -159,22 +153,22 @@ export function monthParam(d: Date): string {
 }
 
 /**
- * 42 Tage (6 Wochen) für das Monatsraster, Montag-zuerst. Enthält je nach
+ * 42 Tage (6 Wochen) für das Monatsraster, Sonntag-zuerst. Enthält je nach
  * Monat führende/nachlaufende Tage der Nachbarmonate.
  */
 export function monthGridDays(year: number, month: number): Date[] {
   const first = new Date(year, month, 1);
-  const lead = isoWeekday(first);
+  const lead = isoWeekday(first); // Sonntag=0
   const startDate = new Date(year, month, 1 - lead);
   return Array.from({ length: 42 }, (_, i) =>
     new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i),
   );
 }
 
-/** Die 7 Tage der Woche (Montag-zuerst), die `d` enthält. */
+/** Die 7 Tage der Woche (Sonntag-zuerst), die `d` enthält. */
 export function weekDays(d: Date): Date[] {
-  const monday = addDays(startOfDay(d), -isoWeekday(d));
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  const sunday = addDays(startOfDay(d), -isoWeekday(d));
+  return Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
 }
 
 const fmtTimeDE = new Intl.DateTimeFormat("de-DE", {
@@ -206,4 +200,9 @@ export function fmtDayLong(d: Date): string {
 const fmtWeekdayShortDE = new Intl.DateTimeFormat("de-DE", { weekday: "short" });
 export function fmtWeekdayShort(d: Date): string {
   return fmtWeekdayShortDE.format(d);
+}
+
+const fmtMonthShortDE = new Intl.DateTimeFormat("de-DE", { month: "short" });
+export function fmtMonthShort(d: Date): string {
+  return fmtMonthShortDE.format(d);
 }
