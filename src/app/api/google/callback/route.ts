@@ -8,6 +8,7 @@ import {
   exchangeCodeForTokens,
   fetchUserEmail,
   saveConnection,
+  verifyOAuthState,
 } from "@/lib/server/google/oauth";
 import { pullFromGoogle } from "@/lib/server/google/calendar";
 
@@ -25,8 +26,7 @@ export async function GET(req: NextRequest) {
 
   const code = sp.get("code");
   const state = sp.get("state");
-  const cookieState = req.cookies.get("g_oauth_state")?.value;
-  if (!code || !state || !cookieState || state !== cookieState) {
+  if (!code || !verifyOAuthState(state)) {
     return back("?fehler=state");
   }
 
@@ -36,9 +36,7 @@ export async function GET(req: NextRequest) {
     const org = await requireActiveOrg();
     await saveConnection(org.id, tokens, email);
     await pullFromGoogle(org.id); // erster Abgleich sofort
-    const res = back("?verbunden=1");
-    res.cookies.delete("g_oauth_state");
-    return res;
+    return back("?verbunden=1");
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unbekannter Fehler";
     return back(`?fehler=${encodeURIComponent(msg)}`);

@@ -5,6 +5,7 @@
  * Danach liefert `getValidAccessToken()` bei jedem Sync ein gültiges
  * Access-Token und erneuert es bei Bedarf über den Refresh-Token.
  */
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { googleAccounts } from "@/db/schema";
@@ -20,6 +21,41 @@ import {
 import { decryptToken, encryptToken } from "./crypto";
 
 export type GoogleAccount = typeof googleAccounts.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// CSRF-State (zustandslos, signiert) — übersteht den domainübergreifenden
+// Rücksprung von Google zuverlässig, ohne auf ein Cookie angewiesen zu sein.
+// ---------------------------------------------------------------------------
+
+function stateSecret(): string {
+  return (
+    process.env.GOOGLE_TOKEN_SECRET?.trim() ||
+    process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+    "sascha-oauth-fallback"
+  );
+}
+
+/** Erzeugt einen signierten State: `${timestamp}.${hmac}`. */
+export function createOAuthState(): string {
+  const ts = Date.now().toString();
+  const sig = createHmac("sha256", stateSecret()).update(ts).digest("hex");
+  return `${ts}.${sig}`;
+}
+
+/** Prüft Signatur und Alter (max. 10 Minuten) des States. */
+export function verifyOAuthState(state: string | null): boolean {
+  if (!state) return false;
+  const dot = state.indexOf(".");
+  if (dot < 0) return false;
+  const ts = state.slice(0, dot);
+  const sig = state.slice(dot + 1);
+  const age = Date.now() - Number(ts);
+  if (!Number.isFinite(age) || age < 0 || age > 10 * 60 * 1000) return false;
+  const expected = createHmac("sha256", stateSecret()).update(ts).digest("hex");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /** Baut die Google-Consent-URL, zu der wir den Nutzer weiterleiten. */
 export function buildAuthUrl(origin: string, state: string): string {

@@ -12,6 +12,8 @@ import { ZUGANG_COOKIE, zugangToken } from "@/lib/zugang-token";
  * - /api/instantly/webhook (Instantly sendet keine Cookies; eigener Header-Secret)
  * - /api/enrichment/run    (Cron/Self-Chain; eigener CRON_SECRET-Bearer)
  * - /api/google/sync       (Kalender-Cron; eigener CRON_SECRET-Bearer)
+ * - /api/google/callback   (OAuth-Rücksprung von Google; eigener signierter State,
+ *                           kann das Zugang-Cookie beim Cross-Site-Redirect nicht mitsenden)
  * - /api/scrape-selftest   (curl-Selbsttest; eigener Token via ?t=)
  * - Next-Assets & Dateien mit Endung
  */
@@ -39,6 +41,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|zugang|api/instantly/webhook|api/enrichment/run|api/google/sync|api/scrape-selftest|.*\\..*).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|zugang|api/instantly/webhook|api/enrichment/run|api/google/sync|api/google/callback|api/scrape-selftest|.*\\..*).*)",
   ],
 };
