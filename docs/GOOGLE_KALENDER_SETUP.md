@@ -35,16 +35,27 @@ Dauer: ~10 Minuten.
 
 (Falls schon eingerichtet, direkt zu Schritt 4.)
 
+Zu verbindendes Konto: **saschaduble@gmail.com** (normales Gmail – funktioniert
+über OAuth ohne Sonderbehandlung). Das Cloud-Projekt selbst darf einem beliebigen
+Google-Konto gehören, nicht zwingend saschaduble.
+
 1. **„APIs & Dienste" → „OAuth-Zustimmungsbildschirm"**.
 2. Nutzertyp **„Extern"** wählen → „Erstellen".
 3. Pflichtfelder:
    - App-Name: `Sascha CRM`
-   - Support-E-Mail: Saschas Adresse
-   - Entwickler-Kontakt: Saschas Adresse
-4. Speichern und weiter durch die Schritte (Scopes/Testnutzer können leer bleiben).
-5. Wichtig: Unter **„Testnutzer"** Saschas Google-Adresse hinzufügen
-   (solange die App im „Test"-Status ist, dürfen nur eingetragene Nutzer sich
-   verbinden). Alternativ die App „Veröffentlichen".
+   - Support-E-Mail: eine eigene Adresse
+   - Entwickler-Kontakt: eine eigene Adresse
+4. Speichern und weiter durch die Schritte (Scopes können leer bleiben).
+5. **Testnutzer:** `saschaduble@gmail.com` hinzufügen (solange die App im
+   „Test"-Status ist, dürfen nur eingetragene Nutzer sich verbinden).
+
+> ⚠️ **Wichtig – 7-Tage-Ablauf umgehen:** Im Status „Testing" laufen Googles
+> Refresh-Tokens nach **7 Tagen** ab, d. h. die Sync bricht wöchentlich ab.
+> Deshalb den Zustimmungsbildschirm auf **„In Produktion" veröffentlichen**
+> (Button „App veröffentlichen"). Beim ersten Verbinden erscheint dann einmalig
+> „Google hat diese App nicht überprüft" → **Erweitert → Trotzdem fortfahren**.
+> Danach bleibt die Verbindung dauerhaft. Für ein einzelnes privates Konto ist
+> keine Google-Verifizierung nötig.
 
 ## Schritt 4 – OAuth-Client-ID erstellen
 
