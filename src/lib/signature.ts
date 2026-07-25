@@ -11,10 +11,6 @@ export type EmailSignature = {
   name: string;
   /** Fertiger HTML-Block; Bilder stecken als Data-URI drin. */
   html: string;
-  /** Wird bei neuen E-Mails automatisch eingesetzt (Outlook-Standardsignatur). */
-  defaultNew: boolean;
-  /** Wird bei Antworten/Weiterleitungen automatisch eingesetzt. */
-  defaultReply: boolean;
 };
 
 /**

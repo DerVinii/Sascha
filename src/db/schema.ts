@@ -381,9 +381,9 @@ export const emailMessages = pgTable(
  * umgewandelt (siehe lib/server/mailbox/inline-images.ts) — nur so zeigen
  * Outlook, Gmail & Co. das Bild beim Empfänger wirklich an.
  *
- * `defaultNew` / `defaultReply` bilden Outlooks „Standardsignatur auswählen"
- * ab (neue Nachrichten vs. Antworten/Weiterleitungen); pro Org ist jeweils
- * höchstens eine Signatur gesetzt.
+ * `defaultNew` / `defaultReply` stammen aus einer früheren Standardsignatur-
+ * Auswahl und werden von der App nicht mehr gelesen. Die Spalten bleiben mit
+ * ihren Defaults bestehen, damit keine Migration nötig ist.
  */
 export const emailSignatures = pgTable(
   "email_signatures",

@@ -24,19 +24,13 @@ function check(label: string, ok: boolean, detail = "") {
 
 async function main() {
   const { requireActiveOrg } = await import("../src/lib/server/active-org");
-  const {
-    createSignature,
-    deleteSignature,
-    listSignatures,
-    setDefaultSignature,
-    updateSignature,
-  } = await import("../src/lib/server/signatures");
+  const { createSignature, deleteSignature, listSignatures, updateSignature } =
+    await import("../src/lib/server/signatures");
 
   const org = await requireActiveOrg();
   console.log(`Organisation: ${org.name}\n`);
 
   const before = await listSignatures(org.id);
-  const previousDefaultNew = before.find((s) => s.defaultNew)?.id ?? null;
   let id: string | null = null;
 
   try {
@@ -47,7 +41,6 @@ async function main() {
     if (!created) throw new Error("Anlegen fehlgeschlagen");
     id = created.id;
     check("Startzustand leer", created.html === "");
-    check("kein Standard beim Anlegen", !created.defaultNew && !created.defaultReply);
 
     console.log("\n2) Speichern mit Bild");
     const html =
@@ -64,31 +57,11 @@ async function main() {
     check("Name aktualisiert", list.find((s) => s.id === id)?.name === `${TEST_NAME} 2`);
     check("HTML dabei unangetastet", list.find((s) => s.id === id)?.html.includes(PNG) === true);
 
-    console.log("\n4) Standardsignatur");
-    list = await setDefaultSignature(org.id, "new", id);
-    check("als Standard für neue Mails gesetzt", list.find((s) => s.id === id)?.defaultNew === true);
-    check(
-      "höchstens eine Standardsignatur",
-      list.filter((s) => s.defaultNew).length === 1,
-      `${list.filter((s) => s.defaultNew).length}`,
-    );
-    check(
-      "Antwort-Standard davon unberührt",
-      list.find((s) => s.id === id)?.defaultReply === false,
-    );
-
-    list = await setDefaultSignature(org.id, "new", null);
-    check("Standard wieder abwählbar", list.every((s) => !s.defaultNew));
   } finally {
-    console.log("\n5) Aufräumen");
+    console.log("\n4) Aufräumen");
     if (id) {
       const list = await deleteSignature(org.id, id);
       check("Testsignatur gelöscht", !list.some((s) => s.id === id));
-    }
-    // Ursprüngliche Standardauswahl wiederherstellen.
-    if (previousDefaultNew) {
-      await setDefaultSignature(org.id, "new", previousDefaultNew);
-      console.log("  ✓ vorheriger Standard wiederhergestellt");
     }
     const after = await listSignatures(org.id);
     check("Datenbestand wie vorher", after.length === before.length, `${after.length}/${before.length}`);

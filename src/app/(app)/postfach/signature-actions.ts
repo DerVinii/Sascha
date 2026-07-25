@@ -5,7 +5,6 @@ import {
   createSignature,
   deleteSignature,
   listSignatures,
-  setDefaultSignature,
   updateSignature,
 } from "@/lib/server/signatures";
 import type { EmailSignature } from "@/lib/signature";
@@ -45,12 +44,4 @@ export async function deleteSignatureAction(input: {
 }): Promise<EmailSignature[]> {
   const org = await requireActiveOrg();
   return deleteSignature(org.id, input.id);
-}
-
-export async function setDefaultSignatureAction(input: {
-  slot: "new" | "reply";
-  id: string | null;
-}): Promise<EmailSignature[]> {
-  const org = await requireActiveOrg();
-  return setDefaultSignature(org.id, input.slot, input.id);
 }

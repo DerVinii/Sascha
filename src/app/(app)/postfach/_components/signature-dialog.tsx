@@ -8,26 +8,22 @@ import {
   createSignatureAction,
   deleteSignatureAction,
   saveSignatureAction,
-  setDefaultSignatureAction,
 } from "../signature-actions";
 
 /**
  * Signatur-Verwaltung im Outlook-Aufbau („Signaturen und Briefpapier"):
- * links die Liste der benannten Signaturen, rechts die Standardauswahl für
- * neue Nachrichten bzw. Antworten, darunter der Editor.
+ * oben die Liste der benannten Signaturen, darunter der Editor.
  *
- * Anlegen, Löschen und die Standardauswahl werden sofort gespeichert; der
- * Inhalt der gerade offenen Signatur beim Wechsel, beim Klick auf „Speichern"
- * und beim Schließen.
+ * Anlegen und Löschen werden sofort gespeichert; der Inhalt der gerade
+ * offenen Signatur beim Wechsel, beim Klick auf „Speichern" und beim
+ * Schließen.
  */
 export function SignatureDialog({
   signatures,
-  senderEmail,
   onSignaturesChange,
   onClose,
 }: {
   signatures: EmailSignature[];
-  senderEmail: string;
   onSignaturesChange: (list: EmailSignature[]) => void;
   onClose: () => void;
 }) {
@@ -165,18 +161,6 @@ export function SignatureDialog({
     });
   }
 
-  function setDefault(slot: "new" | "reply", id: string | null) {
-    setError(null);
-    startTransition(async () => {
-      try {
-        const next = await setDefaultSignatureAction({ slot, id });
-        publish(next);
-      } catch (err) {
-        setError(message(err, "Standard konnte nicht gesetzt werden"));
-      }
-    });
-  }
-
   // Escape schließt (und speichert dabei).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -186,9 +170,6 @@ export function SignatureDialog({
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const defaultNewId = list.find((s) => s.defaultNew)?.id ?? "";
-  const defaultReplyId = list.find((s) => s.defaultReply)?.id ?? "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
@@ -213,8 +194,7 @@ export function SignatureDialog({
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Links: Signaturen verwalten */}
+          <div>
             <div className="space-y-2">
               <p className="text-[11px] font-medium text-sub">
                 Signatur zum Bearbeiten auswählen
@@ -236,11 +216,6 @@ export function SignatureDialog({
                       }`}
                     >
                       <span className="flex-1 truncate">{sig.name}</span>
-                      {(sig.defaultNew || sig.defaultReply) && (
-                        <span className="shrink-0 text-[10px] text-sub">
-                          Standard
-                        </span>
-                      )}
                     </button>
                   ))
                 )}
@@ -295,52 +270,6 @@ export function SignatureDialog({
                   </button>
                 </div>
               )}
-            </div>
-
-            {/* Rechts: Standardsignatur auswählen */}
-            <div className="space-y-2">
-              <p className="text-[11px] font-medium text-sub">
-                Standardsignatur auswählen
-              </p>
-              <div className="rounded-md border border-line bg-bg p-3 space-y-2.5">
-                <Row label="E-Mail-Konto">
-                  <span className="text-xs text-ink truncate">
-                    {senderEmail}
-                  </span>
-                </Row>
-                <Row label="Neue Nachrichten">
-                  <select
-                    value={defaultNewId}
-                    onChange={(e) =>
-                      setDefault("new", e.target.value || null)
-                    }
-                    className="h-8 w-full rounded-md border border-line bg-surface px-2 text-xs text-ink focus:outline-none"
-                  >
-                    <option value="">(ohne)</option>
-                    {list.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </Row>
-                <Row label="Antworten/Weiterleitungen">
-                  <select
-                    value={defaultReplyId}
-                    onChange={(e) =>
-                      setDefault("reply", e.target.value || null)
-                    }
-                    className="h-8 w-full rounded-md border border-line bg-surface px-2 text-xs text-ink focus:outline-none"
-                  >
-                    <option value="">(ohne)</option>
-                    {list.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </Row>
-              </div>
             </div>
           </div>
 
@@ -431,21 +360,6 @@ export function SignatureDialog({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-sub w-40 shrink-0">{label}</span>
-      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

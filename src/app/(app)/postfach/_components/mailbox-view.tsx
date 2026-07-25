@@ -103,8 +103,6 @@ function folderIcon(f: MailboxFolder) {
 
 type ComposerState = {
   title: string;
-  /** Steuert, welche Standardsignatur vorbelegt wird. */
-  kind: "new" | "reply";
   to: string;
   cc: string;
   bcc: string;
@@ -166,7 +164,6 @@ export function MailboxView({
       composedRef.current = true;
       setComposer({
         title: "Neue E-Mail",
-        kind: "new",
         to: initialComposeTo,
         cc: "",
         bcc: "",
@@ -357,7 +354,6 @@ export function MailboxView({
   function openCompose() {
     setComposer({
       title: "Neue E-Mail",
-      kind: "new",
       to: "",
       cc: "",
       bcc: "",
@@ -377,7 +373,6 @@ export function MailboxView({
     );
     setComposer({
       title: all ? "Allen antworten" : "Antworten",
-      kind: "reply",
       to: msg.from?.address ?? "",
       cc: all ? others.map((a) => a.address).join(", ") : "",
       bcc: "",
@@ -393,7 +388,6 @@ export function MailboxView({
   function openForward(msg: MailboxMessage) {
     setComposer({
       title: "Weiterleiten",
-      kind: "reply",
       to: "",
       cc: "",
       bcc: "",
@@ -686,7 +680,6 @@ export function MailboxView({
       {signatureDialog && (
         <SignatureDialog
           signatures={signatures}
-          senderEmail={senderEmail}
           onSignaturesChange={setSignatures}
           onClose={() => setSignatureDialog(false)}
         />
@@ -1130,12 +1123,9 @@ function Composer({
   const [showCc, setShowCc] = useState(Boolean(state.cc || state.bcc));
   const [subject, setSubject] = useState(state.subject);
 
-  // Standardsignatur je nach Anlass — wie Outlooks Trennung zwischen neuen
-  // Nachrichten und Antworten/Weiterleitungen.
-  const initialSignature =
-    signatures.find((s) =>
-      state.kind === "new" ? s.defaultNew : s.defaultReply,
-    ) ?? null;
+  // Ohne eigene Standardauswahl: die erste Signatur ist vorbelegt und lässt
+  // sich unten im Entwurf jederzeit wechseln oder abwählen.
+  const initialSignature = signatures[0] ?? null;
 
   const [signatureId, setSignatureId] = useState<string | null>(
     initialSignature?.id ?? null,

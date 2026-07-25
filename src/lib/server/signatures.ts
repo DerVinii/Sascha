@@ -5,7 +5,7 @@
  * Nur serverseitig importieren.
  */
 
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { emailSignatures } from "@/db/schema";
 import { sanitizeEmailHtml, type EmailSignature } from "@/lib/signature";
@@ -14,8 +14,6 @@ const COLUMNS = {
   id: emailSignatures.id,
   name: emailSignatures.name,
   html: emailSignatures.html,
-  defaultNew: emailSignatures.defaultNew,
-  defaultReply: emailSignatures.defaultReply,
 };
 
 export async function listSignatures(orgId: string): Promise<EmailSignature[]> {
@@ -71,38 +69,5 @@ export async function deleteSignature(
   await db
     .delete(emailSignatures)
     .where(and(eq(emailSignatures.orgId, orgId), eq(emailSignatures.id, id)));
-  return listSignatures(orgId);
-}
-
-/**
- * Setzt die Standardsignatur für neue Nachrichten bzw. für Antworten und
- * Weiterleitungen. `id = null` bedeutet „(keine)". Pro Org bleibt jeweils
- * höchstens eine Signatur gesetzt.
- */
-export async function setDefaultSignature(
-  orgId: string,
-  slot: "new" | "reply",
-  id: string | null,
-): Promise<EmailSignature[]> {
-  const clear = slot === "new" ? { defaultNew: false } : { defaultReply: false };
-  const mark = slot === "new" ? { defaultNew: true } : { defaultReply: true };
-
-  // Erst überall abräumen (außer beim neuen Träger), dann setzen.
-  await db
-    .update(emailSignatures)
-    .set(clear)
-    .where(
-      id
-        ? and(eq(emailSignatures.orgId, orgId), ne(emailSignatures.id, id))
-        : eq(emailSignatures.orgId, orgId),
-    );
-
-  if (id) {
-    await db
-      .update(emailSignatures)
-      .set(mark)
-      .where(and(eq(emailSignatures.orgId, orgId), eq(emailSignatures.id, id)));
-  }
-
   return listSignatures(orgId);
 }
