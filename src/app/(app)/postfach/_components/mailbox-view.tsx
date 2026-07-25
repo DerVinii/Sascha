@@ -671,7 +671,6 @@ export function MailboxView({
             setComposer(null);
             refresh();
           }}
-          onError={(m) => setError(m)}
         />
       )}
 
@@ -1100,6 +1099,37 @@ function replaceSignature(
   return doc.body.innerHTML;
 }
 
+/**
+ * Gesamtbudget für Datei-Anhänge. Vercel nimmt pro Request höchstens 4,5 MB
+ * entgegen — darüber bricht der Versand mit einer nichtssagenden Netzwerk-
+ * meldung ab. Der Rest des Budgets bleibt für Text und Signaturbilder.
+ */
+const MAX_ATTACHMENT_BYTES = 3_500_000;
+
+/**
+ * Dateien aus einem Drop lesen. Ordner lassen sich nicht als Anhang versenden
+ * und werden übersprungen — sonst landet ein leerer Eintrag in der Liste.
+ */
+function filesFromDrop(dt: DataTransfer): { files: File[]; folders: number } {
+  const items = Array.from(dt.items ?? []);
+  if (items.length === 0) {
+    return { files: Array.from(dt.files ?? []), folders: 0 };
+  }
+
+  const files: File[] = [];
+  let folders = 0;
+  for (const item of items) {
+    if (item.kind !== "file") continue;
+    if (item.webkitGetAsEntry?.()?.isDirectory) {
+      folders += 1;
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  return { files, folders };
+}
+
 function Composer({
   state,
   senderEmail,
@@ -1107,7 +1137,6 @@ function Composer({
   onEditSignatures,
   onClose,
   onSent,
-  onError,
 }: {
   state: ComposerState;
   senderEmail: string;
@@ -1115,7 +1144,6 @@ function Composer({
   onEditSignatures: () => void;
   onClose: () => void;
   onSent: () => void;
-  onError: (msg: string) => void;
 }) {
   const [to, setTo] = useState(state.to);
   const [cc, setCc] = useState(state.cc);
@@ -1134,8 +1162,15 @@ function Composer({
     initialBody(state.quoteHtml, initialSignature),
   );
   const [files, setFiles] = useState<File[]>([]);
+  const [dropActive, setDropActive] = useState(false);
+  // Eigene Meldung im Dialog: der Fehlerbalken der Seite liegt hinter diesem
+  // Overlay und wäre beim Verfassen nicht zu sehen.
+  const [note, setNote] = useState<string | null>(null);
   const [isSending, startSend] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  // dragenter/dragleave feuern auch beim Wechsel zwischen Kindelementen — ohne
+  // Zähler würde die Ablage-Fläche beim Überfahren des Editors flackern.
+  const dropDepth = useRef(0);
 
   // Wurde die eingesetzte Signatur zwischenzeitlich im Dialog bearbeitet, den
   // Block im offenen Entwurf nachziehen. Beim ersten Lauf nichts tun, sonst
@@ -1163,11 +1198,77 @@ function Composer({
     setBody((prev) => replaceSignature(prev, sig));
   }
 
-  function submit() {
-    if (!to.trim()) {
-      onError("Bitte einen Empfänger angeben.");
+  function addFiles(incoming: File[], skippedFolders = 0) {
+    setNote(null);
+    const merged = [...files];
+    for (const file of incoming) {
+      // Dieselbe Datei nicht doppelt anhängen (z. B. versehentlich zweimal
+      // reingezogen) — Name, Größe und Datum zusammen sind eindeutig genug.
+      const known = merged.some(
+        (f) =>
+          f.name === file.name &&
+          f.size === file.size &&
+          f.lastModified === file.lastModified,
+      );
+      if (!known) merged.push(file);
+    }
+
+    const total = merged.reduce((sum, f) => sum + f.size, 0);
+    if (total > MAX_ATTACHMENT_BYTES) {
+      setNote(
+        `Anhänge dürfen zusammen höchstens ${formatBytes(MAX_ATTACHMENT_BYTES)} groß sein — ausgewählt sind ${formatBytes(total)}.`,
+      );
       return;
     }
+
+    if (merged.length !== files.length) setFiles(merged);
+    if (skippedFolders > 0) {
+      setNote(
+        "Ordner lassen sich nicht anhängen — bitte die einzelnen Dateien reinziehen.",
+      );
+    }
+  }
+
+  /** Nur echte Datei-Drops abfangen; Text im Editor bleibt normal verschiebbar. */
+  function isFileDrag(e: React.DragEvent) {
+    return e.dataTransfer.types.includes("Files");
+  }
+
+  function handleDragEnter(e: React.DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dropDepth.current += 1;
+    setDropActive(true);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!isFileDrag(e)) return;
+    // Ohne preventDefault verwirft der Browser den Drop und öffnet die Datei.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    if (!isFileDrag(e)) return;
+    dropDepth.current = Math.max(0, dropDepth.current - 1);
+    if (dropDepth.current === 0) setDropActive(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dropDepth.current = 0;
+    setDropActive(false);
+    const { files: dropped, folders } = filesFromDrop(e.dataTransfer);
+    addFiles(dropped, folders);
+  }
+
+  function submit() {
+    if (!to.trim()) {
+      setNote("Bitte einen Empfänger angeben.");
+      return;
+    }
+    setNote(null);
     startSend(async () => {
       try {
         const fd = new FormData();
@@ -1183,14 +1284,34 @@ function Composer({
         await sendMailAction(fd);
         onSent();
       } catch (err) {
-        onError(err instanceof Error ? err.message : "Senden fehlgeschlagen");
+        setNote(err instanceof Error ? err.message : "Senden fehlgeschlagen");
       }
     });
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-      <div className="w-full sm:max-w-2xl bg-surface sm:rounded-xl border border-line shadow-xl flex flex-col max-h-[92dvh]">
+    // Die Ablage-Fläche liegt auf dem gesamten Overlay: so landet auch ein
+    // Drop knapp neben dem Fenster als Anhang, statt dass der Browser die
+    // Datei öffnet und der Entwurf verloren geht.
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div className="relative w-full sm:max-w-2xl bg-surface sm:rounded-xl border border-line shadow-xl flex flex-col max-h-[92dvh]">
+        {dropActive && (
+          <div className="absolute inset-0 z-10 sm:rounded-xl border-2 border-dashed border-accent bg-surface/95 flex flex-col items-center justify-center gap-2 pointer-events-none">
+            <Paperclip className="h-6 w-6 text-accent" />
+            <span className="text-sm font-medium text-ink">
+              Dateien hier ablegen
+            </span>
+            <span className="text-[11px] text-sub">
+              werden als Anhang hinzugefügt
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between px-4 py-3 border-b border-line">
           <h2 className="text-sm font-semibold text-ink">{state.title}</h2>
           <button
@@ -1249,13 +1370,17 @@ function Composer({
           <RichTextEditor
             value={body}
             onChange={setBody}
-            onError={onError}
+            onError={setNote}
             minHeight={220}
             maxHeight={420}
             placeholder="Nachricht schreiben …"
           />
 
-          {files.length > 0 && (
+          {files.length === 0 ? (
+            <p className="text-[11px] text-sub">
+              Dateien lassen sich per Drag &amp; Drop ins Fenster ziehen.
+            </p>
+          ) : (
             <div className="flex flex-wrap gap-2">
               {files.map((f, i) => (
                 <span
@@ -1264,6 +1389,7 @@ function Composer({
                 >
                   <Paperclip className="h-3 w-3 text-sub" />
                   <span className="truncate max-w-[160px]">{f.name}</span>
+                  <span className="text-sub">{formatBytes(f.size)}</span>
                   <button
                     onClick={() =>
                       setFiles((prev) => prev.filter((_, j) => j !== i))
@@ -1279,6 +1405,19 @@ function Composer({
           )}
         </div>
 
+        {note && (
+          <div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-err/30 bg-err/5 px-3 py-2 text-xs text-err">
+            <span>{note}</span>
+            <button
+              onClick={() => setNote(null)}
+              className="text-err/70 hover:text-err shrink-0"
+              aria-label="Schließen"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* flex-wrap + Safe-Area: auf schmalen Handys rutscht „Senden" in die
             zweite Zeile statt aus dem Dialog zu laufen. */}
         <div
@@ -1292,8 +1431,7 @@ function Composer({
               multiple
               className="hidden"
               onChange={(e) => {
-                const list = Array.from(e.target.files ?? []);
-                setFiles((prev) => [...prev, ...list]);
+                addFiles(Array.from(e.target.files ?? []));
                 if (fileRef.current) fileRef.current.value = "";
               }}
             />
