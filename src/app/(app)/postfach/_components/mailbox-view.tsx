@@ -124,6 +124,7 @@ export function MailboxView({
   const [opened, setOpened] = useState<MailboxMessage | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [composer, setComposer] = useState<ComposerState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,7 +171,10 @@ export function MailboxView({
     );
   }
 
-  function loadFolder(path: string, search = "") {
+  // flagged wird explizit übergeben (nicht aus dem State gelesen), damit ein
+  // gleichzeitiges Umschalten des Filters nicht auf einen veralteten Wert
+  // trifft.
+  function loadFolder(path: string, search = "", flagged = flaggedOnly) {
     setError(null);
     setActiveFolder(path);
     setSelectedUid(null);
@@ -179,7 +183,11 @@ export function MailboxView({
     setSearchInput(search);
     startList(async () => {
       try {
-        const res = await listMessagesAction({ folder: path, search });
+        const res = await listMessagesAction({
+          folder: path,
+          search,
+          flaggedOnly: flagged,
+        });
         setItems(res.items);
         setTotal(res.total);
       } catch (err) {
@@ -196,6 +204,12 @@ export function MailboxView({
     loadFolder(activeFolder, searchInput.trim());
   }
 
+  function toggleFlaggedFilter() {
+    const next = !flaggedOnly;
+    setFlaggedOnly(next);
+    loadFolder(activeFolder, appliedSearch, next);
+  }
+
   function loadMore() {
     startMore(async () => {
       try {
@@ -203,6 +217,7 @@ export function MailboxView({
           folder: activeFolder,
           offset: items.length,
           search: appliedSearch || undefined,
+          flaggedOnly,
         });
         setItems((prev) => {
           const seen = new Set(prev.map((m) => m.uid));
@@ -250,9 +265,16 @@ export function MailboxView({
 
   function toggleFlag(item: MailboxListItem) {
     const next = !item.flagged;
-    setItems((prev) =>
-      prev.map((m) => (m.uid === item.uid ? { ...m, flagged: next } : m)),
-    );
+    // Im „Nur markiert"-Filter verschwindet eine gerade entmarkierte Mail sofort
+    // aus der Liste (sie passt nicht mehr zum Filter).
+    if (flaggedOnly && !next) {
+      setItems((prev) => prev.filter((m) => m.uid !== item.uid));
+      setTotal((t) => Math.max(0, t - 1));
+    } else {
+      setItems((prev) =>
+        prev.map((m) => (m.uid === item.uid ? { ...m, flagged: next } : m)),
+      );
+    }
     toggleFlagAction({
       folder: activeFolder,
       uid: item.uid,
@@ -448,6 +470,25 @@ export function MailboxView({
                 />
               </div>
               <button
+                onClick={toggleFlaggedFilter}
+                disabled={isListLoading}
+                title={
+                  flaggedOnly
+                    ? "Nur markierte E-Mails — Filter aufheben"
+                    : "Nur markierte E-Mails anzeigen"
+                }
+                aria-pressed={flaggedOnly}
+                className={`h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border transition disabled:opacity-50 ${
+                  flaggedOnly
+                    ? "border-warn/40 bg-warn/10 text-warn"
+                    : "border-line text-sub hover:text-ink hover:bg-bg"
+                }`}
+              >
+                <Star
+                  className={`h-4 w-4 ${flaggedOnly ? "fill-warn" : ""}`}
+                />
+              </button>
+              <button
                 onClick={refresh}
                 disabled={isListLoading}
                 title="Aktualisieren"
@@ -458,13 +499,26 @@ export function MailboxView({
                 />
               </button>
             </div>
-            {appliedSearch && (
-              <button
-                onClick={() => loadFolder(activeFolder, "")}
-                className="text-[11px] text-accent hover:underline"
-              >
-                Suche „{appliedSearch}" zurücksetzen
-              </button>
+            {(appliedSearch || flaggedOnly) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {flaggedOnly && (
+                  <button
+                    onClick={toggleFlaggedFilter}
+                    className="text-[11px] text-warn hover:underline inline-flex items-center gap-1"
+                  >
+                    <Star className="h-3 w-3 fill-warn" />
+                    Nur markierte — Filter aufheben
+                  </button>
+                )}
+                {appliedSearch && (
+                  <button
+                    onClick={() => loadFolder(activeFolder, "")}
+                    className="text-[11px] text-accent hover:underline"
+                  >
+                    Suche „{appliedSearch}" zurücksetzen
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -478,52 +532,25 @@ export function MailboxView({
               <div className="p-8 text-center">
                 <Inbox className="h-8 w-8 mx-auto mb-3 text-sub/50" />
                 <p className="text-sm font-medium text-ink">
-                  {appliedSearch ? "Keine Treffer" : "Keine E-Mails"}
+                  {flaggedOnly
+                    ? "Keine markierten E-Mails"
+                    : appliedSearch
+                      ? "Keine Treffer"
+                      : "Keine E-Mails"}
                 </p>
               </div>
             ) : (
               <>
                 {items.map((item) => (
-                  <button
+                  <MessageRow
                     key={item.uid}
-                    onClick={() => openItem(item)}
-                    className={`w-full text-left px-3 py-2.5 border-b border-line/60 transition ${
-                      selectedUid === item.uid
-                        ? "bg-accent-faint"
-                        : "hover:bg-bg"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-sm truncate ${
-                          !item.seen
-                            ? "font-semibold text-ink"
-                            : "font-medium text-ink/90"
-                        }`}
-                      >
-                        {activeFolderObj?.specialUse === "\\Sent"
-                          ? addressListText(item.to) || "(kein Empfänger)"
-                          : addressText(item.from)}
-                      </span>
-                      <span className="text-[10px] text-sub whitespace-nowrap shrink-0">
-                        {formatTime(item.date)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {!item.seen && (
-                        <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
-                      )}
-                      {item.flagged && (
-                        <Star className="h-3 w-3 text-warn fill-warn shrink-0" />
-                      )}
-                      <span className="text-xs text-sub truncate">
-                        {item.subject || "(kein Betreff)"}
-                      </span>
-                      {item.hasAttachments && (
-                        <Paperclip className="h-3 w-3 text-sub/70 shrink-0 ml-auto" />
-                      )}
-                    </div>
-                  </button>
+                    item={item}
+                    selected={selectedUid === item.uid}
+                    isSent={activeFolderObj?.specialUse === "\\Sent"}
+                    onOpen={() => openItem(item)}
+                    onToggleFlag={() => toggleFlag(item)}
+                    onDelete={() => del(item.uid)}
+                  />
                 ))}
                 {canLoadMore && (
                   <div className="p-3 text-center">
@@ -599,6 +626,203 @@ export function MailboxView({
           onError={(m) => setError(m)}
         />
       )}
+    </div>
+  );
+}
+
+// Wischen bis hierher (px) legt den Löschen-Knopf offen …
+const SWIPE_REVEAL = 76;
+// … und darüber hinaus löscht die Mail direkt.
+const SWIPE_DELETE_AT = 130;
+const SWIPE_MAX = 220;
+
+/**
+ * Eine Listenzeile mit Outlook-artiger Wisch-Geste (nach links wischen → roter
+ * Löschen-Bereich) und einem Sternchen zum Markieren auf jeder Mail. Die
+ * Wisch-Logik ist rein touch-basiert; auf dem Desktop verhält sich die Zeile
+ * wie bisher (Klick öffnet, Stern markiert).
+ */
+function MessageRow({
+  item,
+  selected,
+  isSent,
+  onOpen,
+  onToggleFlag,
+  onDelete,
+}: {
+  item: MailboxListItem;
+  selected: boolean;
+  isSent: boolean;
+  onOpen: () => void;
+  onToggleFlag: () => void;
+  onDelete: () => void;
+}) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  // dx zusätzlich in einem Ref halten, damit onTouchEnd garantiert den aktuellen
+  // Wert sieht (unabhängig vom Render-Zeitpunkt der State-Updates).
+  const dxRef = useRef(0);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const startDx = useRef(0);
+  const horiz = useRef<boolean | null>(null);
+  const moved = useRef(false);
+
+  function applyDx(v: number) {
+    dxRef.current = v;
+    setDx(v);
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0];
+    startX.current = t.clientX;
+    startY.current = t.clientY;
+    startDx.current = dxRef.current;
+    horiz.current = null;
+    moved.current = false;
+    setDragging(true);
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const t = e.touches[0];
+    const deltaX = t.clientX - startX.current;
+    const deltaY = t.clientY - startY.current;
+    // Richtung erst festlegen, wenn eine Mindestbewegung erkennbar ist —
+    // sonst würde jeder Tipper als Wisch gelten.
+    if (horiz.current === null) {
+      if (Math.abs(deltaX) > 6 || Math.abs(deltaY) > 6) {
+        horiz.current = Math.abs(deltaX) > Math.abs(deltaY);
+      } else {
+        return;
+      }
+    }
+    if (!horiz.current) return; // vertikales Scrollen — nicht eingreifen
+    moved.current = true;
+    let next = startDx.current + deltaX;
+    if (next > 0) next = 0; // nicht über den Ursprung nach rechts
+    if (next < -SWIPE_MAX) next = -SWIPE_MAX;
+    applyDx(next);
+  }
+
+  function onTouchEnd() {
+    setDragging(false);
+    horiz.current = null;
+    const cur = dxRef.current;
+    if (cur <= -SWIPE_DELETE_AT) {
+      applyDx(-SWIPE_MAX);
+      onDelete();
+    } else if (cur <= -SWIPE_REVEAL / 2) {
+      applyDx(-SWIPE_REVEAL);
+    } else {
+      applyDx(0);
+    }
+  }
+
+  function handleClick() {
+    if (moved.current) return; // war ein Wisch, kein Tipp
+    if (dxRef.current !== 0) {
+      applyDx(0); // offener Löschen-Bereich → erst schließen
+      return;
+    }
+    onOpen();
+  }
+
+  return (
+    <div className="relative overflow-hidden border-b border-line/60">
+      {/* Löschen-Bereich hinter der Zeile — beim Wischen nach links sichtbar */}
+      <div className="absolute inset-y-0 right-0 flex items-center bg-err">
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label="E-Mail löschen"
+          style={{ width: SWIPE_REVEAL }}
+          className="h-full inline-flex items-center justify-center text-white"
+        >
+          <Trash2 className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Vordergrund: die eigentliche Zeile (deckt den roten Bereich ab) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: dragging ? "none" : "transform 0.2s ease-out",
+          touchAction: "pan-y",
+        }}
+        className={`relative flex items-stretch cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent/50 ${
+          selected ? "bg-accent-faint" : "bg-surface hover:bg-bg"
+        } ${item.flagged ? "border-l-2 border-l-warn" : ""}`}
+      >
+        {/* Markiert-Tönung: über der (deckenden) Grundfarbe, unter dem Inhalt */}
+        {item.flagged && !selected && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-warn/10"
+          />
+        )}
+
+        <div className="relative flex-1 min-w-0 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={`text-sm truncate ${
+                !item.seen
+                  ? "font-semibold text-ink"
+                  : "font-medium text-ink/90"
+              }`}
+            >
+              {isSent
+                ? addressListText(item.to) || "(kein Empfänger)"
+                : addressText(item.from)}
+            </span>
+            <span className="text-[10px] text-sub whitespace-nowrap shrink-0">
+              {formatTime(item.date)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {!item.seen && (
+              <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
+            )}
+            <span className="text-xs text-sub truncate">
+              {item.subject || "(kein Betreff)"}
+            </span>
+            {item.hasAttachments && (
+              <Paperclip className="h-3 w-3 text-sub/70 shrink-0 ml-auto" />
+            )}
+          </div>
+        </div>
+
+        {/* Sternchen auf jeder Mail: tippen markiert/entmarkiert */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFlag();
+          }}
+          aria-label={item.flagged ? "Markierung entfernen" : "Markieren"}
+          aria-pressed={item.flagged}
+          className="relative shrink-0 px-3 flex items-center text-sub hover:text-warn transition"
+        >
+          <Star
+            className={`h-4 w-4 ${item.flagged ? "fill-warn text-warn" : ""}`}
+          />
+        </button>
+      </div>
     </div>
   );
 }

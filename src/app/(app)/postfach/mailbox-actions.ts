@@ -29,10 +29,12 @@ export async function listMessagesAction(input: {
   folder: string;
   offset?: number;
   search?: string;
+  flaggedOnly?: boolean;
 }): Promise<{ items: MailboxListItem[]; total: number }> {
   return listMessages(input.folder, {
     offset: input.offset,
     search: input.search,
+    flaggedOnly: input.flaggedOnly,
   });
 }
 

@@ -267,24 +267,34 @@ const QUERY = {
 async function listMessagesOn(
   c: ImapFlow,
   folder: string,
-  opts: { offset?: number; search?: string } = {},
+  opts: { offset?: number; search?: string; flaggedOnly?: boolean } = {},
 ): Promise<{ items: MailboxListItem[]; total: number }> {
   const offset = opts.offset ?? 0;
   const search = opts.search?.trim();
+  const flaggedOnly = opts.flaggedOnly ?? false;
   const lock = await c.getMailboxLock(folder);
   try {
-    if (search) {
-      const found = await c.search(
-        {
-          or: [
-            { subject: search },
-            { from: search },
-            { to: search },
-            { body: search },
-          ],
-        },
-        { uid: true },
-      );
+    if (search || flaggedOnly) {
+      // Server-seitige Suche/Filter: liefert alle passenden UIDs im Ordner
+      // (flagged UND Texttreffer, wenn beides aktiv), danach seitenweise laden.
+      const criteria: {
+        flagged?: boolean;
+        or?: Array<{
+          subject?: string;
+          from?: string;
+          to?: string;
+          body?: string;
+        }>;
+      } = {};
+      if (flaggedOnly) criteria.flagged = true;
+      if (search)
+        criteria.or = [
+          { subject: search },
+          { from: search },
+          { to: search },
+          { body: search },
+        ];
+      const found = await c.search(criteria, { uid: true });
       const uids = (Array.isArray(found) ? found : []).slice().reverse();
       const page = uids.slice(offset, offset + PAGE_SIZE);
       if (page.length === 0) return { items: [], total: uids.length };
@@ -316,7 +326,7 @@ async function listMessagesOn(
 
 export async function listMessages(
   folder: string,
-  opts: { offset?: number; search?: string } = {},
+  opts: { offset?: number; search?: string; flaggedOnly?: boolean } = {},
 ): Promise<{ items: MailboxListItem[]; total: number }> {
   return withImap((c) => listMessagesOn(c, folder, opts));
 }
