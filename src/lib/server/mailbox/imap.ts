@@ -11,7 +11,11 @@
  */
 
 import { ImapFlow, type ListResponse } from "imapflow";
-import { simpleParser, type AddressObject } from "mailparser";
+import {
+  simpleParser,
+  type AddressObject,
+  type Attachment,
+} from "mailparser";
 import { requireMailboxConfig, type MailboxConfig } from "./config";
 import type {
   MailAddress,
@@ -22,6 +26,37 @@ import type {
 } from "@/lib/mailbox-ui";
 
 const PAGE_SIZE = 30;
+
+/** Obergrenze pro eingebettetem Bild, das wir ins Lese-HTML übernehmen. */
+const MAX_EMBEDDED_IMAGE = 3_000_000;
+
+/**
+ * Löst `cid:`-Verweise im HTML gegen die zugehörigen Inline-Anhänge auf.
+ *
+ * Ohne diesen Schritt zeigt der Lesebereich eingebettete Bilder als kaputte
+ * Platzhalter — betrifft eingehende Mails ebenso wie die eigenen Kopien im
+ * Ordner „Gesendet", deren Signatur-Logos genau so eingebettet sind.
+ */
+export function embedRelatedImages(
+  html: string,
+  attachments: Attachment[],
+): string {
+  const byCid = new Map<string, string>();
+  for (const att of attachments ?? []) {
+    const cid = att.cid?.replace(/^<|>$/g, "").trim();
+    const type = (att.contentType ?? "").toLowerCase();
+    if (!cid || !att.content || !type.startsWith("image/")) continue;
+    if (att.content.length > MAX_EMBEDDED_IMAGE) continue;
+    byCid.set(cid.toLowerCase(), `data:${type};base64,${att.content.toString("base64")}`);
+  }
+  if (byCid.size === 0) return html;
+
+  return html.replace(/(["'])cid:([^"']+)\1/gi, (match, quote, rawCid) => {
+    const key = decodeURIComponent(String(rawCid)).trim().toLowerCase();
+    const dataUrl = byCid.get(key);
+    return dataUrl ? `${quote}${dataUrl}${quote}` : match;
+  });
+}
 
 // --- Verbindungs-Pool --------------------------------------------------------
 
@@ -419,7 +454,7 @@ export async function getMessage(
         to: addrObjToList(parsed.to),
         cc: addrObjToList(parsed.cc),
         date: toIso(parsed.date),
-        html: parsed.html || null,
+        html: parsed.html ? embedRelatedImages(parsed.html, parsed.attachments) : null,
         text: parsed.text || null,
         messageId: parsed.messageId ?? null,
         inReplyTo: parsed.inReplyTo ?? null,

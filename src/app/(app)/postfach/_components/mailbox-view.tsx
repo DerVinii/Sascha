@@ -23,6 +23,7 @@ import {
   Mail,
   Download,
   Loader2,
+  Signature as SignatureIcon,
 } from "lucide-react";
 import {
   addressListText,
@@ -33,6 +34,15 @@ import {
   type MailboxListItem,
   type MailboxMessage,
 } from "@/lib/mailbox-ui";
+import {
+  escapeHtml,
+  htmlToPlainText,
+  QUOTE_ATTR,
+  SIGNATURE_ATTR,
+  type EmailSignature,
+} from "@/lib/signature";
+import { RichTextEditor } from "@/components/app/rich-text-editor";
+import { SignatureDialog } from "./signature-dialog";
 import {
   deleteMessageAction,
   listMessagesAction,
@@ -93,11 +103,14 @@ function folderIcon(f: MailboxFolder) {
 
 type ComposerState = {
   title: string;
+  /** Steuert, welche Standardsignatur vorbelegt wird. */
+  kind: "new" | "reply";
   to: string;
   cc: string;
   bcc: string;
   subject: string;
-  body: string;
+  /** Zitierter Originaltext als HTML-Block (leer beim Verfassen). */
+  quoteHtml: string;
   inReplyTo: string | null;
   references: string[] | null;
 };
@@ -108,6 +121,7 @@ export function MailboxView({
   initialList,
   senderEmail,
   initialComposeTo,
+  signatures: initialSignatures,
 }: {
   folders: MailboxFolder[];
   initialFolder: string;
@@ -115,6 +129,7 @@ export function MailboxView({
   senderEmail: string;
   /** Aus dem Kontakt-Panel: Verfassen-Dialog direkt mit diesem Empfänger öffnen. */
   initialComposeTo?: string;
+  signatures: EmailSignature[];
 }) {
   const [folders, setFolders] = useState(initialFolders);
   const [activeFolder, setActiveFolder] = useState(initialFolder);
@@ -126,6 +141,8 @@ export function MailboxView({
   const [appliedSearch, setAppliedSearch] = useState("");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [composer, setComposer] = useState<ComposerState | null>(null);
+  const [signatures, setSignatures] = useState(initialSignatures);
+  const [signatureDialog, setSignatureDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [isListLoading, startList] = useTransition();
@@ -149,11 +166,12 @@ export function MailboxView({
       composedRef.current = true;
       setComposer({
         title: "Neue E-Mail",
+        kind: "new",
         to: initialComposeTo,
         cc: "",
         bcc: "",
         subject: "",
-        body: "",
+        quoteHtml: "",
         inReplyTo: null,
         references: null,
       });
@@ -307,14 +325,27 @@ export function MailboxView({
     );
   }
 
-  function quoted(msg: MailboxMessage): string {
+  /**
+   * Zitat-Block als HTML. Bewusst aus dem Text-Teil der Originalmail aufgebaut
+   * und nicht aus deren HTML: dort steckende `cid:`- und Tracking-Bilder
+   * würden in der Antwort als kaputte Platzhalter landen.
+   */
+  function quotedHtml(msg: MailboxMessage): string {
     const header = [
-      `Von: ${addressText(msg.from)}${msg.from ? ` <${msg.from.address}>` : ""}`,
-      `Datum: ${formatFull(msg.date)}`,
-      `Betreff: ${msg.subject ?? "(kein Betreff)"}`,
-    ].join("\n");
-    const original = (msg.text ?? "").trim();
-    return `\n\n---------- Ursprüngliche Nachricht ----------\n${header}\n\n${original}`;
+      `<b>Von:</b> ${escapeHtml(addressText(msg.from))}${
+        msg.from ? ` &lt;${escapeHtml(msg.from.address)}&gt;` : ""
+      }`,
+      `<b>Datum:</b> ${escapeHtml(formatFull(msg.date))}`,
+      `<b>Betreff:</b> ${escapeHtml(msg.subject ?? "(kein Betreff)")}`,
+    ].join("<br>");
+    // Nur-HTML-Mails haben keinen Text-Teil — dann aus dem HTML ableiten.
+    const plain = msg.text?.trim() || htmlToPlainText(msg.html ?? "");
+    return (
+      `<div ${QUOTE_ATTR}="1" style="margin-top:14px">` +
+      `<div style="border-top:1px solid #d1d5db;padding-top:10px;color:#6b7280;font-size:10pt">${header}</div>` +
+      `<div style="margin-top:10px">${escapeHtml(plain).replace(/\n/g, "<br>")}</div>` +
+      `</div>`
+    );
   }
 
   function reSubject(prefix: "Re" | "Fwd", subject: string | null): string {
@@ -326,11 +357,12 @@ export function MailboxView({
   function openCompose() {
     setComposer({
       title: "Neue E-Mail",
+      kind: "new",
       to: "",
       cc: "",
       bcc: "",
       subject: "",
-      body: "",
+      quoteHtml: "",
       inReplyTo: null,
       references: null,
     });
@@ -345,11 +377,12 @@ export function MailboxView({
     );
     setComposer({
       title: all ? "Allen antworten" : "Antworten",
+      kind: "reply",
       to: msg.from?.address ?? "",
       cc: all ? others.map((a) => a.address).join(", ") : "",
       bcc: "",
       subject: reSubject("Re", msg.subject),
-      body: quoted(msg),
+      quoteHtml: quotedHtml(msg),
       inReplyTo: msg.messageId,
       references: [...msg.references, msg.messageId].filter(
         (r): r is string => Boolean(r),
@@ -360,11 +393,12 @@ export function MailboxView({
   function openForward(msg: MailboxMessage) {
     setComposer({
       title: "Weiterleiten",
+      kind: "reply",
       to: "",
       cc: "",
       bcc: "",
       subject: reSubject("Fwd", msg.subject),
-      body: quoted(msg),
+      quoteHtml: quotedHtml(msg),
       inReplyTo: null,
       references: null,
     });
@@ -426,6 +460,17 @@ export function MailboxView({
               );
             })}
           </div>
+          <div className="p-2 border-t border-line">
+            <button
+              onClick={() => setSignatureDialog(true)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-sub hover:text-ink hover:bg-bg transition"
+            >
+              <SignatureIcon className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left truncate">
+                Signaturen bearbeiten
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Mittelspalte: Liste */}
@@ -447,6 +492,13 @@ export function MailboxView({
                   </option>
                 ))}
               </select>
+              <button
+                onClick={() => setSignatureDialog(true)}
+                title="Signaturen bearbeiten"
+                className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition"
+              >
+                <SignatureIcon className="h-4 w-4" />
+              </button>
               <button
                 onClick={openCompose}
                 title="Neue E-Mail"
@@ -618,12 +670,25 @@ export function MailboxView({
         <Composer
           state={composer}
           senderEmail={senderEmail}
+          signatures={signatures}
+          onEditSignatures={() => setSignatureDialog(true)}
           onClose={() => setComposer(null)}
           onSent={() => {
             setComposer(null);
             refresh();
           }}
           onError={(m) => setError(m)}
+        />
+      )}
+
+      {/* Nach dem Composer gerendert, damit der Dialog auch über einem offenen
+          Entwurf liegt (beide z-50). */}
+      {signatureDialog && (
+        <SignatureDialog
+          signatures={signatures}
+          senderEmail={senderEmail}
+          onSignaturesChange={setSignatures}
+          onClose={() => setSignatureDialog(false)}
         />
       )}
     </div>
@@ -999,15 +1064,54 @@ function MoveMenu({
   );
 }
 
+/** Signatur als markierter Block — daran erkennt der Wechsel den alten Stand. */
+function signatureBlock(sig: EmailSignature): string {
+  return `<div ${SIGNATURE_ATTR}="${sig.id}">${sig.html}</div>`;
+}
+
+/** Startinhalt des Entwurfs: Leerzeile für den Text, Signatur, dann Zitat. */
+function initialBody(quoteHtml: string, sig: EmailSignature | null): string {
+  return `<div><br></div>${sig ? signatureBlock(sig) : ""}${quoteHtml}`;
+}
+
+/**
+ * Tauscht den Signatur-Block im Entwurf aus (oder entfernt ihn). Läuft über den
+ * DOM-Parser statt über Regex, damit verschachtelte Signaturen mit Tabellen und
+ * Bildern zuverlässig als Ganzes erwischt werden. Nur im Browser aufrufen.
+ */
+function replaceSignature(
+  bodyHtml: string,
+  sig: EmailSignature | null,
+): string {
+  const doc = new DOMParser().parseFromString(bodyHtml, "text/html");
+  const existing = doc.body.querySelector(`[${SIGNATURE_ATTR}]`);
+  const block = sig ? signatureBlock(sig) : null;
+
+  if (existing) {
+    if (block) existing.outerHTML = block;
+    else existing.remove();
+  } else if (block) {
+    // Vor das Zitat setzen (Outlook-Verhalten), sonst ans Ende.
+    const quote = doc.body.querySelector(`[${QUOTE_ATTR}]`);
+    if (quote) quote.insertAdjacentHTML("beforebegin", block);
+    else doc.body.insertAdjacentHTML("beforeend", block);
+  }
+  return doc.body.innerHTML;
+}
+
 function Composer({
   state,
   senderEmail,
+  signatures,
+  onEditSignatures,
   onClose,
   onSent,
   onError,
 }: {
   state: ComposerState;
   senderEmail: string;
+  signatures: EmailSignature[];
+  onEditSignatures: () => void;
   onClose: () => void;
   onSent: () => void;
   onError: (msg: string) => void;
@@ -1017,10 +1121,49 @@ function Composer({
   const [bcc, setBcc] = useState(state.bcc);
   const [showCc, setShowCc] = useState(Boolean(state.cc || state.bcc));
   const [subject, setSubject] = useState(state.subject);
-  const [body, setBody] = useState(state.body);
+
+  // Standardsignatur je nach Anlass — wie Outlooks Trennung zwischen neuen
+  // Nachrichten und Antworten/Weiterleitungen.
+  const initialSignature =
+    signatures.find((s) =>
+      state.kind === "new" ? s.defaultNew : s.defaultReply,
+    ) ?? null;
+
+  const [signatureId, setSignatureId] = useState<string | null>(
+    initialSignature?.id ?? null,
+  );
+  const [body, setBody] = useState(() =>
+    initialBody(state.quoteHtml, initialSignature),
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [isSending, startSend] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Wurde die eingesetzte Signatur zwischenzeitlich im Dialog bearbeitet, den
+  // Block im offenen Entwurf nachziehen. Beim ersten Lauf nichts tun, sonst
+  // würde das normalisierte HTML den Cursor zurücksetzen.
+  const firstSync = useRef(true);
+  useEffect(() => {
+    if (firstSync.current) {
+      firstSync.current = false;
+      return;
+    }
+    const current = signatureId
+      ? (signatures.find((s) => s.id === signatureId) ?? null)
+      : null;
+    if (signatureId && !current) setSignatureId(null);
+    setBody((prev) => replaceSignature(prev, current));
+  }, [signatures, signatureId]);
+
+  function chooseSignature(value: string) {
+    if (value === "__edit") {
+      onEditSignatures();
+      return;
+    }
+    const sig = signatures.find((s) => s.id === value) ?? null;
+    setSignatureId(sig?.id ?? null);
+    setBody((prev) => replaceSignature(prev, sig));
+  }
 
   function submit() {
     if (!to.trim()) {
@@ -1034,7 +1177,8 @@ function Composer({
         fd.set("cc", cc);
         fd.set("bcc", bcc);
         fd.set("subject", subject);
-        fd.set("body", body);
+        fd.set("bodyHtml", body);
+        fd.set("body", htmlToPlainText(body));
         if (state.inReplyTo) fd.set("inReplyTo", state.inReplyTo);
         if (state.references) fd.set("references", state.references.join(" "));
         for (const f of files) fd.append("files", f);
@@ -1104,12 +1248,13 @@ function Composer({
               className="w-full bg-transparent text-sm text-ink focus:outline-none"
             />
           </Field>
-          <textarea
+          <RichTextEditor
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={12}
+            onChange={setBody}
+            onError={onError}
+            minHeight={220}
+            maxHeight={420}
             placeholder="Nachricht schreiben …"
-            className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink placeholder:text-sub resize-y focus:outline-none focus:ring-1 focus:ring-accent/40"
           />
 
           {files.length > 0 && (
@@ -1136,8 +1281,13 @@ function Composer({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-line">
-          <div>
+        {/* flex-wrap + Safe-Area: auf schmalen Handys rutscht „Senden" in die
+            zweite Zeile statt aus dem Dialog zu laufen. */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-line"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
             <input
               ref={fileRef}
               type="file"
@@ -1156,6 +1306,25 @@ function Composer({
               <Paperclip className="h-3.5 w-3.5" />
               Anhang
             </button>
+            <label
+              title="Signatur"
+              className="h-9 px-2 inline-flex items-center gap-1.5 rounded-md border border-line text-sub min-w-0"
+            >
+              <SignatureIcon className="h-3.5 w-3.5 shrink-0" />
+              <select
+                value={signatureId ?? ""}
+                onChange={(e) => chooseSignature(e.target.value)}
+                className="bg-transparent text-xs text-ink focus:outline-none max-w-[110px] truncate"
+              >
+                <option value="">Ohne Signatur</option>
+                {signatures.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+                <option value="__edit">Signaturen bearbeiten …</option>
+              </select>
+            </label>
           </div>
           <button
             onClick={submit}

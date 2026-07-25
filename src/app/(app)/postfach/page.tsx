@@ -2,6 +2,8 @@ import { Inbox, AlertTriangle } from "lucide-react";
 import { getMailboxConfig } from "@/lib/server/mailbox/config";
 import { getMailboxOverview } from "@/lib/server/mailbox/imap";
 import { folderSortRank } from "@/lib/mailbox-ui";
+import { getActiveOrg } from "@/lib/server/active-org";
+import { listSignaturesSafe } from "@/lib/server/signatures";
 import { MailboxView } from "./_components/mailbox-view";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +33,13 @@ export default async function PostfachPage({
   }
 
   try {
-    // Ordner + erste Inbox-Seite kommen in EINER IMAP-Verbindung.
-    const overview = await getMailboxOverview();
+    // Ordner + erste Inbox-Seite kommen in EINER IMAP-Verbindung; die
+    // Signaturen liegen in der eigenen DB und laufen parallel dazu.
+    const org = await getActiveOrg();
+    const [overview, signatures] = await Promise.all([
+      getMailboxOverview(),
+      org ? listSignaturesSafe(org.id) : Promise.resolve([]),
+    ]);
     const folders = overview.folders.sort(
       (a, b) => folderSortRank(a) - folderSortRank(b) || a.name.localeCompare(b.name),
     );
@@ -44,6 +51,7 @@ export default async function PostfachPage({
         initialList={overview.list}
         senderEmail={cfg.email}
         initialComposeTo={composeTo}
+        signatures={signatures}
       />
     );
   } catch (err) {

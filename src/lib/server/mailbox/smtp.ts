@@ -13,6 +13,13 @@ export type OutgoingAttachment = {
   filename: string;
   content: Buffer;
   contentType?: string;
+  /**
+   * Gesetzt für eingebettete Bilder (Signatur): im HTML als `cid:…`
+   * referenziert. Nodemailer baut daraus automatisch ein multipart/related,
+   * damit das Bild beim Empfänger im Text steht statt als Anhang.
+   */
+  cid?: string;
+  contentDisposition?: "inline" | "attachment";
 };
 
 export type OutgoingMail = {

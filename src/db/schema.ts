@@ -373,6 +373,40 @@ export const emailMessages = pgTable(
 );
 
 /**
+ * E-Mail-Signaturen für das echte Postfach — mehrere pro Organisation, damit
+ * jeder Mitarbeiter seine eigene unter eigenem Namen pflegen kann.
+ *
+ * `html` ist der fertige Signatur-Block inklusive eingebetteter Bilder als
+ * Data-URI. Beim Versand werden diese Data-URIs in echte CID-Anhänge
+ * umgewandelt (siehe lib/server/mailbox/inline-images.ts) — nur so zeigen
+ * Outlook, Gmail & Co. das Bild beim Empfänger wirklich an.
+ *
+ * `defaultNew` / `defaultReply` bilden Outlooks „Standardsignatur auswählen"
+ * ab (neue Nachrichten vs. Antworten/Weiterleitungen); pro Org ist jeweils
+ * höchstens eine Signatur gesetzt.
+ */
+export const emailSignatures = pgTable(
+  "email_signatures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    html: text("html").default("").notNull(),
+    defaultNew: boolean("default_new").default(false).notNull(),
+    defaultReply: boolean("default_reply").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("email_signatures_org_idx").on(t.orgId)],
+);
+
+/**
  * Spiegel der Instantly-Unibox (Postfach-Reiter). Gefüllt per Webhook
  * (reply_received) + Backfill-Poll; `id` ist die Instantly-Email-UUID.
  * Empfangene Mails werden komplett gespiegelt, gesendete nur für Threads,
