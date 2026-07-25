@@ -58,21 +58,32 @@ export function Header({ mobileNav }: { mobileNav?: React.ReactNode }) {
   const { title, desc } = matchTitle(pathname);
 
   return (
-    <header className="h-14 bg-surface border-b border-line flex items-center justify-between px-4 md:px-6 shrink-0">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {mobileNav}
-        <div className="min-w-0">
-          <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
-          <p className="text-[11px] text-sub hidden sm:block truncate">{desc}</p>
+    // pt-[safe-area-inset-top]: schiebt die Leiste auf dem Handy unter die
+    // Statusleiste/Notch (viewport-fit=cover + black-translucent lassen den
+    // Inhalt sonst hinter Uhrzeit/Dynamic Island verschwinden). Auf Desktop
+    // und Geräten ohne Notch ist der Inset 0 → unverändert.
+    <header
+      className="bg-surface border-b border-line shrink-0"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="h-14 flex items-center justify-between px-4 md:px-6">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {mobileNav}
+          <div className="min-w-0">
+            <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
+            <p className="text-[11px] text-sub hidden sm:block truncate">
+              {desc}
+            </p>
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink transition"
-          aria-label="Benachrichtigungen"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink transition"
+            aria-label="Benachrichtigungen"
+          >
+            <Bell className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </header>
   );
