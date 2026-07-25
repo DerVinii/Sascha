@@ -630,15 +630,15 @@ export function MailboxView({
   );
 }
 
-// Wischen bis hierher (px) legt den Löschen-Knopf offen …
+// Nach links wischen legt den Löschen-Knopf offen (weiter geht es nicht).
 const SWIPE_REVEAL = 76;
-// … und darüber hinaus löscht die Mail direkt.
-const SWIPE_DELETE_AT = 130;
-const SWIPE_MAX = 220;
+// Ab dieser Wisch-Strecke rastet die Zeile offen ein, sonst schnappt sie zurück.
+const SWIPE_OPEN_AT = 32;
 
 /**
  * Eine Listenzeile mit Outlook-artiger Wisch-Geste (nach links wischen → roter
- * Löschen-Bereich) und einem Sternchen zum Markieren auf jeder Mail. Die
+ * Löschen-Bereich) und einem Sternchen zum Markieren auf jeder Mail. Gelöscht
+ * wird bewusst NUR per Tipp auf den Knopf, nie allein durchs Wischen. Die
  * Wisch-Logik ist rein touch-basiert; auf dem Desktop verhält sich die Zeile
  * wie bisher (Klick öffnet, Stern markiert).
  */
@@ -700,22 +700,15 @@ function MessageRow({
     moved.current = true;
     let next = startDx.current + deltaX;
     if (next > 0) next = 0; // nicht über den Ursprung nach rechts
-    if (next < -SWIPE_MAX) next = -SWIPE_MAX;
+    if (next < -SWIPE_REVEAL) next = -SWIPE_REVEAL; // nur bis zum Löschen-Knopf
     applyDx(next);
   }
 
   function onTouchEnd() {
     setDragging(false);
     horiz.current = null;
-    const cur = dxRef.current;
-    if (cur <= -SWIPE_DELETE_AT) {
-      applyDx(-SWIPE_MAX);
-      onDelete();
-    } else if (cur <= -SWIPE_REVEAL / 2) {
-      applyDx(-SWIPE_REVEAL);
-    } else {
-      applyDx(0);
-    }
+    // Nie durchs Wischen löschen — nur offen einrasten oder zurückschnappen.
+    applyDx(dxRef.current <= -SWIPE_OPEN_AT ? -SWIPE_REVEAL : 0);
   }
 
   function handleClick() {
@@ -798,7 +791,11 @@ function MessageRow({
             {!item.seen && (
               <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
             )}
-            <span className="text-xs text-sub truncate">
+            <span
+              className={`text-xs truncate ${
+                !item.seen ? "font-semibold text-ink" : "text-sub"
+              }`}
+            >
               {item.subject || "(kein Betreff)"}
             </span>
             {item.hasAttachments && (
