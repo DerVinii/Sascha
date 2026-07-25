@@ -827,6 +827,14 @@ function MessageRow({
           selected ? "bg-accent-faint" : "bg-surface hover:bg-bg"
         } ${item.flagged ? "border-l-2 border-l-warn" : ""}`}
       >
+        {/* Ungelesen: hellerer Hintergrund, damit neue Mails deutlich auffallen
+            (liegt über der deckenden Grundfarbe, unter dem Inhalt). */}
+        {!item.seen && !selected && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-accent/10"
+          />
+        )}
         {/* Markiert-Tönung: über der (deckenden) Grundfarbe, unter dem Inhalt */}
         {item.flagged && !selected && (
           <span
