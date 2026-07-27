@@ -290,10 +290,12 @@ function MonthGrid({
     <div>
       {/* Wochentagsleiste (Google-Stil: schlicht, zentriert, Sonntag zuerst) */}
       <div className="grid grid-cols-7 border-b border-line">
-        {weekdayHeaders().map((w) => (
+        {weekdayHeaders().map((w, i) => (
           <div
             key={w}
-            className="px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-sub text-center"
+            className={`px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-sub text-center ${
+              i >= 5 ? "bg-black/[0.03] dark:bg-white/[0.04]" : ""
+            }`}
           >
             {w}
           </div>
@@ -305,6 +307,7 @@ function MonthGrid({
           const inMonth = d.getMonth() === cursor.getMonth();
           const isToday = sameDay(d, today);
           const isFirst = d.getDate() === 1;
+          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
           const dayItems = eventsOf(d);
           return (
             <div
@@ -319,7 +322,9 @@ function MonthGrid({
                   onSelectDay(d);
                 }
               }}
-              className="min-h-[96px] md:min-h-[120px] border-b border-r border-line px-1 pt-1.5 pb-1 cursor-pointer transition hover:bg-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+              className={`min-h-[96px] md:min-h-[120px] border-b border-r border-line px-1 pt-1.5 pb-1 cursor-pointer transition hover:bg-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+                isWeekend ? "bg-black/[0.03] dark:bg-white/[0.04]" : ""
+              }`}
             >
               {/* Tageszahl oben zentriert */}
               <div className="flex justify-center">
@@ -451,9 +456,15 @@ function WeekGrid({
       <div className="grid grid-cols-7 min-w-[720px]">
         {days.map((d) => {
           const isToday = sameDay(d, today);
+          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
           const dayItems = eventsOf(d);
           return (
-            <div key={dayKey(d)} className="border-r border-line last:border-r-0 min-h-[360px]">
+            <div
+              key={dayKey(d)}
+              className={`border-r border-line last:border-r-0 min-h-[360px] ${
+                isWeekend ? "bg-black/[0.03] dark:bg-white/[0.04]" : ""
+              }`}
+            >
               <button
                 onClick={() => onSelectDay(d)}
                 className="w-full px-2 py-2 border-b border-line text-center hover:bg-bg/50 transition"

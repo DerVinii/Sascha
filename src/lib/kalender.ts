@@ -96,15 +96,15 @@ export function readableOn(hex: string): "#ffffff" | "#3c4043" {
 // Datums-Helfer (lokale Zeit)
 // ---------------------------------------------------------------------------
 
-// Sonntag zuerst — wie in Google Calendar (SO MO DI MI DO FR SA).
-const WEEKDAYS_SHORT = ["SO", "MO", "DI", "MI", "DO", "FR", "SA"];
+// Montag zuerst (MO DI MI DO FR SA SO) — Sonntag ganz rechts neben Samstag.
+const WEEKDAYS_SHORT = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"];
 export function weekdayHeaders(): string[] {
   return WEEKDAYS_SHORT;
 }
 
-/** JS-Standard: Sonntag=0 … Samstag=6. */
+/** Montag=0 … Sonntag=6 (statt JS-Standard Sonntag=0). */
 export function isoWeekday(d: Date): number {
-  return d.getDay();
+  return (d.getDay() + 6) % 7;
 }
 
 export function startOfDay(d: Date): Date {
@@ -153,22 +153,22 @@ export function monthParam(d: Date): string {
 }
 
 /**
- * 42 Tage (6 Wochen) für das Monatsraster, Sonntag-zuerst. Enthält je nach
+ * 42 Tage (6 Wochen) für das Monatsraster, Montag-zuerst. Enthält je nach
  * Monat führende/nachlaufende Tage der Nachbarmonate.
  */
 export function monthGridDays(year: number, month: number): Date[] {
   const first = new Date(year, month, 1);
-  const lead = isoWeekday(first); // Sonntag=0
+  const lead = isoWeekday(first); // Montag=0
   const startDate = new Date(year, month, 1 - lead);
   return Array.from({ length: 42 }, (_, i) =>
     new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i),
   );
 }
 
-/** Die 7 Tage der Woche (Sonntag-zuerst), die `d` enthält. */
+/** Die 7 Tage der Woche (Montag-zuerst), die `d` enthält. */
 export function weekDays(d: Date): Date[] {
-  const sunday = addDays(startOfDay(d), -isoWeekday(d));
-  return Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
+  const monday = addDays(startOfDay(d), -isoWeekday(d));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 }
 
 const fmtTimeDE = new Intl.DateTimeFormat("de-DE", {
