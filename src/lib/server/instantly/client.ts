@@ -155,6 +155,12 @@ const DEFAULT_SCHEDULE = {
 // Kampagnen; ein im Instantly-UI geänderter Wert bleibt erhalten.
 const DEFAULT_DAILY_LIMIT = 100;
 
+// "Optionen" → "Zustelloptimierung" → "E-Mails nur als Text senden (kein HTML)".
+// Reine Textmails landen seltener im Spam. Unsere Mailtexte werden ohnehin aus
+// einfachem Text erzeugt (textToHtml), es geht also keine Formatierung verloren.
+// Nebeneffekt: ohne HTML gibt es kein Zählpixel, Öffnungs-Tracking ist damit aus.
+const DEFAULT_TEXT_ONLY = true;
+
 export async function createCampaign(input: {
   name: string;
   sequences: InstantlySequence[];
@@ -165,6 +171,7 @@ export async function createCampaign(input: {
     sequences: input.sequences,
     campaign_schedule: DEFAULT_SCHEDULE,
     daily_limit: DEFAULT_DAILY_LIMIT,
+    text_only: DEFAULT_TEXT_ONLY,
   };
   if (input.emailList?.length) body.email_list = input.emailList;
   const data = await call<{ id: string }>("/campaigns", {
