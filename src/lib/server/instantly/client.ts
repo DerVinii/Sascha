@@ -696,11 +696,22 @@ export type InstantlyLead = {
   custom_variables?: Record<string, string>;
 };
 
-/** Lead-ID zu einer E-Mail finden (Workspace-weit; E-Mail ist eindeutig). */
-export async function findLeadIdByEmail(email: string): Promise<string | null> {
+/**
+ * Lead-ID zu einer E-Mail finden. Dieselbe Adresse kann in mehreren Kampagnen
+ * stecken — dann gibt es pro Kampagne einen eigenen Lead-Datensatz mit eigener
+ * ID. Ohne `campaignId` gewinnt der erste Treffer, was beim Aktualisieren oder
+ * Löschen den falschen Datensatz erwischen würde. Der Filter heißt `campaign`
+ * (gegen die API verifiziert: `campaign_id` wird stillschweigend ignoriert).
+ */
+export async function findLeadIdByEmail(
+  email: string,
+  campaignId?: string,
+): Promise<string | null> {
+  const body: Record<string, unknown> = { search: email, limit: 10 };
+  if (campaignId) body.campaign = campaignId;
   const data = await call<{ items?: Array<{ id: string; email?: string }> }>(
     "/leads/list",
-    { method: "POST", body: JSON.stringify({ search: email, limit: 10 }) },
+    { method: "POST", body: JSON.stringify(body) },
   );
   const items = data.items ?? [];
   const hit = items.find(
@@ -756,11 +767,16 @@ export async function deleteLead(id: string): Promise<void> {
 
 /**
  * Leads anhand ihrer E-Mails in Instantly löschen (Best-Effort). Für jede E-Mail
- * wird die Lead-ID gesucht und der Lead gelöscht. Einzelne Fehler brechen den
+ * wird die Lead-ID gesucht und der Lead gelöscht. `campaignId` grenzt das auf
+ * eine Kampagne ein — sonst könnte derselbe Lead in einer anderen Kampagne
+ * erwischt werden. Einzelne Fehler brechen den
  * Rest NICHT ab (das lokale Löschen soll nie an Instantly scheitern).
  * Gibt die Anzahl tatsächlich gelöschter Leads zurück.
  */
-export async function deleteLeadsByEmails(emails: string[]): Promise<number> {
+export async function deleteLeadsByEmails(
+  emails: string[],
+  campaignId?: string,
+): Promise<number> {
   const unique = [
     ...new Set(
       emails
@@ -771,7 +787,7 @@ export async function deleteLeadsByEmails(emails: string[]): Promise<number> {
   let deleted = 0;
   for (const email of unique) {
     try {
-      const id = await findLeadIdByEmail(email);
+      const id = await findLeadIdByEmail(email, campaignId);
       if (!id) continue;
       await deleteLead(id);
       deleted += 1;
@@ -784,7 +800,15 @@ export async function deleteLeadsByEmails(emails: string[]): Promise<number> {
 
 /**
  * Leads in eine Kampagne einspielen (bis zu 1000/Call).
- * `skipIfInCampaign` lässt Instantly selbst deduplizieren.
+ *
+ * Achtung bei `skipIfInCampaign`: Instantly liest das als „steckt schon in
+ * IRGENDEINER Kampagne", nicht als „schon in dieser Kampagne" — gegen die echte
+ * API verifiziert. Auf `true` wird ein Lead also stillschweigend übersprungen,
+ * bloß weil er in einer anderen Kampagne läuft. Default darum `false`; der
+ * Duplikat-Wunsch kommt aus dem Haken im Kampagnen-Dialog.
+ *
+ * Doppelte Leads INNERHALB derselben Kampagne entstehen dadurch nicht: die
+ * lehnt Instantly unabhängig von diesen Flags ab (Antwort `duplicated_leads`).
  */
 export async function bulkAddLeads(
   campaignId: string,
@@ -797,7 +821,7 @@ export async function bulkAddLeads(
     body: JSON.stringify({
       campaign_id: campaignId,
       leads,
-      skip_if_in_campaign: opts?.skipIfInCampaign ?? true,
+      skip_if_in_campaign: opts?.skipIfInCampaign ?? false,
       skip_if_in_workspace: opts?.skipIfInWorkspace ?? false,
     }),
   });

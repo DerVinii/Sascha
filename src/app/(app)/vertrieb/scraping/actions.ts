@@ -1218,7 +1218,9 @@ export async function bulkDeleteLeadsAction(input: {
       .filter((e) => e.includes("@"));
     if (emails.length > 0) {
       try {
-        await deleteLeadsByEmails(emails);
+        // Nur in der Kampagne dieses Ordners löschen — derselbe Lead kann
+        // bewusst auch in einer anderen Kampagne laufen und muss dort bleiben.
+        await deleteLeadsByEmails(emails, listRow.instantlyCampaignId);
       } catch (err) {
         console.error("Instantly: Leads konnten nicht gelöscht werden:", err);
       }
@@ -1939,14 +1941,16 @@ export async function sendListToInstantlyAction(input: {
     };
 
     // 1) Neue Leads einspielen — immer mit ALLEN Spalten (siehe buildInstantlyLead).
-    // skipIfInWorkspace doppelt als Server-Absicherung zum obigen Duplikat-Check.
+    // Beide Skip-Flags hängen am Haken im Dialog: Instantly versteht auch
+    // skip_if_in_campaign als „steckt schon in irgendeiner Kampagne" und würde
+    // sonst jeden Lead verschlucken, der bereits woanders läuft.
     if (addRows.length > 0) {
       try {
         await bulkAddLeads(
           campaignId,
           addRows.map((s) => buildInstantlyLead(s, columns)),
           {
-            skipIfInCampaign: true,
+            skipIfInCampaign: input.filter.skipWorkspaceDuplicates,
             skipIfInWorkspace: input.filter.skipWorkspaceDuplicates,
           },
         );
@@ -1964,14 +1968,16 @@ export async function sendListToInstantlyAction(input: {
       for (const src of toUpdate) {
         const lead = buildInstantlyLead(src, columns);
         try {
-          const id = await findLeadIdByEmail(lead.email);
+          // Auf DIESE Kampagne eingegrenzt: derselbe Lead kann in mehreren
+          // Kampagnen liegen, sonst würde der falsche Datensatz aktualisiert.
+          const id = await findLeadIdByEmail(lead.email, campaignId);
           if (id) {
             await updateLead(id, lead);
             updated++;
             pushedIds.push(src.contact.id);
           } else {
             // Laut DB gesendet, in Instantly aber nicht (mehr) vorhanden → neu anlegen.
-            await bulkAddLeads(campaignId, [lead], { skipIfInCampaign: true });
+            await bulkAddLeads(campaignId, [lead], { skipIfInCampaign: false });
             sent++;
             await markSent([src]);
             pushedIds.push(src.contact.id);

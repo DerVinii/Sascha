@@ -196,7 +196,9 @@ export async function deleteLeadAction(contactId: string) {
       .limit(1);
     if (list?.instantlyCampaignId) {
       try {
-        await deleteLeadsByEmails([email]);
+        // Auf die Kampagne dieses Ordners eingegrenzt: dieselbe Adresse kann
+        // bewusst in einer weiteren Kampagne stecken und darf dort nicht weg.
+        await deleteLeadsByEmails([email], list.instantlyCampaignId);
       } catch (err) {
         console.error("Instantly: Lead konnte nicht gelöscht werden:", err);
       }
