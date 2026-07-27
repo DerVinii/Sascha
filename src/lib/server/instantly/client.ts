@@ -150,6 +150,11 @@ const DEFAULT_SCHEDULE = {
   ],
 };
 
+// Tägliches Sendelimit pro Kampagne ("Optionen" → "Tägliches Limit"). Ohne
+// Angabe setzt Instantly selbst 30 — zu wenig. Gilt nur für neu angelegte
+// Kampagnen; ein im Instantly-UI geänderter Wert bleibt erhalten.
+const DEFAULT_DAILY_LIMIT = 100;
+
 export async function createCampaign(input: {
   name: string;
   sequences: InstantlySequence[];
@@ -159,6 +164,7 @@ export async function createCampaign(input: {
     name: input.name,
     sequences: input.sequences,
     campaign_schedule: DEFAULT_SCHEDULE,
+    daily_limit: DEFAULT_DAILY_LIMIT,
   };
   if (input.emailList?.length) body.email_list = input.emailList;
   const data = await call<{ id: string }>("/campaigns", {
