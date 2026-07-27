@@ -573,6 +573,98 @@ export async function deleteMessage(
   });
 }
 
+/**
+ * Mehrere ausgewählte Nachrichten in einem Rutsch löschen. Semantik wie
+ * deleteMessage: in den Papierkorb verschieben; ist der Ordner selbst der
+ * Papierkorb (oder es gibt keinen), endgültig entfernen. In Blöcken, damit die
+ * IMAP-Befehlszeile bei sehr vielen UIDs nicht zu lang wird.
+ */
+export async function bulkDeleteMessages(
+  folder: string,
+  uids: number[],
+): Promise<void> {
+  if (uids.length === 0) return;
+  await withImap(async (c) => {
+    const list = await c.list();
+    const trash = list.find((f) => f.specialUse === "\\Trash");
+    const inTrash = Boolean(trash && trash.path === folder);
+    const lock = await c.getMailboxLock(folder);
+    try {
+      await purgeUids(c, uids, trash?.path, inTrash);
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Alle Nachrichten eines Ordners löschen — optional gefiltert wie die Liste
+ * (Suche / „nur markiert"). Für „Alle auswählen → Löschen". Ermittelt die
+ * passenden UIDs serverseitig, damit auch noch nicht nachgeladene Mails erfasst
+ * werden. Gibt die Anzahl der gelöschten Nachrichten zurück.
+ */
+export async function bulkDeleteFolder(
+  folder: string,
+  opts: { search?: string; flaggedOnly?: boolean } = {},
+): Promise<number> {
+  return withImap(async (c) => {
+    const list = await c.list();
+    const trash = list.find((f) => f.specialUse === "\\Trash");
+    const inTrash = Boolean(trash && trash.path === folder);
+    const search = opts.search?.trim();
+    const flaggedOnly = opts.flaggedOnly ?? false;
+    const lock = await c.getMailboxLock(folder);
+    try {
+      let uids: number[];
+      if (search || flaggedOnly) {
+        const criteria: {
+          flagged?: boolean;
+          or?: Array<{ subject?: string; from?: string; to?: string; body?: string }>;
+        } = {};
+        if (flaggedOnly) criteria.flagged = true;
+        if (search)
+          criteria.or = [
+            { subject: search },
+            { from: search },
+            { to: search },
+            { body: search },
+          ];
+        const found = await c.search(criteria, { uid: true });
+        uids = Array.isArray(found) ? found : [];
+      } else {
+        const found = await c.search({ all: true }, { uid: true });
+        uids = Array.isArray(found) ? found : [];
+      }
+      await purgeUids(c, uids, trash?.path, inTrash);
+      return uids.length;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * UIDs blockweise löschen bzw. in den Papierkorb verschieben. Erwartet einen
+ * bereits gesetzten Mailbox-Lock auf dem Quellordner.
+ */
+async function purgeUids(
+  c: ImapFlow,
+  uids: number[],
+  trashPath: string | undefined,
+  inTrash: boolean,
+): Promise<void> {
+  const CHUNK = 500;
+  for (let i = 0; i < uids.length; i += CHUNK) {
+    const seq = uids.slice(i, i + CHUNK).join(",");
+    if (!seq) continue;
+    if (!trashPath || inTrash) {
+      await c.messageDelete(seq, { uid: true });
+    } else {
+      await c.messageMove(seq, trashPath, { uid: true });
+    }
+  }
+}
+
 /** Eine gesendete Nachricht (rohes MIME) in den „Gesendet"-Ordner ablegen. */
 export async function appendToSent(raw: Buffer): Promise<void> {
   await withImap(async (c) => {

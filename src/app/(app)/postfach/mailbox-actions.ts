@@ -1,6 +1,8 @@
 "use server";
 
 import {
+  bulkDeleteFolder,
+  bulkDeleteMessages,
   deleteMessage,
   getMessage,
   listFolders,
@@ -82,6 +84,29 @@ export async function deleteMessageAction(input: {
   uid: number;
 }): Promise<void> {
   await deleteMessage(input.folder, input.uid);
+}
+
+/** Mehrere ausgewählte E-Mails auf einmal löschen. */
+export async function bulkDeleteAction(input: {
+  folder: string;
+  uids: number[];
+}): Promise<void> {
+  await bulkDeleteMessages(input.folder, input.uids);
+}
+
+/**
+ * Alle E-Mails im Ordner löschen (optional gefiltert wie die Liste). Für
+ * „Alle auswählen → Löschen". Gibt die Anzahl gelöschter E-Mails zurück.
+ */
+export async function bulkDeleteFolderAction(input: {
+  folder: string;
+  search?: string;
+  flaggedOnly?: boolean;
+}): Promise<number> {
+  return bulkDeleteFolder(input.folder, {
+    search: input.search,
+    flaggedOnly: input.flaggedOnly,
+  });
 }
 
 /**

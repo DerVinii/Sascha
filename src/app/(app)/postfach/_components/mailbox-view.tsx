@@ -24,11 +24,16 @@ import {
   Download,
   Loader2,
   Signature as SignatureIcon,
+  ListChecks,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from "lucide-react";
 import {
   addressListText,
   addressText,
   folderLabel,
+  folderSortRank,
   formatBytes,
   type MailboxFolder,
   type MailboxListItem,
@@ -44,7 +49,10 @@ import {
 import { RichTextEditor } from "@/components/app/rich-text-editor";
 import { SignatureDialog } from "./signature-dialog";
 import {
+  bulkDeleteAction,
+  bulkDeleteFolderAction,
   deleteMessageAction,
+  listFoldersAction,
   listMessagesAction,
   moveMessageAction,
   openMessageAction,
@@ -143,9 +151,17 @@ export function MailboxView({
   const [signatureDialog, setSignatureDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Mehrfachauswahl: Auswahlmodus, explizit angehakte UIDs und der Sonderfall
+  // „ganzer Ordner" (auch noch nicht nachgeladene Mails).
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUids, setSelectedUids] = useState<Set<number>>(new Set());
+  const [allInFolder, setAllInFolder] = useState(false);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+
   const [isListLoading, startList] = useTransition();
   const [isOpening, startOpen] = useTransition();
   const [isMoreLoading, startMore] = useTransition();
+  const [isBulkDeleting, startBulkDelete] = useTransition();
 
   const activeFolderObj = useMemo(
     () => folders.find((f) => f.path === activeFolder) ?? null,
@@ -194,6 +210,9 @@ export function MailboxView({
     setActiveFolder(path);
     setSelectedUid(null);
     setOpened(null);
+    setSelectionMode(false);
+    setSelectedUids(new Set());
+    setAllInFolder(false);
     setAppliedSearch(search);
     setSearchInput(search);
     startList(async () => {
@@ -241,6 +260,125 @@ export function MailboxView({
         setTotal(res.total);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Laden fehlgeschlagen");
+      }
+    });
+  }
+
+  // --- Mehrfachauswahl ------------------------------------------------------
+
+  const selectedCount = allInFolder ? total : selectedUids.size;
+  const anySelected = allInFolder || selectedUids.size > 0;
+  const rowChecked = (uid: number) => allInFolder || selectedUids.has(uid);
+  const trashFolder = folders.find((f) => f.specialUse === "\\Trash");
+  // Löschen entfernt hier endgültig, wenn es keinen Papierkorb gibt oder man
+  // bereits im Papierkorb ist — sonst wird verschoben.
+  const deletesPermanently = !trashFolder || trashFolder.path === activeFolder;
+
+  function enterSelection() {
+    setSelectionMode(true);
+    setSelectedUids(new Set());
+    setAllInFolder(false);
+    setOpened(null);
+    setSelectedUid(null);
+  }
+
+  function exitSelection() {
+    setSelectionMode(false);
+    setSelectedUids(new Set());
+    setAllInFolder(false);
+    setConfirmBulk(false);
+  }
+
+  function toggleSelect(uid: number) {
+    if (allInFolder) {
+      // War „ganzer Ordner" aktiv, jetzt eine Mail abhaken → auf die geladenen
+      // Mails (ohne diese) materialisieren.
+      const base = new Set(items.map((m) => m.uid));
+      base.delete(uid);
+      setAllInFolder(false);
+      setSelectedUids(base);
+      return;
+    }
+    setSelectedUids((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (anySelected) {
+      setAllInFolder(false);
+      setSelectedUids(new Set());
+    } else {
+      // Alle Mails im aktiven Ordner (auch nicht geladene) auswählen.
+      setAllInFolder(true);
+      setSelectedUids(new Set());
+    }
+  }
+
+  // Nach einer Massenlöschung Liste und Ordnerzähler frisch vom Server holen —
+  // bei „ganzer Ordner" sind auch nicht geladene Mails betroffen, deshalb kein
+  // rein optimistisches Update.
+  async function reloadAfterBulk() {
+    try {
+      const [msgs, fresh] = await Promise.all([
+        listMessagesAction({
+          folder: activeFolder,
+          search: appliedSearch || undefined,
+          flaggedOnly,
+        }),
+        listFoldersAction(),
+      ]);
+      setItems(msgs.items);
+      setTotal(msgs.total);
+      setFolders(
+        fresh.sort(
+          (a, b) =>
+            folderSortRank(a) - folderSortRank(b) || a.name.localeCompare(b.name),
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Laden fehlgeschlagen");
+    }
+  }
+
+  function runBulkDelete() {
+    const wholeFolder = allInFolder;
+    const uids = [...selectedUids];
+    if (!wholeFolder && uids.length === 0) return;
+    setConfirmBulk(false);
+
+    // Optimistisch aus der Liste nehmen, damit keine bereits gelöschte Zeile
+    // kurz sichtbar bleibt; reloadAfterBulk gleicht danach mit dem Server ab.
+    if (wholeFolder) {
+      setItems([]);
+      setTotal(0);
+    } else {
+      const removing = new Set(uids);
+      setItems((prev) => prev.filter((m) => !removing.has(m.uid)));
+      setTotal((t) => Math.max(0, t - uids.length));
+    }
+    setSelectionMode(false);
+    setSelectedUids(new Set());
+    setAllInFolder(false);
+
+    startBulkDelete(async () => {
+      try {
+        if (wholeFolder) {
+          await bulkDeleteFolderAction({
+            folder: activeFolder,
+            search: appliedSearch || undefined,
+            flaggedOnly,
+          });
+        } else {
+          await bulkDeleteAction({ folder: activeFolder, uids });
+        }
+        await reloadAfterBulk();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Löschen fehlgeschlagen");
+        await reloadAfterBulk();
       }
     });
   }
@@ -502,70 +640,133 @@ export function MailboxView({
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sub" />
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                  placeholder={`In ${
-                    activeFolderObj ? folderLabel(activeFolderObj) : "Ordner"
-                  } suchen …`}
-                  className="w-full h-9 sm:h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
-                />
+            {selectionMode ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex-1 min-w-0 h-9 sm:h-8 inline-flex items-center gap-2 rounded-md border border-line px-2.5 text-sm text-ink hover:bg-bg transition"
+                >
+                  {anySelected ? (
+                    allInFolder || (items.length > 0 && items.every((m) => selectedUids.has(m.uid))) ? (
+                      <CheckSquare className="h-4 w-4 text-accent shrink-0" />
+                    ) : (
+                      <MinusSquare className="h-4 w-4 text-accent shrink-0" />
+                    )
+                  ) : (
+                    <Square className="h-4 w-4 text-sub shrink-0" />
+                  )}
+                  <span className="truncate">
+                    {anySelected
+                      ? `${selectedCount} ausgewählt`
+                      : "Alle auswählen"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setConfirmBulk(true)}
+                  disabled={!anySelected || isBulkDeleting}
+                  title="Ausgewählte löschen"
+                  className="h-9 sm:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-err/40 bg-err/5 text-sm font-medium text-err hover:bg-err/10 transition disabled:opacity-40"
+                >
+                  {isBulkDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">Löschen</span>
+                </button>
+                <button
+                  onClick={exitSelection}
+                  title="Auswahl beenden"
+                  className="h-9 w-9 sm:h-8 sm:w-8 shrink-0 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                onClick={toggleFlaggedFilter}
-                disabled={isListLoading}
-                title={
-                  flaggedOnly
-                    ? "Nur markierte E-Mails — Filter aufheben"
-                    : "Nur markierte E-Mails anzeigen"
-                }
-                aria-pressed={flaggedOnly}
-                className={`h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border transition disabled:opacity-50 ${
-                  flaggedOnly
-                    ? "border-warn/40 bg-warn/10 text-warn"
-                    : "border-line text-sub hover:text-ink hover:bg-bg"
-                }`}
-              >
-                <Star
-                  className={`h-4 w-4 ${flaggedOnly ? "fill-warn" : ""}`}
-                />
-              </button>
-              <button
-                onClick={refresh}
-                disabled={isListLoading}
-                title="Aktualisieren"
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isListLoading ? "animate-spin" : ""}`}
-                />
-              </button>
-            </div>
-            {(appliedSearch || flaggedOnly) && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                {flaggedOnly && (
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sub" />
+                    <input
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                      placeholder={`In ${
+                        activeFolderObj ? folderLabel(activeFolderObj) : "Ordner"
+                      } suchen …`}
+                      className="w-full h-9 sm:h-8 pl-8 pr-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    />
+                  </div>
+                  <button
+                    onClick={enterSelection}
+                    disabled={isListLoading || items.length === 0}
+                    title="E-Mails auswählen"
+                    className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
+                  >
+                    <ListChecks className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={toggleFlaggedFilter}
-                    className="text-[11px] text-warn hover:underline inline-flex items-center gap-1"
+                    disabled={isListLoading}
+                    title={
+                      flaggedOnly
+                        ? "Nur markierte E-Mails — Filter aufheben"
+                        : "Nur markierte E-Mails anzeigen"
+                    }
+                    aria-pressed={flaggedOnly}
+                    className={`h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border transition disabled:opacity-50 ${
+                      flaggedOnly
+                        ? "border-warn/40 bg-warn/10 text-warn"
+                        : "border-line text-sub hover:text-ink hover:bg-bg"
+                    }`}
                   >
-                    <Star className="h-3 w-3 fill-warn" />
-                    Nur markierte — Filter aufheben
+                    <Star
+                      className={`h-4 w-4 ${flaggedOnly ? "fill-warn" : ""}`}
+                    />
                   </button>
-                )}
-                {appliedSearch && (
                   <button
-                    onClick={() => loadFolder(activeFolder, "")}
-                    className="text-[11px] text-accent hover:underline"
+                    onClick={refresh}
+                    disabled={isListLoading}
+                    title="Aktualisieren"
+                    className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md border border-line text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
                   >
-                    Suche „{appliedSearch}" zurücksetzen
+                    <RefreshCw
+                      className={`h-4 w-4 ${isListLoading ? "animate-spin" : ""}`}
+                    />
                   </button>
+                </div>
+                {(appliedSearch || flaggedOnly) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {flaggedOnly && (
+                      <button
+                        onClick={toggleFlaggedFilter}
+                        className="text-[11px] text-warn hover:underline inline-flex items-center gap-1"
+                      >
+                        <Star className="h-3 w-3 fill-warn" />
+                        Nur markierte — Filter aufheben
+                      </button>
+                    )}
+                    {appliedSearch && (
+                      <button
+                        onClick={() => loadFolder(activeFolder, "")}
+                        className="text-[11px] text-accent hover:underline"
+                      >
+                        Suche „{appliedSearch}" zurücksetzen
+                      </button>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
+            {selectionMode &&
+              allInFolder &&
+              total > items.length && (
+                <p className="text-[11px] text-sub">
+                  Alle {total} E-Mails in{" "}
+                  {activeFolderObj ? folderLabel(activeFolderObj) : "diesem Ordner"}{" "}
+                  sind ausgewählt.
+                </p>
+              )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -593,7 +794,10 @@ export function MailboxView({
                     item={item}
                     selected={selectedUid === item.uid}
                     isSent={activeFolderObj?.specialUse === "\\Sent"}
+                    selectionMode={selectionMode}
+                    checked={rowChecked(item.uid)}
                     onOpen={() => openItem(item)}
+                    onToggleSelect={() => toggleSelect(item.uid)}
                     onToggleFlag={() => toggleFlag(item)}
                     onDelete={() => del(item.uid)}
                   />
@@ -683,6 +887,52 @@ export function MailboxView({
           onClose={() => setSignatureDialog(false)}
         />
       )}
+
+      {confirmBulk && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+          onClick={() => setConfirmBulk(false)}
+        >
+          <div
+            className="w-full sm:max-w-sm bg-surface sm:rounded-xl border border-line shadow-xl p-5"
+            style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 h-9 w-9 shrink-0 rounded-full bg-err/10 flex items-center justify-center">
+                <Trash2 className="h-5 w-5 text-err" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-ink">
+                  {selectedCount === 1
+                    ? "1 E-Mail löschen?"
+                    : `${selectedCount} E-Mails löschen?`}
+                </h2>
+                <p className="mt-1 text-xs text-sub leading-relaxed">
+                  {deletesPermanently
+                    ? "Die Auswahl wird endgültig gelöscht und lässt sich nicht wiederherstellen."
+                    : "Die Auswahl wird in den Papierkorb verschoben."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmBulk(false)}
+                className="h-9 px-4 inline-flex items-center rounded-md border border-line text-sm font-medium text-sub hover:text-ink hover:bg-bg transition"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={runBulkDelete}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-md bg-err text-white text-sm font-medium hover:bg-err/90 transition"
+              >
+                <Trash2 className="h-4 w-4" />
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -703,14 +953,20 @@ function MessageRow({
   item,
   selected,
   isSent,
+  selectionMode,
+  checked,
   onOpen,
+  onToggleSelect,
   onToggleFlag,
   onDelete,
 }: {
   item: MailboxListItem;
   selected: boolean;
   isSent: boolean;
+  selectionMode: boolean;
+  checked: boolean;
   onOpen: () => void;
+  onToggleSelect: () => void;
   onToggleFlag: () => void;
   onDelete: () => void;
 }) {
@@ -730,7 +986,14 @@ function MessageRow({
     setDx(v);
   }
 
+  // Im Auswahlmodus gibt es keine Wisch-Geste — eine evtl. offene Zeile
+  // zurückschnappen lassen, damit der rote Löschen-Bereich nicht sichtbar bleibt.
+  useEffect(() => {
+    if (selectionMode && dxRef.current !== 0) applyDx(0);
+  }, [selectionMode]);
+
   function onTouchStart(e: React.TouchEvent) {
+    if (selectionMode) return;
     const t = e.touches[0];
     startX.current = t.clientX;
     startY.current = t.clientY;
@@ -741,6 +1004,7 @@ function MessageRow({
   }
 
   function onTouchMove(e: React.TouchEvent) {
+    if (selectionMode) return;
     const t = e.touches[0];
     const deltaX = t.clientX - startX.current;
     const deltaY = t.clientY - startY.current;
@@ -762,6 +1026,7 @@ function MessageRow({
   }
 
   function onTouchEnd() {
+    if (selectionMode) return;
     setDragging(false);
     horiz.current = null;
     // Nie durchs Wischen löschen — nur offen einrasten oder zurückschnappen.
@@ -769,6 +1034,10 @@ function MessageRow({
   }
 
   function handleClick() {
+    if (selectionMode) {
+      onToggleSelect(); // im Auswahlmodus hakt ein Tipp die Zeile an/ab
+      return;
+    }
     if (moved.current) return; // war ein Wisch, kein Tipp
     if (dxRef.current !== 0) {
       applyDx(0); // offener Löschen-Bereich → erst schließen
@@ -798,13 +1067,15 @@ function MessageRow({
 
       {/* Vordergrund: die eigentliche Zeile (deckt den roten Bereich ab) */}
       <div
-        role="button"
+        role={selectionMode ? "checkbox" : "button"}
+        aria-checked={selectionMode ? checked : undefined}
         tabIndex={0}
         onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onOpen();
+            if (selectionMode) onToggleSelect();
+            else onOpen();
           }
         }}
         onTouchStart={onTouchStart}
@@ -816,23 +1087,34 @@ function MessageRow({
           touchAction: "pan-y",
         }}
         className={`relative flex items-stretch cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent/50 ${
-          selected ? "bg-accent-faint" : "bg-surface hover:bg-bg"
+          selected || checked ? "bg-accent-faint" : "bg-surface hover:bg-bg"
         } ${item.flagged ? "border-l-2 border-l-warn" : ""}`}
       >
         {/* Ungelesen: hellerer Hintergrund, damit neue Mails deutlich auffallen
             (liegt über der deckenden Grundfarbe, unter dem Inhalt). */}
-        {!item.seen && !selected && (
+        {!item.seen && !selected && !checked && (
           <span
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-accent/10"
           />
         )}
         {/* Markiert-Tönung: über der (deckenden) Grundfarbe, unter dem Inhalt */}
-        {item.flagged && !selected && (
+        {item.flagged && !selected && !checked && (
           <span
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-warn/10"
           />
+        )}
+
+        {/* Auswahl-Kästchen (nur im Auswahlmodus) */}
+        {selectionMode && (
+          <div className="relative flex items-center pl-3 shrink-0">
+            {checked ? (
+              <CheckSquare className="h-5 w-5 text-accent" />
+            ) : (
+              <Square className="h-5 w-5 text-sub/60" />
+            )}
+          </div>
         )}
 
         <div className="relative flex-1 min-w-0 px-3 py-2.5">
@@ -869,21 +1151,24 @@ function MessageRow({
           </div>
         </div>
 
-        {/* Sternchen auf jeder Mail: tippen markiert/entmarkiert */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFlag();
-          }}
-          aria-label={item.flagged ? "Markierung entfernen" : "Markieren"}
-          aria-pressed={item.flagged}
-          className="relative shrink-0 px-3 flex items-center text-sub hover:text-warn transition"
-        >
-          <Star
-            className={`h-4 w-4 ${item.flagged ? "fill-warn text-warn" : ""}`}
-          />
-        </button>
+        {/* Sternchen auf jeder Mail: tippen markiert/entmarkiert.
+            Im Auswahlmodus ausgeblendet — dort zählt nur das Kästchen. */}
+        {!selectionMode && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFlag();
+            }}
+            aria-label={item.flagged ? "Markierung entfernen" : "Markieren"}
+            aria-pressed={item.flagged}
+            className="relative shrink-0 px-3 flex items-center text-sub hover:text-warn transition"
+          >
+            <Star
+              className={`h-4 w-4 ${item.flagged ? "fill-warn text-warn" : ""}`}
+            />
+          </button>
+        )}
       </div>
     </div>
   );
