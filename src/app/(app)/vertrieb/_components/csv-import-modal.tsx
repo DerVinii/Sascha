@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Papa from "papaparse";
-import { X, Upload, FileText } from "lucide-react";
+import { X, Upload, FileText, Plus } from "lucide-react";
 import {
   importLeadsAction,
   type ImportRow,
@@ -95,6 +95,26 @@ export function CsvImportModal({
     });
   }
 
+  /**
+   * Die eben übersprungenen Zeilen doch anlegen. Nötig, wenn dieselben Leads
+   * bewusst in einen zweiten Ordner sollen — der Dubletten-Check greift org-weit.
+   */
+  function addDuplicates() {
+    const dupes = result?.duplicateRows ?? [];
+    if (dupes.length === 0) return;
+    startTransition(async () => {
+      const r = await importLeadsAction(dupes, listId, {
+        allowDuplicates: true,
+      });
+      setResult((prev) => ({
+        imported: (prev?.imported ?? 0) + r.imported,
+        duplicates: 0,
+        duplicateRows: [],
+        errors: [...(prev?.errors ?? []), ...r.errors],
+      }));
+    });
+  }
+
   return (
     <>
       {!controlled && (
@@ -161,7 +181,8 @@ export function CsvImportModal({
                     </div>
                     <p className="text-[11px] text-sub mt-2">
                       Duplikate werden anhand der E-Mail-Adresse erkannt und
-                      übersprungen.
+                      zunächst übersprungen — nach dem Import lassen sie sich
+                      mit einem Klick trotzdem hinzufügen.
                     </p>
                   </div>
                 </div>
@@ -219,10 +240,16 @@ export function CsvImportModal({
                     {result.imported} importiert
                   </div>
                   {result.duplicates > 0 && (
-                    <p className="text-sm text-sub">
-                      {result.duplicates} Duplikat
-                      {result.duplicates !== 1 ? "e" : ""} übersprungen
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-sm text-sub">
+                        {result.duplicates} Duplikat
+                        {result.duplicates !== 1 ? "e" : ""} übersprungen
+                      </p>
+                      <p className="text-[11px] text-sub">
+                        Diese E-Mail-Adressen gibt es schon in einem anderen
+                        Ordner.
+                      </p>
+                    </div>
                   )}
                   {result.errors.length > 0 && (
                     <div className="text-xs text-err">
@@ -254,6 +281,18 @@ export function CsvImportModal({
                   {pending
                     ? "Wird importiert …"
                     : `${rows.length} Leads importieren`}
+                </button>
+              )}
+              {result && result.duplicateRows.length > 0 && (
+                <button
+                  onClick={addDuplicates}
+                  disabled={pending}
+                  className="h-9 px-4 inline-flex items-center gap-1.5 bg-brand text-white text-sm font-medium rounded-md hover:bg-sidebar-soft transition disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {pending
+                    ? "Wird hinzugefügt …"
+                    : "Duplikate trotzdem hinzufügen"}
                 </button>
               )}
             </div>

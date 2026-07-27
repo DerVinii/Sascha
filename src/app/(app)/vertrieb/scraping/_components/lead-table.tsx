@@ -505,7 +505,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         hasCampaign={hasCampaign}
         onLinkPipeline={() => setLinkPipelineOpen(true)}
         linkedPipelineName={linkedPipeline?.name ?? null}
-        exportHref="/api/crm/export?status=lead"
+        exportHref={`/api/crm/export?listId=${encodeURIComponent(listId)}`}
         progress={runner.progress}
         onStop={runner.stop}
         bgActive={bgEnrich.active}

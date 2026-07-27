@@ -23,33 +23,51 @@ export type ImportRow = {
 export type ImportResult = {
   imported: number;
   duplicates: number;
+  /** Die übersprungenen Zeilen — Grundlage für „Duplikate trotzdem hinzufügen". */
+  duplicateRows: ImportRow[];
   errors: string[];
 };
 
 /**
  * Massen-Import von Leads. Status wird auf 'lead' gesetzt. Duplikate werden
  * anhand der E-Mail-Adresse erkannt (innerhalb der gleichen Org).
+ *
+ * Der Check ist org-weit, nicht ordnerweit: ein Lead, der schon in einem anderen
+ * Ordner liegt, gilt also als Duplikat. Wer denselben Lead bewusst in eine zweite
+ * Kampagne holen will, ruft das Ganze mit `allowDuplicates` erneut auf — dann
+ * entsteht ein zweiter Kontakt in diesem Ordner.
  */
 export async function importLeadsAction(
   rows: ImportRow[],
   listId?: string,
+  opts?: { allowDuplicates?: boolean },
 ): Promise<ImportResult> {
   const org = await requireActiveOrg();
-  const result: ImportResult = { imported: 0, duplicates: 0, errors: [] };
+  const result: ImportResult = {
+    imported: 0,
+    duplicates: 0,
+    duplicateRows: [],
+    errors: [],
+  };
 
   if (rows.length === 0) return result;
 
-  // Existing emails in this org für Dubletten-Check
-  const existingEmails = new Set(
-    (
-      await db
-        .select({ email: contacts.email })
-        .from(contacts)
-        .where(eq(contacts.orgId, org.id))
-    )
-      .map((r) => r.email?.toLowerCase())
-      .filter(Boolean) as string[],
-  );
+  const allowDuplicates = opts?.allowDuplicates === true;
+
+  // Bereits vorhandene E-Mails der Org für den Dubletten-Check. Beim bewussten
+  // Nachtragen von Duplikaten sparen wir uns die Abfrage komplett.
+  const existingEmails = allowDuplicates
+    ? new Set<string>()
+    : new Set(
+        (
+          await db
+            .select({ email: contacts.email })
+            .from(contacts)
+            .where(eq(contacts.orgId, org.id))
+        )
+          .map((r) => r.email?.toLowerCase())
+          .filter(Boolean) as string[],
+      );
 
   // Firmen-Map aufbauen für deduplizierte company_id-Vergabe
   const uniqueCompanyNames = [
@@ -95,9 +113,10 @@ export async function importLeadsAction(
     const email = row.email?.trim().toLowerCase() || null;
     if (email && existingEmails.has(email)) {
       result.duplicates += 1;
+      result.duplicateRows.push(row);
       continue;
     }
-    if (email) existingEmails.add(email);
+    if (email && !allowDuplicates) existingEmails.add(email);
 
     toInsert.push({
       orgId: org.id,
