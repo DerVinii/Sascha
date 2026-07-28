@@ -521,7 +521,7 @@ function MessageBubble({ message }: { message: UniboxMessage }) {
   return (
     <div className={`flex ${incoming ? "justify-start" : "justify-end"}`}>
       <div
-        className={`max-w-[85%] rounded-xl border px-3.5 py-2.5 ${
+        className={`max-w-[75%] rounded-xl border px-3.5 py-2.5 ${
           incoming
             ? "bg-surface border-line"
             : "bg-accent-faint border-accent-line"
@@ -548,12 +548,13 @@ function MessageBubble({ message }: { message: UniboxMessage }) {
             {message.subject}
           </div>
         )}
-        {/* Eigene Antworten als Text auf der Bubble rendern (wie die Lead-Mails),
-            statt im weißen HTML-iframe-Kasten — nur rechtsbündig. */}
+        {/* Immer den Klartext auf der dunklen Bubble rendern (Lead links, eigene
+            Antworten rechts) — kein weißer HTML-iframe-Kasten. Fällt nur auf den
+            iframe zurück, wenn eine Mail gar keinen Textteil hat. */}
         <MessageBody
           html={message.bodyHtml}
           text={message.bodyText}
-          preferText={!incoming}
+          preferText
         />
       </div>
     </div>
