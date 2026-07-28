@@ -17,6 +17,16 @@ function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Heutiges Datum in Berliner Zeit. Über toISOString() (UTC) läge „heute" in den
+ * frühen Morgenstunden noch auf dem Vortag — die Tageszahl wäre dann falsch.
+ */
+function berlinToday(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Berlin",
+  }).format(new Date());
+}
+
 export default async function AccountsPage() {
   await requireActiveOrg();
 
@@ -36,16 +46,26 @@ export default async function AccountsPage() {
       err instanceof Error ? err.message : "Instantly-API nicht erreichbar";
   }
 
+  // Fehlgeschlagene Statistik darf nicht als "0 gesendet" durchgehen — dann
+  // stünde eine glatte Null da, wo in Wahrheit nichts abgefragt werden konnte.
+  let statsError: string | null = null;
+
   if (!error) {
     try {
       const end = new Date();
       const start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
-      daily = await getAccountDailyAnalytics(isoDay(start), isoDay(end));
-    } catch {
-      // Kampagnen-Statistik ist optional (leerer Workspace liefert [])
+      daily = await getAccountDailyAnalytics(
+        isoDay(start),
+        isoDay(end),
+        accounts.map((a) => a.email),
+      );
+    } catch (err) {
+      statsError =
+        err instanceof Error ? err.message : "Statistik nicht abrufbar";
     }
   }
 
+  const today = berlinToday();
   const sevenDaysAgo = isoDay(
     new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
   );
@@ -78,6 +98,10 @@ export default async function AccountsPage() {
       warmupSent: agg?.sent ?? 0,
       warmupInbox: agg?.landedInbox ?? 0,
       warmupSpam: agg?.landedSpam ?? 0,
+      sentToday: sum(
+        mine.filter((d) => d.date === today),
+        (d) => d.sent,
+      ),
       sent7: sum(mine7, (d) => d.sent),
       replies7: sum(mine7, (d) => d.replies),
       bounced7: sum(mine7, (d) => d.bounced),
@@ -89,5 +113,11 @@ export default async function AccountsPage() {
     };
   });
 
-  return <AccountsDashboard accounts={rows} error={error} />;
+  return (
+    <AccountsDashboard
+      accounts={rows}
+      error={error}
+      statsError={statsError}
+    />
+  );
 }

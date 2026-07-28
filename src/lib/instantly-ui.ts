@@ -36,6 +36,8 @@ export type AccountRow = {
   warmupSent: number;
   warmupInbox: number;
   warmupSpam: number;
+  /** Kampagnen-Versand von heute (Berliner Datum, kein Warmup). */
+  sentToday: number;
   sent7: number;
   replies7: number;
   bounced7: number;

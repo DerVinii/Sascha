@@ -57,9 +57,12 @@ function scoreColor(score: number | null): string {
 export function AccountsDashboard({
   accounts,
   error,
+  statsError,
 }: {
   accounts: AccountRow[];
   error: string | null;
+  /** Versand-Statistik nicht abrufbar — Zahlen dann als „–" statt als 0 zeigen. */
+  statsError?: string | null;
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -129,7 +132,7 @@ export function AccountsDashboard({
         <Kpi
           icon={Mail}
           label="Kampagne 7 T (Sent/Repl.)"
-          value={`${sent7}/${replies7}`}
+          value={statsError ? "–" : `${sent7}/${replies7}`}
         />
       </div>
 
@@ -157,7 +160,7 @@ export function AccountsDashboard({
                 <th className="px-3 py-2.5 font-medium">Health</th>
                 <th className="px-3 py-2.5 font-medium">Warmup 7 T</th>
                 <th className="px-3 py-2.5 font-medium">Limit/Tag</th>
-                <th className="px-3 py-2.5 font-medium">Kampagne 7 T</th>
+                <th className="px-3 py-2.5 font-medium">Kampagne</th>
                 <th className="px-3 py-2.5 font-medium">Provider</th>
                 <th className="px-3 py-2.5 font-medium text-right">Aktion</th>
               </tr>
@@ -212,10 +215,30 @@ export function AccountsDashboard({
                     <td className="px-3 py-2.5 text-ink">
                       {a.dailyLimit ?? "–"}
                     </td>
-                    <td className="px-3 py-2.5 text-ink whitespace-nowrap">
-                      {a.sent7} gesendet
-                      {a.bounced7 > 0 && (
-                        <span className="text-err"> · {a.bounced7} Bounce</span>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {statsError ? (
+                        <span className="text-sub">–</span>
+                      ) : (
+                        <>
+                          <div className="text-ink">
+                            {a.sentToday} heute
+                            {a.dailyLimit != null && (
+                              <span className="text-sub">
+                                {" "}
+                                von {a.dailyLimit}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-sub">
+                            {a.sent7} in 7 Tagen
+                            {a.bounced7 > 0 && (
+                              <span className="text-err">
+                                {" "}
+                                · {a.bounced7} Bounce
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-sub">
@@ -253,9 +276,17 @@ export function AccountsDashboard({
         </div>
       </div>
 
+      {statsError && (
+        <div className="rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-xs text-warn">
+          Versand-Statistik konnte nicht geladen werden: {statsError}
+        </div>
+      )}
+
       <p className="text-[11px] text-sub">
-        Health-Score & Warmup-Daten kommen direkt aus Instantly. „Kampagne 7 T“
-        zählt nur echten Kampagnen-Versand (kein Warmup).
+        Health-Score & Warmup-Daten kommen direkt aus Instantly. „Kampagne“
+        zählt nur echten Kampagnen-Versand (kein Warmup). Balken bei „Warmup 7
+        T“: grün = alles im Posteingang, orange = ein bis zwei Mails im Spam, rot
+        = drei oder mehr.
       </p>
     </div>
   );
@@ -289,7 +320,13 @@ function Kpi({
   );
 }
 
-/** Mini-Balken: Warmup-Zustellung der letzten 7 Tage (grün Inbox, rot Spam). */
+/** Ab so vielen Spam-Landungen an EINEM Tag gilt der Tag als kritisch (rot). */
+const WARMUP_SPAM_CRITICAL = 3;
+
+/**
+ * Mini-Balken: Warmup-Zustellung der letzten 7 Tage. Grün = alles im Posteingang,
+ * Orange = ein bis zwei Mails im Spam (im Warmup normal), Rot = ab drei.
+ */
 function WarmupBars({
   days,
 }: {
@@ -301,11 +338,16 @@ function WarmupBars({
     <div className="flex items-end gap-0.5 h-6" title="Warmup: gesendet/Inbox letzte 7 Tage">
       {days.map((d) => {
         const h = Math.max(Math.round((d.sent / max) * 24), 2);
-        const spam = d.landedSpam > 0;
+        const color =
+          d.landedSpam >= WARMUP_SPAM_CRITICAL
+            ? "bg-err/70"
+            : d.landedSpam > 0
+              ? "bg-warn/70"
+              : "bg-ok/70";
         return (
           <div
             key={d.date}
-            className={`w-1.5 rounded-sm ${spam ? "bg-err/70" : "bg-ok/70"}`}
+            className={`w-1.5 rounded-sm ${color}`}
             style={{ height: h }}
             title={`${d.date}: ${d.sent} gesendet, ${d.landedInbox} Inbox${
               d.landedSpam ? `, ${d.landedSpam} Spam` : ""

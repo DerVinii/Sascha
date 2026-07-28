@@ -337,24 +337,48 @@ export type AccountDailyStat = {
   bounced: number;
 };
 
-/** Sende-Statistik pro Account & Tag (Kampagnen-Versand, nicht Warmup). */
+/**
+ * Sende-Statistik pro Account & Tag (Kampagnen-Versand, nicht Warmup).
+ *
+ * Der `emails`-Filter ist PFLICHT, auch wenn die API ihn als optional führt:
+ * ohne ihn antwortet Instantly für gewachsene Workspaces mit 413 „Analytics
+ * request is too large for this workspace" — unabhängig vom Zeitraum (gegen die
+ * echte API verifiziert). Deshalb werden die Konten in Blöcken abgefragt.
+ */
 export async function getAccountDailyAnalytics(
   startDate: string,
   endDate: string,
+  emails: string[],
 ): Promise<AccountDailyStat[]> {
-  const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await call<any>(`/accounts/analytics/daily?${qs.toString()}`);
-  const rows = Array.isArray(data) ? data : (data?.items ?? []);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return rows.map((r: any) => ({
-    email: r.email ?? r.eaccount ?? r.account ?? "",
-    date: r.date ?? r.day ?? "",
-    sent: r.sent ?? 0,
-    opened: r.opened ?? r.unique_opened ?? 0,
-    replies: r.replies ?? r.reply_count ?? 0,
-    bounced: r.bounced ?? 0,
-  }));
+  const unique = [...new Set(emails.map((e) => e.trim()).filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const CHUNK = 25; // viele Konten in EINER Anfrage laufen wieder in den 413er
+  const out: AccountDailyStat[] = [];
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const qs = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      emails: unique.slice(i, i + CHUNK).join(","),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await call<any>(`/accounts/analytics/daily?${qs.toString()}`);
+    const rows = Array.isArray(data) ? data : (data?.items ?? []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const r of rows as any[]) {
+      out.push({
+        // Instantly nennt das Konto hier "email_account". Ohne dieses Feld
+        // bliebe die Zuordnung leer und jede Zeile stünde auf 0.
+        email: r.email_account ?? r.email ?? r.eaccount ?? r.account ?? "",
+        date: r.date ?? r.day ?? "",
+        sent: r.sent ?? 0,
+        opened: r.opened ?? r.unique_opened ?? 0,
+        replies: r.replies ?? r.reply_count ?? 0,
+        bounced: r.bounced ?? 0,
+      });
+    }
+  }
+  return out;
 }
 
 export async function pauseAccount(email: string): Promise<void> {
