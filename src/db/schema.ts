@@ -415,12 +415,15 @@ export const emailSignatures = pgTable(
 export const instantlyEmails = pgTable(
   "instantly_emails",
   {
-    id: uuid("id").primaryKey(),
+    // Instantly-Bezeichner sind KEINE garantierten UUIDs: die v2-API liefert
+    // zunehmend präfixierte IDs (z. B. "ac-e9MU…"). Deshalb text statt uuid,
+    // sonst bricht der Sync mit „invalid input syntax for type uuid" ab.
+    id: text("id").primaryKey(),
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    threadId: uuid("thread_id"),
-    campaignId: uuid("campaign_id"),
+    threadId: text("thread_id"),
+    campaignId: text("campaign_id"),
     campaignName: text("campaign_name"),
     eaccount: text("eaccount"),
     leadEmail: text("lead_email"),
