@@ -548,7 +548,13 @@ function MessageBubble({ message }: { message: UniboxMessage }) {
             {message.subject}
           </div>
         )}
-        <MessageBody html={message.bodyHtml} text={message.bodyText} />
+        {/* Eigene Antworten als Text auf der Bubble rendern (wie die Lead-Mails),
+            statt im weißen HTML-iframe-Kasten — nur rechtsbündig. */}
+        <MessageBody
+          html={message.bodyHtml}
+          text={message.bodyText}
+          preferText={!incoming}
+        />
       </div>
     </div>
   );
@@ -562,15 +568,20 @@ function MessageBubble({ message }: { message: UniboxMessage }) {
 function MessageBody({
   html,
   text,
+  preferText = false,
 }: {
   html: string | null;
   text: string | null;
+  /** Vorhandenen Klartext bevorzugen (eigene Antworten wie Lead-Mails rendern). */
+  preferText?: boolean;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
   const [remoteContent, setRemoteContent] = useState(false);
 
-  if (!html) {
+  // Kein HTML — oder für eigene Antworten bewusst der Klartext: direkt auf der
+  // Bubble rendern (kein weißer iframe-Kasten).
+  if (!html || (preferText && text && text.trim())) {
     return (
       <div className="text-sm text-ink whitespace-pre-wrap break-words">
         {text || "(leer)"}
