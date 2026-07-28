@@ -23,6 +23,7 @@ import {
   interestLabel,
   type UniboxMessage,
 } from "@/lib/instantly-ui";
+import { htmlToPlainText } from "@/lib/signature";
 import {
   loadThreadAction,
   markEmailReadAction,
@@ -580,12 +581,21 @@ function MessageBody({
   const [height, setHeight] = useState(80);
   const [remoteContent, setRemoteContent] = useState(false);
 
-  // Kein HTML — oder für eigene Antworten bewusst der Klartext: direkt auf der
-  // Bubble rendern (kein weißer iframe-Kasten).
-  if (!html || (preferText && text && text.trim())) {
+  // Text-Darstellung: vorhandenen Klartext nutzen, sonst aus dem HTML ableiten
+  // (Instantly liefert bei gesendeten Antworten oft nur HTML zurück).
+  const plain =
+    text && text.trim()
+      ? text
+      : html
+        ? htmlToPlainText(html)
+        : "";
+
+  // Kein HTML — oder bewusst der Klartext (Lead & eigene Antworten): direkt auf
+  // der dunklen Bubble rendern statt im weißen iframe-Kasten.
+  if (!html || (preferText && plain.trim())) {
     return (
       <div className="text-sm text-ink whitespace-pre-wrap break-words">
-        {text || "(leer)"}
+        {plain || "(leer)"}
       </div>
     );
   }

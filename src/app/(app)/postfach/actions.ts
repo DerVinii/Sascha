@@ -143,7 +143,14 @@ export async function sendReplyAction(input: {
     bodyHtml: html,
     bodyText: text,
   });
-  await upsertInstantlyEmails(org.id, [sent]);
+  // Instantly gibt in der Reply-Antwort oft nur HTML (kein body.text) zurück.
+  // Den tatsächlich gesendeten Klartext behalten, damit die Unibox ihn als
+  // dunkle Text-Bubble rendern kann (statt Fallback auf den weißen iframe).
+  const sentWithText = {
+    ...sent,
+    body: { html: sent.body?.html ?? html, text: sent.body?.text ?? text },
+  };
+  await upsertInstantlyEmails(org.id, [sentWithText]);
   revalidatePath("/postfach/unibox");
 
   if (row.threadId) {
