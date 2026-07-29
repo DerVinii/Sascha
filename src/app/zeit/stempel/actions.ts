@@ -8,6 +8,7 @@ import { requireDeviceEmployee } from "@/lib/server/zeiterfassung/auth";
 import { isPushConfigured, sendPushToOrg } from "@/lib/server/push";
 import {
   dayKeyBerlin,
+  formatTime,
   parseFromBerlinLocal,
   shiftYmd,
 } from "@/lib/zeiterfassung";
@@ -133,6 +134,22 @@ export async function stempeln(
   }
 
   alleAnsichtenAuffrischen();
+
+  // Sascha informieren — best effort, darf das Stempeln nie scheitern lassen.
+  // Ob die Meldung rausgeht, entscheidet der Schalter „Ein- und Ausstempeln"
+  // unter Einstellungen → Benachrichtigungen (standardmäßig aus).
+  try {
+    await sendPushToOrg(employee.orgId, {
+      title: richtung === "ein" ? "Eingestempelt" : "Ausgestempelt",
+      body: `${employee.name} · ${formatTime(jetzt)} Uhr`,
+      url: "/zeiterfassung",
+      tag: `stempel-${employee.id}`,
+      event: "stempeln",
+    });
+  } catch (fehler) {
+    console.error("[zeit] Push zum Stempeln fehlgeschlagen:", fehler);
+  }
+
   return { ok: true, richtung, zeitpunkt: jetzt.toISOString() };
 }
 
@@ -274,6 +291,7 @@ export async function krankMelden(
           body: `${employee.name}: ${zeitraum} (${tageText})`,
           url: "/zeiterfassung",
           tag: "krankmeldung",
+          event: "krankmeldung",
         });
       }
     } catch (fehler) {

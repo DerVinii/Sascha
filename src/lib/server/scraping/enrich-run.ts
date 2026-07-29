@@ -23,6 +23,7 @@ import {
 import { runProvider } from "./providers";
 import { runAiColumn } from "./ai-column";
 import { emailFinderMissingRows, runEmailFinderPool } from "./reacher";
+import { sendPushToOrg } from "@/lib/server/push";
 import type { LeadColumn } from "@/lib/scraping-types";
 
 export { cellPatch };
@@ -268,6 +269,26 @@ export type DrainSummary = {
 export const ENRICH_STALE_MS = 3 * 60 * 1000;
 
 /**
+ * Push-Meldung zum Ende eines Recherche-Laufs. Best-effort: ein Fehler beim
+ * Benachrichtigen darf den Drain nie stoppen — die Zeilen sind längst gespeichert.
+ */
+async function meldeRecherche(
+  list: { id: string; orgId: string },
+  meldung: { title: string; body: string },
+): Promise<void> {
+  try {
+    await sendPushToOrg(list.orgId, {
+      ...meldung,
+      url: `/vertrieb/scraping?list=${list.id}`,
+      tag: `enrich-${list.id}`,
+      event: "recherche",
+    });
+  } catch (err) {
+    console.error("[enrich] Push fehlgeschlagen", err);
+  }
+}
+
+/**
  * Verarbeitet Listen mit gesetztem enrichmentQueuedAt server-seitig in Chargen,
  * bis das Zeitbudget erschöpft ist. `isContinuation` = true bei Self-Chain-Hops
  * (immer weiterarbeiten); false bei Cron/Erst-Kick (nur „tote" Läufe aufnehmen).
@@ -286,6 +307,7 @@ export async function drainQueuedLists(opts: {
     .select({
       id: leadLists.id,
       orgId: leadLists.orgId,
+      name: leadLists.name,
       tickAt: leadLists.enrichmentTickAt,
       queuedAt: leadLists.enrichmentQueuedAt,
     })
@@ -328,6 +350,9 @@ export async function drainQueuedLists(opts: {
 
     // true = diese Liste hat noch offene Arbeit (Budget erschöpft).
     let listRemaining = false;
+    // Nur für die Push-Meldung: hat dieser Hop für die Liste überhaupt etwas
+    // getan? Sonst käme ein „fertig" auch für Listen, bei denen nichts anlag.
+    const bereitsVerarbeitet = processedRows;
 
     // --- Phase 1: Geschäftsführer finden (Gemini) --------------------------
     if (dmColumn) {
@@ -381,12 +406,20 @@ export async function drainQueuedLists(opts: {
       .set({ enrichmentTickAt: new Date() })
       .where(eq(leadLists.id, list.id));
 
+    const verarbeitet = processedRows - bereitsVerarbeitet;
+
     if (rateLimited) {
       // Kontingent erschöpft: Lauf abbrechen (Client-Neustart nötig).
       await db
         .update(leadLists)
         .set({ enrichmentQueuedAt: null })
         .where(eq(leadLists.id, list.id));
+      await meldeRecherche(list, {
+        title: "Lead-Recherche gestoppt",
+        body: `${list.name}: KI-Kontingent aufgebraucht${
+          verarbeitet > 0 ? ` (${verarbeitet} Zeilen geschafft)` : ""
+        }`,
+      });
       break;
     }
     if (listRemaining) {
@@ -397,6 +430,14 @@ export async function drainQueuedLists(opts: {
         .update(leadLists)
         .set({ enrichmentQueuedAt: null })
         .where(eq(leadLists.id, list.id));
+      if (verarbeitet > 0) {
+        await meldeRecherche(list, {
+          title: "Lead-Recherche fertig",
+          body: `${list.name}: ${verarbeitet} ${
+            verarbeitet === 1 ? "Zeile" : "Zeilen"
+          } bearbeitet`,
+        });
+      }
     }
   }
 

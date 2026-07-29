@@ -1,7 +1,13 @@
 "use server";
 
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/server/active-org";
+import { setOrgSettingsKey } from "@/lib/server/org-settings";
+import {
+  parsePushEventPrefs,
+  type PushEventPrefs,
+} from "@/lib/notification-events";
 import {
   saveSubscription,
   deleteSubscription,
@@ -34,6 +40,19 @@ export async function unsubscribePushAction(endpoint: string): Promise<void> {
   const org = await requireActiveOrg();
   if (!endpoint) return;
   await deleteSubscription(org.id, endpoint);
+}
+
+/**
+ * Auswahl speichern, welche Ereignisse eine Benachrichtigung auslösen.
+ * `parsePushEventPrefs` filtert dabei alles heraus, was nicht im Katalog steht —
+ * in die Org-Settings kommen nur bekannte Keys mit echtem Boolean.
+ */
+export async function savePushEventsAction(
+  prefs: PushEventPrefs,
+): Promise<void> {
+  const org = await requireActiveOrg();
+  await setOrgSettingsKey(org.id, "pushEvents", parsePushEventPrefs(prefs));
+  revalidatePath("/einstellungen/benachrichtigungen");
 }
 
 export async function sendTestNotificationAction(): Promise<{

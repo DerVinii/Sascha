@@ -26,6 +26,7 @@ import {
   upsertInstantlyEmails,
 } from "@/lib/server/instantly/sync";
 import { sendPushToOrg } from "@/lib/server/push";
+import type { PushEventKey } from "@/lib/notification-events";
 import {
   autoAdvanceByInstantlyEvent,
   type AutoStageName,
@@ -49,6 +50,36 @@ const EVENT_STAGE: Record<string, AutoStageName> = {
   reply_received: "geantwortet",
   lead_interested: "geantwortet",
   lead_not_interested: "Lost",
+};
+
+/**
+ * Event → Push-Meldung. Antworten fehlen hier bewusst: die laufen weiter über
+ * eventType.includes("reply") weiter unten, damit auch Abwesenheitsnotizen
+ * (auto_reply_received) als Reaktion gemeldet werden. email_sent bleibt außen
+ * vor — jede einzelne gesendete Mail zu melden wäre unbrauchbar.
+ */
+const EVENT_PUSH: Record<
+  string,
+  { title: string; url: string; tag: string; event: PushEventKey }
+> = {
+  lead_interested: {
+    title: "Lead ist interessiert",
+    url: "/postfach/unibox",
+    tag: "instantly-interested",
+    event: "lead_interessiert",
+  },
+  lead_not_interested: {
+    title: "Lead hat abgesagt",
+    url: "/postfach/unibox",
+    tag: "instantly-not-interested",
+    event: "lead_abgesagt",
+  },
+  campaign_completed: {
+    title: "Sequenz durchgelaufen",
+    url: "/statistik",
+    tag: "instantly-campaign-done",
+    event: "kampagne_fertig",
+  },
 };
 
 export async function GET() {
@@ -135,21 +166,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Push-Benachrichtigung bei eingehenden Antworten (Lead reagiert).
+  // Push-Benachrichtigungen. Was davon wirklich rausgeht, entscheidet die
+  // Auswahl unter Einstellungen → Benachrichtigungen (sendPushToOrg prüft das).
   try {
+    const leadEmail =
+      typeof payload?.lead_email === "string" ? payload.lead_email : null;
+    const campaign =
+      typeof payload?.campaign_name === "string" ? payload.campaign_name : null;
+    const body =
+      [leadEmail, campaign].filter(Boolean).join(" · ") || "Im Postfach ansehen";
+
+    // Antworten zuerst: reply_received und auto_reply_received (Abwesenheits-
+    // notiz) gelten beide als Reaktion und liegen deshalb nicht in EVENT_PUSH.
     if (eventType.includes("reply")) {
-      const leadEmail =
-        typeof payload?.lead_email === "string" ? payload.lead_email : null;
-      const campaign =
-        typeof payload?.campaign_name === "string"
-          ? payload.campaign_name
-          : null;
       await sendPushToOrg(org.id, {
         title: "Neue Antwort von einem Lead",
-        body: [leadEmail, campaign].filter(Boolean).join(" · ") || "Im Postfach ansehen",
+        body,
         url: "/postfach/unibox",
         tag: "instantly-reply",
+        event: "lead_antwort",
       });
+    } else {
+      const meldung = EVENT_PUSH[eventType];
+      if (meldung) {
+        await sendPushToOrg(org.id, {
+          title: meldung.title,
+          body,
+          url: meldung.url,
+          tag: meldung.tag,
+          event: meldung.event,
+        });
+      }
     }
   } catch (err) {
     console.error("instantly-webhook: Push fehlgeschlagen", err);

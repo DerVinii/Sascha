@@ -1,6 +1,11 @@
 import { requireActiveOrg } from "@/lib/server/active-org";
-import { isPushConfigured, countSubscriptions } from "@/lib/server/push";
+import {
+  isPushConfigured,
+  countSubscriptions,
+  getPushEventPrefs,
+} from "@/lib/server/push";
 import { NotificationsManager } from "../_components/notifications-manager";
+import { NotificationEvents } from "../_components/notification-events";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +13,7 @@ export default async function BenachrichtigungenPage() {
   const org = await requireActiveOrg();
   const configured = await isPushConfigured();
   const deviceCount = configured ? await countSubscriptions(org.id) : 0;
+  const prefs = await getPushEventPrefs(org.id);
 
   return (
     <>
@@ -27,20 +33,15 @@ export default async function BenachrichtigungenPage() {
       </div>
 
       <div className="rounded-xl border border-line bg-surface p-5">
-        <h2 className="text-sm font-semibold text-ink mb-2">
+        <h2 className="text-sm font-semibold text-ink mb-1">
           Wobei du benachrichtigt wirst
         </h2>
-        <ul className="space-y-1.5 text-sm text-ink">
-          <li className="flex items-start gap-2">
-            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
-            Neuer Kontakt/Lead wurde angelegt
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
-            Ein Lead hat auf eine Instantly-Kampagne geantwortet
-          </li>
-        </ul>
-        <p className="text-[11px] text-sub mt-3">
+        <p className="text-xs text-sub mb-4">
+          Wähle aus, was eine Benachrichtigung auslösen soll. Änderungen gelten
+          sofort.
+        </p>
+        <NotificationEvents prefs={prefs} />
+        <p className="text-[11px] text-sub mt-4">
           Benachrichtigungen funktionieren am zuverlässigsten, wenn die App zum
           Startbildschirm hinzugefügt (installiert) ist.
         </p>

@@ -113,6 +113,7 @@ export async function createContactAction(formData: FormData) {
     body: companyName ? `${leadName} · ${companyName}` : leadName,
     url: `/crm/${inserted.id}`,
     tag: `lead-${inserted.id}`,
+    event: "lead_neu",
   });
 
   revalidatePath("/crm");

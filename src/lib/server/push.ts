@@ -2,6 +2,13 @@ import webpush from "web-push";
 import { db } from "@/db";
 import { pushKeys, pushSubscriptions } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { getOrgSettings } from "@/lib/server/org-settings";
+import {
+  isPushEventEnabled,
+  parsePushEventPrefs,
+  type PushEventKey,
+  type PushEventPrefs,
+} from "@/lib/notification-events";
 
 /**
  * Web-Push (Systembenachrichtigungen). Läuft nur im Node-Runtime.
@@ -176,7 +183,21 @@ export type PushPayload = {
   body?: string;
   url?: string;
   tag?: string;
+  /**
+   * Art des Ereignisses — wird gegen die Auswahl unter Einstellungen →
+   * Benachrichtigungen geprüft. Ohne Angabe (Testbenachrichtigung) geht die
+   * Meldung immer raus.
+   */
+  event?: PushEventKey;
 };
+
+/** Welche Ereignisse diese Org bekommen will (leer = alles auf Standard). */
+export async function getPushEventPrefs(
+  orgId: string,
+): Promise<PushEventPrefs> {
+  const settings = await getOrgSettings(orgId);
+  return parsePushEventPrefs(settings.pushEvents);
+}
 
 /**
  * Sendet eine Benachrichtigung an alle Geräte der Org. Best-effort:
@@ -189,6 +210,13 @@ export async function sendPushToOrg(
 ): Promise<void> {
   const keys = await getVapidKeys();
   if (!keys) return;
+
+  // Abgewähltes Ereignis → nichts senden. Die Prüfung läuft vor dem Laden der
+  // Abos, damit ein abgeschalteter Typ auch keine Arbeit mehr verursacht.
+  if (payload.event) {
+    const prefs = await getPushEventPrefs(orgId);
+    if (!isPushEventEnabled(prefs, payload.event)) return;
+  }
 
   const subs = await db
     .select({
