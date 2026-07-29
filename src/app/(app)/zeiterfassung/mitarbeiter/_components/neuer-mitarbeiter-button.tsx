@@ -3,12 +3,22 @@
 import { useEffect, useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { createEmployee } from "../../actions";
+import {
+  EinladungAnzeige,
+  type Einladung,
+} from "../../_components/einladung-anzeige";
 
 export function NeuerMitarbeiterButton() {
   const [offen, setOffen] = useState(false);
   const [name, setName] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Nach dem Anlegen zeigt derselbe Dialog den Einrichtungs-Link. Der Link
+  // kommt genau einmal vom Server und lebt nur in diesem State.
+  const [angelegt, setAngelegt] = useState<{
+    name: string;
+    einladung: Einladung;
+  } | null>(null);
 
   // Escape schließt den Dialog — solange nicht gerade gespeichert wird.
   useEffect(() => {
@@ -24,6 +34,7 @@ export function NeuerMitarbeiterButton() {
     setOffen(false);
     setName("");
     setFehler(null);
+    setAngelegt(null);
   }
 
   function speichern() {
@@ -36,7 +47,14 @@ export function NeuerMitarbeiterButton() {
           setFehler(res.error);
           return;
         }
-        schliessen();
+        setAngelegt({
+          name: name.trim(),
+          einladung: {
+            url: res.url,
+            qr: res.qr,
+            expiresAt: res.expiresAt,
+          },
+        });
       } catch {
         setFehler("Der Mitarbeiter konnte nicht angelegt werden.");
       }
@@ -61,10 +79,12 @@ export function NeuerMitarbeiterButton() {
             if (e.target === e.currentTarget && !pending) schliessen();
           }}
         >
-          <div className="rounded-xl border border-line bg-surface w-full max-w-md shadow-xl">
+          <div className="rounded-xl border border-line bg-surface w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h2 className="text-sm font-semibold text-ink">
-                Neuer Mitarbeiter
+                {angelegt
+                  ? `${angelegt.name} ist angelegt`
+                  : "Neuer Mitarbeiter"}
               </h2>
               <button
                 type="button"
@@ -77,6 +97,23 @@ export function NeuerMitarbeiterButton() {
               </button>
             </div>
 
+            {angelegt ? (
+              <div className="p-5 space-y-4">
+                <EinladungAnzeige
+                  name={angelegt.name}
+                  einladung={angelegt.einladung}
+                />
+                <div className="flex justify-end pt-2 border-t border-line">
+                  <button
+                    type="button"
+                    onClick={schliessen}
+                    className="h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90"
+                  >
+                    Fertig
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form
               className="p-5 space-y-3"
               onSubmit={(e) => {
@@ -102,7 +139,8 @@ export function NeuerMitarbeiterButton() {
                 />
                 <p className="text-xs text-sub mt-1">
                   Der Name muss eindeutig sein und erscheint später auf dem
-                  Stempel-Handy.
+                  Stempel-Handy. Im nächsten Schritt bekommst du den
+                  Einrichtungs-Link zum Verschicken.
                 </p>
               </div>
 
@@ -126,6 +164,7 @@ export function NeuerMitarbeiterButton() {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

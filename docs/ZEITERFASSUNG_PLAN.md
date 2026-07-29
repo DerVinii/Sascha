@@ -23,12 +23,14 @@ Der Mitarbeiterbereich ist deshalb ohne Passwort erreichbar, aber **nicht ungesc
 Mitarbeiter-Seiten:
 
 ```
-/zeit                  → Ziel des QR-Codes: Anleitung zur Installation als App
-/zeit/stempel          → Stempeluhr; ohne gekoppeltes Gerät die Code-Eingabe
-/zeit/meine-zeiten     → eigene Einträge, Monatsnavigation, Gerät abmelden
+/zeit                      → leitet weiter auf /zeit/stempel
+/zeit/einladung/[token]    → persönlicher Einrichtungs-Link: Gerätewahl + Anleitung
+/zeit/einladung/[token]/manifest → PWA-Manifest dieser Einladung (siehe §4.1)
+/zeit/stempel              → Stempeluhr; ohne Gerät ein Hinweis auf den Link
+/zeit/meine-zeiten         → eigene Einträge, Monatsnavigation, Gerät abmelden
 ```
 
-Admin-Seiten: `/zeiterfassung` (Live-Übersicht), `/zeiterfassung/mitarbeiter` (Liste, Monatsexport), `/zeiterfassung/mitarbeiter/[id]` (Kopplungscode, Geräte, Zeiten, Korrekturen).
+Admin-Seiten: `/zeiterfassung` (Live-Übersicht), `/zeiterfassung/mitarbeiter` (Liste, Anlegen mit Link, Monatsexport), `/zeiterfassung/mitarbeiter/[id]` (neuer Link, Geräte, Zeiten, Korrekturen).
 
 ### 2.1 Zwei Fallstricke in der Middleware
 
@@ -79,27 +81,33 @@ Wer hier etwas ändert, muss beide Sichten zusammen betrachten, sonst driften An
 
 ## 4. Ablauf der Geräte-Kopplung
 
-1. Sascha legt den Mitarbeiter unter `/zeiterfassung` an und erzeugt einen **Kopplungscode** (`createEnrollmentToken`). Angezeigt wird er groß zum Vorlesen, dazu ein QR-Code auf die Installationsseite `/zeit`.
-2. Der Code besteht aus 8 Zeichen eines Alphabets ohne verwechselbare Zeichen (kein 0/O, kein 1/I/L — siehe `src/lib/kopplungscode.ts`). In der DB landet **nur der SHA-256-Hash** (`tokenLookup`); der Klartext existiert ausschließlich in der einen Server-Antwort. Ein Datenbankleck gibt niemandem Zugang.
-3. Der Code ist **30 Minuten** gültig und **einmal** einlösbar (`consumed`). 31⁸ ≈ 8·10¹¹ Möglichkeiten bei genau einem gültigen Code je Mitarbeiter — Durchprobieren ist aussichtslos, ein Zählwerk für Fehlversuche wäre nur Ballast.
-4. Der Mitarbeiter scannt den QR, installiert die Stempeluhr als App (siehe §4.1) und tippt den Code **in der installierten App** ein. `mitCodeKoppeln` prüft (nicht abgelaufen, nicht verbraucht, richtige Org, Mitarbeiter aktiv), entwertet den Code, legt ein `employee_devices`-Gerät an — wieder nur mit dem Hash — und setzt das Cookie `sk_zeit_geraet` (HttpOnly, `secure`, `sameSite: lax`).
+1. Sascha legt den Mitarbeiter unter `/zeiterfassung/mitarbeiter` an. Das Anlegen erzeugt **sofort den Einrichtungs-Link** — ein Mitarbeiter ohne Einladung kann nichts, ein Extraklick dafür wäre nur eine Stelle zum Vergessen. Für bestehende Mitarbeiter gibt es denselben Link auf der Detailseite („Einrichtungs-Link erzeugen").
+2. Sascha schickt den Link (Kopieren-Knopf oder direkt per WhatsApp). Der Token darin ist 32 zufällige Bytes; in der DB landet **nur sein SHA-256** (`tokenLookup`). Ein Datenbankleck gibt niemandem Zugang.
+3. Der Link ist **7 Tage** gültig und **einmal** einlösbar (`consumed`). Sieben Tage, weil er per Messenger verschickt und nicht unbedingt sofort geöffnet wird; das Risiko bleibt klein, weil er genau ein Gerät koppelt und Sascha jedes gekoppelte Handy in der Geräteliste sieht.
+4. Der Mitarbeiter öffnet den Link, wählt **iPhone oder Android** und bekommt die passende Anleitung. Nach der Installation öffnet er die App über das neue Symbol — und **damit ist er angemeldet**. `einladungEinloesen` prüft (nicht abgelaufen, nicht verbraucht, richtige Org, Mitarbeiter aktiv), entwertet die Einladung, legt ein `employee_devices`-Gerät an — wieder nur mit dem Hash — und setzt das Cookie `sk_zeit_geraet` (HttpOnly, `secure`, `sameSite: lax`).
 5. Cookie-Laufzeit: **730 Tage**. Das Handy bleibt gekoppelt, bis es gesperrt wird oder der Nutzer Browserdaten löscht. Bei jedem Zugriff wird `lastSeenAt` aktualisiert; ein gesperrtes (`revoked`) Gerät fällt sofort raus.
 
-Verlorenes Handy = Gerät in der Admin-Ansicht sperren, neuen Code erzeugen. Alter Zugang tot, kein Passwortwechsel für alle nötig. Der Mitarbeiter kann sein Gerät außerdem selbst abmelden (unter „Meine Zeiten") — praktisch beim Handywechsel oder wenn ein Diensthandy zurückgegeben wird.
+Verlorenes Handy = Gerät in der Admin-Ansicht sperren, neuen Link erzeugen. Alter Zugang tot, kein Passwortwechsel für alle nötig. Der Mitarbeiter kann sein Gerät außerdem selbst abmelden (unter „Meine Zeiten") — praktisch beim Handywechsel oder wenn ein Diensthandy zurückgegeben wird.
 
-Die Option „Bereits eingerichtete Geräte abmelden" beim Erzeugen eines neuen Codes ist **standardmäßig aus** und fragt vor dem Ausführen nach. Sie war zunächst vorbelegt, sperrt aber das laufende Handy in dem Moment, in dem der neue Code erzeugt wird — wird er dann nicht sofort eingelöst, steht der Mitarbeiter ohne Stempelmöglichkeit da.
+Die Option „Bereits eingerichtete Geräte abmelden" beim Erzeugen eines neuen Links ist **standardmäßig aus** und fragt vor dem Ausführen nach. Sie war zunächst vorbelegt, sperrt aber das laufende Handy in dem Moment, in dem der neue Link erzeugt wird — wird er dann nicht sofort benutzt, steht der Mitarbeiter ohne Stempelmöglichkeit da.
 
-### 4.1 Warum erst installieren, dann koppeln
+### 4.1 Der Kniff: die Einladung ist die `start_url` der App
 
-Die Reihenfolge ist kein Detail, sondern der Grund für das ganze Code-Verfahren. Der ursprüngliche Weg war ein QR-Code mit dem Token **im Link**: scannen, im Browser einlösen, fertig. Das scheitert auf dem iPhone. Eine zum Startbildschirm hinzugefügte Web-App bekommt dort einen **eigenen Datenspeicher**, getrennt von Safari — das im Browser gesetzte Geräte-Cookie gilt in der App nicht. Der Mitarbeiter sähe „Gerät einrichten", und der Einmal-Code wäre bereits verbraucht.
+Hier steckt die eigentliche Idee, und sie ist nicht offensichtlich. Auf dem iPhone bekommt eine zum Startbildschirm hinzugefügte Web-App einen **eigenen Datenspeicher**, getrennt von Safari. Ein Cookie, das beim Öffnen des Links im Browser gesetzt wird, gilt in der installierten App **nicht** — der Mitarbeiter stünde dort vor „nicht angemeldet", und die Einmal-Einladung wäre schon verbraucht.
 
-Deshalb wird der Code **in der App** eingegeben. Das funktioniert unabhängig davon, ob ein Gerät den Speicher teilt oder nicht — und bleibt richtig, falls Apple sein Verhalten ändert. Angenehme Nebenwirkung: Das Geheimnis steht nicht mehr in einer URL und damit nicht in Server-Logs, Browserverlauf oder Messenger-Vorschauen.
+Deshalb meldet die Einladungsseite ein **eigenes Manifest pro Einladung** (`/zeit/einladung/[token]/manifest`), dessen `start_url` auf genau diese Einladungsseite zeigt. Der Ablauf ergibt sich daraus von selbst:
 
-Die Stempelseite `/zeit/stempel` ist zugleich die Kopplungsseite: Sie ist die `start_url` der App, ein frisch installiertes Handy landet also genau dort und zeigt ohne gültiges Cookie das Code-Feld. Eine separate Kopplungs-Route gäbe es dagegen nur einmal zu sehen — und wäre in der installierten App gar nicht erreichbar, weil dort niemand eine Adresse eintippt.
+- Im Browser zeigt die Seite nur die Anleitung. Sie löst **nichts** ein — sonst würde schon eine Linkvorschau in WhatsApp die Einladung abbrennen.
+- Nach der Installation startet die App auf ihrer `start_url`, also wieder auf der Einladungsseite — diesmal aber **im Datenspeicher der App**. Dort erkennt sie über `display-mode: standalone`, dass sie als App läuft, und löst die Einladung automatisch ein.
+- Ab dann ist ein Cookie da, und dieselbe Seite leitet bei jedem weiteren App-Start sofort auf `/zeit/stempel` weiter.
+
+Das funktioniert unabhängig davon, ob ein Gerät seinen Speicher teilt (Android) oder trennt (iPhone) — ein einziger Weg für beide, und er bleibt richtig, falls Apple sein Verhalten ändert. Für Rechner oder wenn die Installation partout nicht klappt, gibt es unter „Installation klappt nicht?" eine bewusst unscheinbare Rückfalltür, die direkt im Browser anmeldet.
+
+Nebenwirkung, die man kennen sollte: Die `start_url` der installierten App enthält dauerhaft den Einladungs-Token. Der ist nach dem Einlösen entwertet und damit wertlos, taucht aber bei jedem App-Start in den Server-Logs auf.
 
 ### 4.2 Zwei getrennte Apps auf einem Handy
 
-`/zeit*` meldet ein eigenes Manifest (`public/zeit.webmanifest`, Name „SK Zeit", `scope: "/zeit"`, `start_url: "/zeit/stempel"`) mit eigenen Symbolen (teal-grüne Uhr statt dunklem „SK"; erzeugt von `scripts/generate-zeit-icons.mjs`). Dadurch lassen sich Kommandozentrale und Stempeluhr **unabhängig voneinander** installieren und liegen als zwei unterscheidbare Symbole nebeneinander.
+`/zeit*` meldet ein eigenes Manifest (`public/zeit.webmanifest`, Name „SK Zeit", `scope: "/zeit"`, `start_url: "/zeit/stempel"`) mit eigenen Symbolen (teal-grüne Uhr statt dunklem „SK"; erzeugt von `scripts/generate-zeit-icons.mjs`). Dadurch lassen sich Kommandozentrale und Stempeluhr **unabhängig voneinander** installieren und liegen als zwei unterscheidbare Symbole nebeneinander. Die Einladungsseite überschreibt dieses Manifest für sich mit der Variante aus §4.1 — gleiche Symbole, nur andere `start_url`.
 
 Wichtig für spätere Änderungen: Beide Manifeste sind **statische Dateien in `public/`** und werden über das Metadaten-Feld `manifest` eingehängt (Root-Layout bzw. `src/app/zeit/layout.tsx`). Die Next-Datei-Konvention `app/manifest.ts` wurde bewusst entfernt — sie hängt ihren Link unabhängig von den Metadaten ein und lässt sich in einem Unter-Layout **nicht** überschreiben; `/zeit` meldete damit weiterhin das Manifest der Kommandozentrale. Wer die Konvention zurückholt, bricht die zweite App.
 

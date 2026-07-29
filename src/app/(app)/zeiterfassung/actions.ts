@@ -37,10 +37,9 @@ import {
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { requireAppZugang } from "@/lib/server/app-zugang";
 import {
-  generatePairingCode,
+  generateToken,
   hashToken,
 } from "@/lib/server/zeiterfassung/tokens";
-import { formatiereCode } from "@/lib/kopplungscode";
 import { parseFromBerlinLocal, shiftYmd } from "@/lib/zeiterfassung";
 
 // ============================================================================
@@ -136,23 +135,34 @@ function aktualisiereAnsichten() {
 // MITARBEITER
 // ============================================================================
 
-/** Legt einen Mitarbeiter an. Doppelte Namen fängt der Unique-Index ab. */
-export async function createEmployee(
-  name: string,
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+/**
+ * Legt einen Mitarbeiter an und erzeugt gleich seinen Einladungslink.
+ *
+ * Beides in einem Schritt, weil ein Mitarbeiter ohne Einladung nichts kann —
+ * ein extra Klick dafür wäre nur eine Stelle, an der man es vergisst.
+ */
+export async function createEmployee(name: string): Promise<
+  | { ok: true; id: string; url: string; qr: string; expiresAt: string }
+  | { ok: false; error: string }
+> {
   await requireAppZugang();
   const org = await requireActiveOrg();
   const geprueft = pruefeName(name);
   if (!geprueft.ok) return geprueft;
 
+  // Vor dem Schreiben klären: Ohne verlässliche App-Adresse gäbe es keinen
+  // brauchbaren Link — dann lieber gar nichts anlegen.
+  const basis = await basisUrl();
+  if (!basis) return { ok: false, error: FEHLT_APP_URL };
+
+  let id: string;
   try {
     const [row] = await db
       .insert(employees)
       .values({ orgId: org.id, name: geprueft.name })
       .returning({ id: employees.id });
     if (!row) return { ok: false, error: "Anlegen fehlgeschlagen." };
-    aktualisiereAnsichten();
-    return { ok: true, id: row.id };
+    id = row.id;
   } catch (e) {
     if (istUniqueVerstoss(e)) {
       return {
@@ -162,6 +172,10 @@ export async function createEmployee(
     }
     throw e;
   }
+
+  const einladung = await einladungAnlegen(org.id, id, basis);
+  aktualisiereAnsichten();
+  return { ok: true, id, ...einladung };
 }
 
 /**
@@ -262,16 +276,27 @@ export async function renameEmployee(
 }
 
 // ============================================================================
-// GERÄTE-KOPPLUNG (QR-CODE)
+// EINLADUNG (GERÄTE-KOPPLUNG)
 // ============================================================================
+
+const FEHLT_APP_URL =
+  "Die App-Adresse ist nicht konfiguriert. Bitte NEXT_PUBLIC_APP_URL setzen.";
+
+/**
+ * 7 Tage. Der Link wird per WhatsApp verschickt und nicht unbedingt sofort
+ * geöffnet — eine knappe Frist wäre nur eine Quelle für „Link abgelaufen“.
+ * Das Risiko bleibt klein: Der Link ist einmal verwendbar, koppelt genau ein
+ * Gerät, und Sascha sieht jedes gekoppelte Handy in der Geräteliste.
+ */
+const EINLADUNG_GUELTIG_TAGE = 7;
 
 /**
  * Basis-URL der App — bevorzugt aus der Env.
  *
  * Der Host-Header ist vom Aufrufer frei wählbar. Würden wir ihm blind folgen,
- * zeigte der erzeugte QR-Code auf einen fremden Server. Deshalb gilt der
- * Header-Fallback nur noch für lokale Entwicklung; sonst gibt es lieber einen
- * verständlichen Fehler als einen falschen Link.
+ * zeigte der erzeugte Link auf einen fremden Server und der Mitarbeiter
+ * schickte sein Einladungs-Token beim Öffnen genau dorthin. Deshalb gilt der
+ * Header-Fallback nur noch für lokale Entwicklung.
  */
 async function basisUrl(): Promise<string | null> {
   const ausEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -283,28 +308,76 @@ async function basisUrl(): Promise<string | null> {
   return istLokal ? `http://${host}` : null;
 }
 
-/** 30 Minuten: Sascha und der Mitarbeiter richten das Handy gemeinsam ein. */
-const CODE_GUELTIG_MINUTEN = 30;
+/**
+ * Legt eine Einladung an und baut Link und QR dazu.
+ *
+ * Der Klartext-Token existiert NUR im zurückgegebenen Link — in der Datenbank
+ * liegt ausschließlich sein SHA-256. Ältere, noch offene Einladungen desselben
+ * Mitarbeiters werden entwertet, damit immer nur genau ein Link gültig ist.
+ */
+async function einladungAnlegen(
+  orgId: string,
+  employeeId: string,
+  basis: string,
+  geraeteAbmelden = false,
+): Promise<{ url: string; qr: string; expiresAt: string }> {
+  const token = generateToken();
+  const expiresAt = new Date(
+    Date.now() + EINLADUNG_GUELTIG_TAGE * 24 * 60 * 60 * 1000,
+  );
+
+  await db.transaction(async (tx) => {
+    if (geraeteAbmelden) {
+      await tx
+        .update(employeeDevices)
+        .set({ revoked: true })
+        .where(
+          and(
+            eq(employeeDevices.orgId, orgId),
+            eq(employeeDevices.employeeId, employeeId),
+            eq(employeeDevices.revoked, false),
+          ),
+        );
+    }
+
+    await tx
+      .update(enrollmentTokens)
+      .set({ consumed: true, consumedAt: new Date() })
+      .where(
+        and(
+          eq(enrollmentTokens.orgId, orgId),
+          eq(enrollmentTokens.employeeId, employeeId),
+          eq(enrollmentTokens.consumed, false),
+        ),
+      );
+
+    await tx.insert(enrollmentTokens).values({
+      orgId,
+      employeeId,
+      tokenLookup: hashToken(token),
+      expiresAt,
+    });
+  });
+
+  const url = `${basis}/zeit/einladung/${token}`;
+  const qr = await QRCode.toDataURL(url, {
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 320,
+  });
+
+  return { url, qr, expiresAt: expiresAt.toISOString() };
+}
 
 /**
- * Erzeugt einen Kopplungscode zum Vorlesen plus einen QR-Code auf die
- * Installationsseite.
- *
- * Warum ein Code und kein Link mit Token: Auf dem iPhone bekommt eine zum
- * Startbildschirm hinzugefügte App einen eigenen Datenspeicher, getrennt von
- * Safari. Ein im Browser eingelöster Link würde die App also nicht koppeln —
- * das Handy müsste ein zweites Mal gekoppelt werden, und der Einmal-Code wäre
- * schon verbraucht. Deshalb wird der Code IN der installierten App eingetippt.
- *
- * Der Klartext existiert NUR in dieser Antwort — in der Datenbank liegt
- * ausschließlich sein SHA-256. Ältere, noch offene Codes desselben Mitarbeiters
- * werden entwertet, damit immer nur genau einer gültig ist.
+ * Erzeugt einen neuen Einladungslink für einen bestehenden Mitarbeiter —
+ * etwa nach einem Handywechsel oder wenn der alte Link abgelaufen ist.
  */
 export async function createEnrollmentToken(
   employeeId: string,
   revokeExisting: boolean,
 ): Promise<
-  | { ok: true; code: string; url: string; qr: string; expiresAt: string }
+  | { ok: true; url: string; qr: string; expiresAt: string }
   | { ok: false; error: string }
 > {
   await requireAppZugang();
@@ -318,73 +391,17 @@ export async function createEnrollmentToken(
     };
   }
 
-  // Vor dem Schreiben klären: ohne verlässliche App-Adresse gäbe es hinterher
-  // nur einen unsicheren Link — dann lieber gar keinen Code verbrauchen.
   const basis = await basisUrl();
-  if (!basis) {
-    return {
-      ok: false,
-      error: "Die App-Adresse ist nicht konfiguriert. Bitte NEXT_PUBLIC_APP_URL setzen.",
-    };
-  }
+  if (!basis) return { ok: false, error: FEHLT_APP_URL };
 
-  const code = generatePairingCode();
-  const tokenLookup = hashToken(code);
-  const expiresAt = new Date(Date.now() + CODE_GUELTIG_MINUTEN * 60 * 1000);
-
-  await db.transaction(async (tx) => {
-    if (revokeExisting) {
-      // Bestehende Handys sperren — das neu gekoppelte ersetzt sie.
-      await tx
-        .update(employeeDevices)
-        .set({ revoked: true })
-        .where(
-          and(
-            eq(employeeDevices.orgId, org.id),
-            eq(employeeDevices.employeeId, employeeId),
-            eq(employeeDevices.revoked, false),
-          ),
-        );
-    }
-
-    // Es soll immer nur genau ein offener Code gültig sein.
-    await tx
-      .update(enrollmentTokens)
-      .set({ consumed: true, consumedAt: new Date() })
-      .where(
-        and(
-          eq(enrollmentTokens.orgId, org.id),
-          eq(enrollmentTokens.employeeId, employeeId),
-          eq(enrollmentTokens.consumed, false),
-        ),
-      );
-
-    await tx.insert(enrollmentTokens).values({
-      orgId: org.id,
-      employeeId,
-      tokenLookup,
-      expiresAt,
-    });
-  });
-
-  // Der QR enthält bewusst KEIN Geheimnis mehr, sondern nur die
-  // Installationsseite. Er ist eine Abkürzung zum Tippen der Adresse, kein
-  // Ausweis — dadurch steht der Code auch nicht in Server-Logs oder im Verlauf.
-  const url = `${basis}/zeit`;
-  const qr = await QRCode.toDataURL(url, {
-    errorCorrectionLevel: "M",
-    margin: 1,
-    width: 320,
-  });
-
+  const einladung = await einladungAnlegen(
+    org.id,
+    employeeId,
+    basis,
+    revokeExisting,
+  );
   aktualisiereAnsichten();
-  return {
-    ok: true,
-    code: formatiereCode(code),
-    url,
-    qr,
-    expiresAt: expiresAt.toISOString(),
-  };
+  return { ok: true, ...einladung };
 }
 
 /** Sperrt ein gekoppeltes Gerät (z. B. Handy verloren). */

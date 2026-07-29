@@ -1,15 +1,13 @@
-import { Installieren } from "./_components/installieren";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Einstiegsseite für Mitarbeiter — das Ziel des QR-Codes, den Sascha zeigt.
+ * /zeit ist nur der Einstieg — die Stempeluhr liegt unter /zeit/stempel.
  *
- * Sie erklärt die Installation als eigene App und leitet weiter, sobald sie
- * merkt, dass sie bereits in der installierten App läuft. Die Stempeluhr selbst
- * ist die `start_url` (siehe public/zeit.webmanifest), diese Seite bekommt man
- * nach der Installation also normalerweise nie wieder zu sehen.
+ * Die Einrichtung eines Handys läuft nicht über diese Seite, sondern über den
+ * persönlichen Einladungslink (/zeit/einladung/[token]), den Sascha verschickt.
  */
 export default function ZeitIndexPage() {
-  return <Installieren />;
+  redirect("/zeit/stempel");
 }

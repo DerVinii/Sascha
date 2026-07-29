@@ -5,6 +5,8 @@
 
 **Stand:** 2026-07-29 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
 
+> 🔗 **Einrichtung per Link (2026-07-30):** „Neuer Mitarbeiter" liefert direkt einen **Einrichtungs-Link** zum Verschicken (Kopieren oder WhatsApp). Der Mitarbeiter öffnet ihn, wählt iPhone oder Android, bekommt die passende Anleitung — und ist nach der Installation **automatisch angemeldet**, ohne Code und ohne Passwort. Möglich macht das ein **eigenes Manifest pro Einladung**, dessen `start_url` auf die Einladungsseite zeigt: Die frisch installierte App startet dort noch einmal und löst die Einladung in ihrem eigenen Datenspeicher ein — der einzige Weg, der auch auf dem iPhone trägt. Der Kopplungscode entfällt.
+>
 > 📱 **Stempeluhr als eigene App (2026-07-30):** `/zeit*` meldet ein eigenes PWA-Manifest („SK Zeit", teal-grüne Uhr, `scope: /zeit`) — Mitarbeiter installieren die Stempeluhr getrennt von der Kommandozentrale, beide Symbole liegen unterscheidbar nebeneinander. Die Kopplung läuft jetzt über einen **8-stelligen Code, der IN der installierten App eingetippt wird**, statt über einen QR-Link: Auf dem iPhone hat eine installierte Web-App einen eigenen Datenspeicher, ein in Safari gesetztes Cookie gilt dort nicht. `/zeit` ist die Installationsanleitung (plattformabhängig), `/zeit/enroll/[token]` entfällt. ⚠️ `app/manifest.ts` wurde entfernt — beide Manifeste liegen als statische Dateien in `public/`, weil die Next-Datei-Konvention sich in einem Unter-Layout nicht überschreiben lässt. Steht noch aus: Test auf echtem iPhone und Android-Gerät.
 >
 > ⏱ **Zeiterfassung live (2026-07-29):** Deployt und gegen die Produktion abgenommen; `NEXT_PUBLIC_APP_URL` ist in Vercel gesetzt (nötig für die QR-Links — `NEXT_PUBLIC_`-Werte werden beim Build eingesetzt, eine Wertänderung braucht also ein Redeploy). Sascha kann unter `/zeiterfassung` den ersten Mitarbeiter anlegen.
@@ -234,7 +236,7 @@ Nachträglich beauftragt, daher nicht Teil der ~84 PDF-Punkte und nicht in der P
 | # | Punkt | Status | Wo / Anmerkung |
 |---|---|---|---|
 | 13.1 | Mitarbeiterverwaltung | ✅ | `/zeiterfassung` — Mitarbeiter anlegen, aktiv/inaktiv. Tabelle `employees`, unique `(org_id, name)` |
-| 13.2 | Gerätekopplung per Code | ✅ | 8-stelliger Einmal-Code (30 min, nur SHA-256 in der DB), eingegeben **in der installierten App** → Geräte-Cookie `sk_zeit_geraet` (730 Tage). Tabellen `enrollment_tokens`, `employee_devices`; Geräte sperrbar. Der QR zeigt nur noch auf die Installationsseite, enthält kein Geheimnis mehr |
+| 13.2 | Gerätekopplung per Einladungslink | ✅ | Einmal-Link (7 Tage, nur SHA-256 in der DB) mit Gerätewahl und Installationsanleitung; die installierte App löst ihn beim ersten Start selbst ein → Geräte-Cookie `sk_zeit_geraet` (730 Tage). Tabellen `enrollment_tokens`, `employee_devices`; Geräte sperrbar |
 | 13.11 | Eigene App für Mitarbeiter | ✅ | Zweites PWA-Manifest `public/zeit.webmanifest` („SK Zeit"), eigene Symbole, `scope: /zeit`; Installationsanleitung unter `/zeit` mit Android-Installationsknopf und iPhone-Anleitung |
 | 13.3 | Stempeln per Handy | ✅ | `/zeit/stempel` — Ein-/Ausstempeln ohne Login, Identität = gekoppeltes Gerät (`requireDeviceEmployee()`). Doppeltes Einstempeln fängt ein partieller Unique-Index in der DB ab. Eigene Zeiten unter `/zeit/meine-zeiten`, dort auch „Gerät abmelden" |
 | 13.4 | Live-Übersicht & Zeitenliste | ✅ | `/zeiterfassung` — wer ist eingestempelt, Einträge nach Tag/Woche/Monat (alle Berechnungen in Europe/Berlin über `src/lib/zeiterfassung.ts`) |

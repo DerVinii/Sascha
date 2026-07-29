@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { timeEntries } from "@/db/schema";
 import { getCurrentDeviceEmployee } from "@/lib/server/zeiterfassung/auth";
 import { dayKeyBerlin, formatDateTime } from "@/lib/zeiterfassung";
-import { KoppelnFormular } from "./_components/koppeln-formular";
 import { KrankDialog } from "./_components/krank-dialog";
 import {
   StempelClient,
@@ -27,31 +26,22 @@ export default async function StempelPage() {
   // Kein gültiges Geräte-Cookie: bewusst KEIN Redirect auf /zugang — Mitarbeiter
   // kennen das App-Passwort nicht und würden dort nur stranden.
   //
-  // Diese Seite ist zugleich die Kopplungsseite: Sie ist die `start_url` der
-  // App (public/zeit.webmanifest), ein frisch installiertes Handy landet also
-  // genau hier und kann sich sofort koppeln. Eine eigene Route dafür gäbe es
-  // sonst nur einmal zu sehen — und wäre in der installierten App nicht
-  // erreichbar, weil dort niemand eine Adresse eintippt.
+  // Die Einrichtung läuft über den Einladungslink, den Sascha verschickt
+  // (/zeit/einladung/[token]) — hier gibt es deshalb nichts einzutippen.
   if (!session) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-xl border border-line bg-surface p-5">
-          <h2 className="text-base font-semibold text-ink">Gerät einrichten</h2>
-          <p className="mt-2 mb-4 text-sm text-sub">
-            Sascha nennt dir einen Code. Trag ihn hier ein — danach kannst du
-            auf diesem Handy dauerhaft ein- und ausstempeln.
-          </p>
-          <KoppelnFormular />
-        </div>
-
-        <p className="text-center text-xs text-sub">
-          Du hast die App noch nicht auf dem Startbildschirm?{" "}
-          <Link
-            href="/zeit"
-            className="underline underline-offset-4 hover:text-ink"
-          >
-            So installierst du sie
-          </Link>
+      <div className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="text-base font-semibold text-ink">
+          Dieses Gerät ist nicht angemeldet
+        </h2>
+        <p className="mt-2 text-sm text-sub">
+          Bitte lass dir von Sascha den Einrichtungs-Link schicken und öffne ihn
+          auf diesem Handy.
+        </p>
+        <p className="mt-3 text-xs text-sub">
+          Wenn du die App schon eingerichtet hattest: Öffne sie über das Symbol
+          auf dem Startbildschirm — im Browser gilt die Anmeldung unter Umständen
+          nicht.
         </p>
       </div>
     );

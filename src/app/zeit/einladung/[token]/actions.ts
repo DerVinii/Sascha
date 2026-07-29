@@ -6,35 +6,33 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { employeeDevices, employees, enrollmentTokens } from "@/db/schema";
 import { requireActiveOrg } from "@/lib/server/active-org";
-import { setDeviceCookie } from "@/lib/server/zeiterfassung/auth";
+import {
+  getCurrentDeviceEmployee,
+  setDeviceCookie,
+} from "@/lib/server/zeiterfassung/auth";
 import { generateToken, hashToken } from "@/lib/server/zeiterfassung/tokens";
-import { istVollstaendig, normalisiereCode } from "@/lib/kopplungscode";
 
-export type KoppelErgebnis = { ok: true } | { ok: false; error: string };
+export type EinloesenErgebnis = { ok: true } | { ok: false; error: string };
 
 /**
- * Koppelt dieses Gerät über den Code, den Sascha vorliest.
+ * Löst die Einladung ein: legt das Gerät an und setzt das Geräte-Cookie.
  *
- * Die Kopplung passiert bewusst hier, in der bereits installierten App, und
- * nicht vorher über einen Link im Browser: Auf dem iPhone hat eine zum
- * Startbildschirm hinzugefügte App einen eigenen Datenspeicher: Ein in Safari
- * gesetztes Cookie gilt dort nicht. Wer erst installiert und dann koppelt,
- * landet immer im richtigen Speicher — unabhängig davon, wie das jeweilige
- * Handy das handhabt.
- *
- * Der Klartext-Token des Geräts landet ausschließlich im Cookie, in der
- * Datenbank steht nur sein SHA-256.
+ * WICHTIG — wird bewusst NICHT beim bloßen Öffnen der Seite aufgerufen,
+ * sondern erst, wenn die Einrichtung wirklich abgeschlossen wird. Zwei Gründe:
+ * Eine Linkvorschau in WhatsApp würde die Einladung sonst abbrennen, bevor der
+ * Mitarbeiter sie überhaupt sieht. Und auf dem iPhone hat die installierte App
+ * einen eigenen Datenspeicher — ein in Safari gesetztes Cookie gilt dort nicht,
+ * also muss der Aufruf aus der App heraus kommen.
  */
-export async function mitCodeKoppeln(eingabe: string): Promise<KoppelErgebnis> {
+export async function einladungEinloesen(
+  token: string,
+): Promise<EinloesenErgebnis> {
   const org = await requireActiveOrg();
 
-  const code = normalisiereCode(eingabe);
-  if (!istVollstaendig(code)) {
-    return {
-      ok: false,
-      error: "Bitte den vollständigen Code eingeben (8 Zeichen).",
-    };
-  }
+  // Schon gekoppelt? Dann nichts verbrauchen — das passiert, wenn die App nach
+  // dem Einrichten erneut auf ihre start_url startet.
+  const vorhanden = await getCurrentDeviceEmployee();
+  if (vorhanden) return { ok: true };
 
   const rows = await db
     .select({
@@ -48,27 +46,25 @@ export async function mitCodeKoppeln(eingabe: string): Promise<KoppelErgebnis> {
     .innerJoin(employees, eq(employees.id, enrollmentTokens.employeeId))
     .where(
       and(
-        eq(enrollmentTokens.tokenLookup, hashToken(code)),
+        eq(enrollmentTokens.tokenLookup, hashToken(token)),
         eq(enrollmentTokens.orgId, org.id),
       ),
     )
     .limit(1);
 
   const row = rows[0];
-  // Bewusst dieselbe Meldung wie bei einem abgelaufenen Code: Wer raten will,
-  // soll nicht erfahren, ob ein Code existiert.
   if (!row || row.expiresAt.getTime() < Date.now()) {
     return {
       ok: false,
       error:
-        "Dieser Code ist ungültig oder abgelaufen. Bitte lass dir von Sascha einen neuen geben.",
+        "Dieser Link ist ungültig oder abgelaufen. Bitte lass dir von Sascha einen neuen schicken.",
     };
   }
   if (row.consumed) {
     return {
       ok: false,
       error:
-        "Dieser Code wurde bereits verwendet. Bitte lass dir von Sascha einen neuen geben.",
+        "Dieser Link wurde bereits verwendet. Bitte lass dir von Sascha einen neuen schicken.",
     };
   }
   if (!row.employeeActive) {
@@ -79,8 +75,9 @@ export async function mitCodeKoppeln(eingabe: string): Promise<KoppelErgebnis> {
   const userAgent = (await headers()).get("user-agent");
 
   const ergebnis = await db.transaction(async (tx) => {
-    // Erst den Code entwerten — die Bedingung `consumed = false` macht aus dem
-    // Update eine Sperre: zwei parallele Versuche können ihn nie doppelt nutzen.
+    // Erst die Einladung entwerten — die Bedingung `consumed = false` macht aus
+    // dem Update eine Sperre: zwei parallele Aufrufe können sie nie doppelt
+    // nutzen.
     const entwertet = await tx
       .update(enrollmentTokens)
       .set({ consumed: true, consumedAt: new Date() })
@@ -96,7 +93,7 @@ export async function mitCodeKoppeln(eingabe: string): Promise<KoppelErgebnis> {
       return {
         ok: false as const,
         error:
-          "Dieser Code wurde bereits verwendet. Bitte lass dir von Sascha einen neuen geben.",
+          "Dieser Link wurde bereits verwendet. Bitte lass dir von Sascha einen neuen schicken.",
       };
     }
 
@@ -123,11 +120,7 @@ export async function mitCodeKoppeln(eingabe: string): Promise<KoppelErgebnis> {
   return { ok: true };
 }
 
-/**
- * Grobe Gerätebezeichnung aus dem User-Agent, damit Sascha in der Geräteliste
- * etwas Lesbares sieht. Früher tippte der Mitarbeiter den Namen selbst ein —
- * ein Feld, das auf dem Weg zum Stempeln nur im Weg stand.
- */
+/** Grobe Gerätebezeichnung für Saschas Geräteliste. */
 function geraeteBezeichnung(userAgent: string | null): string | null {
   if (!userAgent) return null;
   if (/iPhone/i.test(userAgent)) return "iPhone";
