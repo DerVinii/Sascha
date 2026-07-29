@@ -13,6 +13,13 @@ export const metadata: Metadata = {
   title: "SK Kommandozentrale",
   description: "Vertrieb, Sichtbarkeit und CRM für SK – Dozent und Coach",
   applicationName: "SK Kommandozentrale",
+  // Bewusst als Metadaten-Feld und nicht über die Datei-Konvention
+  // `app/manifest.ts`: Deren Link wird unabhängig von den Metadaten eingehängt
+  // und lässt sich in einem Unter-Layout nicht überschreiben. Der
+  // Mitarbeiterbereich unter /zeit meldet aber ein eigenes Manifest
+  // (public/zeit.webmanifest), damit die Stempeluhr als getrennte App
+  // installiert werden kann. Beide Manifeste liegen daher in public/.
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

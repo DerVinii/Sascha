@@ -5,6 +5,8 @@
 
 **Stand:** 2026-07-29 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
 
+> 📱 **Stempeluhr als eigene App (2026-07-30):** `/zeit*` meldet ein eigenes PWA-Manifest („SK Zeit", teal-grüne Uhr, `scope: /zeit`) — Mitarbeiter installieren die Stempeluhr getrennt von der Kommandozentrale, beide Symbole liegen unterscheidbar nebeneinander. Die Kopplung läuft jetzt über einen **8-stelligen Code, der IN der installierten App eingetippt wird**, statt über einen QR-Link: Auf dem iPhone hat eine installierte Web-App einen eigenen Datenspeicher, ein in Safari gesetztes Cookie gilt dort nicht. `/zeit` ist die Installationsanleitung (plattformabhängig), `/zeit/enroll/[token]` entfällt. ⚠️ `app/manifest.ts` wurde entfernt — beide Manifeste liegen als statische Dateien in `public/`, weil die Next-Datei-Konvention sich in einem Unter-Layout nicht überschreiben lässt. Steht noch aus: Test auf echtem iPhone und Android-Gerät.
+>
 > ⏱ **Zeiterfassung live (2026-07-29):** Deployt und gegen die Produktion abgenommen; `NEXT_PUBLIC_APP_URL` ist in Vercel gesetzt (nötig für die QR-Links — `NEXT_PUBLIC_`-Werte werden beim Build eingesetzt, eine Wertänderung braucht also ein Redeploy). Sascha kann unter `/zeiterfassung` den ersten Mitarbeiter anlegen.
 >
 > ⏱ **Zeiterfassung integriert (2026-07-29):** Neuer Reiter `/zeiterfassung` (Admin, hinter dem Passwort-Gate) + Mitarbeiterbereich `/zeit/*` (bewusst vom Gate ausgenommen, geschützt durch das Geräte-Cookie `sk_zeit_geraet`). Mitarbeiter stempeln per Handy, das Gerät wird einmalig per QR-Code gekoppelt. Fachlogik portiert aus einem bestehenden System eines anderen Kunden — **ohne** Geofence/Standortabfrage und ohne Außendienst-/Homeoffice-Flags. Plan & Architektur: [`ZEITERFASSUNG_PLAN.md`](ZEITERFASSUNG_PLAN.md).
@@ -232,7 +234,8 @@ Nachträglich beauftragt, daher nicht Teil der ~84 PDF-Punkte und nicht in der P
 | # | Punkt | Status | Wo / Anmerkung |
 |---|---|---|---|
 | 13.1 | Mitarbeiterverwaltung | ✅ | `/zeiterfassung` — Mitarbeiter anlegen, aktiv/inaktiv. Tabelle `employees`, unique `(org_id, name)` |
-| 13.2 | Gerätekopplung per QR-Code | ✅ | Einmal-Token (24 h, nur SHA-256 in der DB) → Geräte-Cookie `sk_zeit_geraet` (730 Tage). Tabellen `enrollment_tokens`, `employee_devices`; Geräte sperrbar |
+| 13.2 | Gerätekopplung per Code | ✅ | 8-stelliger Einmal-Code (30 min, nur SHA-256 in der DB), eingegeben **in der installierten App** → Geräte-Cookie `sk_zeit_geraet` (730 Tage). Tabellen `enrollment_tokens`, `employee_devices`; Geräte sperrbar. Der QR zeigt nur noch auf die Installationsseite, enthält kein Geheimnis mehr |
+| 13.11 | Eigene App für Mitarbeiter | ✅ | Zweites PWA-Manifest `public/zeit.webmanifest` („SK Zeit"), eigene Symbole, `scope: /zeit`; Installationsanleitung unter `/zeit` mit Android-Installationsknopf und iPhone-Anleitung |
 | 13.3 | Stempeln per Handy | ✅ | `/zeit/stempel` — Ein-/Ausstempeln ohne Login, Identität = gekoppeltes Gerät (`requireDeviceEmployee()`). Doppeltes Einstempeln fängt ein partieller Unique-Index in der DB ab. Eigene Zeiten unter `/zeit/meine-zeiten`, dort auch „Gerät abmelden" |
 | 13.4 | Live-Übersicht & Zeitenliste | ✅ | `/zeiterfassung` — wer ist eingestempelt, Einträge nach Tag/Woche/Monat (alle Berechnungen in Europe/Berlin über `src/lib/zeiterfassung.ts`) |
 | 13.5 | Krankmeldungen | ✅ | Der Mitarbeiter meldet sich selbst krank (Push an Sascha). Fertige Einträge 08:00–16:00 je Kalendertag, belegte Tage werden übersprungen, max. 62 Tage pro Vorgang — und höchstens 14 Tage rückwirkend / 30 Tage im Voraus, damit niemand sich Stunden in abgerechnete Monate bucht |

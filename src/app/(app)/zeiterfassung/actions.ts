@@ -37,9 +37,10 @@ import {
 import { requireActiveOrg } from "@/lib/server/active-org";
 import { requireAppZugang } from "@/lib/server/app-zugang";
 import {
-  generateToken,
+  generatePairingCode,
   hashToken,
 } from "@/lib/server/zeiterfassung/tokens";
+import { formatiereCode } from "@/lib/kopplungscode";
 import { parseFromBerlinLocal, shiftYmd } from "@/lib/zeiterfassung";
 
 // ============================================================================
@@ -268,10 +269,9 @@ export async function renameEmployee(
  * Basis-URL der App — bevorzugt aus der Env.
  *
  * Der Host-Header ist vom Aufrufer frei wählbar. Würden wir ihm blind folgen,
- * zeigte der erzeugte QR-Code auf einen fremden Server und der Mitarbeiter
- * schickte den Klartext-Token beim Scannen genau dorthin. Deshalb gilt der
+ * zeigte der erzeugte QR-Code auf einen fremden Server. Deshalb gilt der
  * Header-Fallback nur noch für lokale Entwicklung; sonst gibt es lieber einen
- * verständlichen Fehler als einen unsicheren Link.
+ * verständlichen Fehler als einen falschen Link.
  */
 async function basisUrl(): Promise<string | null> {
   const ausEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -283,18 +283,28 @@ async function basisUrl(): Promise<string | null> {
   return istLokal ? `http://${host}` : null;
 }
 
+/** 30 Minuten: Sascha und der Mitarbeiter richten das Handy gemeinsam ein. */
+const CODE_GUELTIG_MINUTEN = 30;
+
 /**
- * Erzeugt einen 24 h gültigen Einrichtungs-Code samt QR-Bild.
+ * Erzeugt einen Kopplungscode zum Vorlesen plus einen QR-Code auf die
+ * Installationsseite.
  *
- * Der Klartext-Token existiert NUR in dieser Antwort — in der Datenbank liegt
+ * Warum ein Code und kein Link mit Token: Auf dem iPhone bekommt eine zum
+ * Startbildschirm hinzugefügte App einen eigenen Datenspeicher, getrennt von
+ * Safari. Ein im Browser eingelöster Link würde die App also nicht koppeln —
+ * das Handy müsste ein zweites Mal gekoppelt werden, und der Einmal-Code wäre
+ * schon verbraucht. Deshalb wird der Code IN der installierten App eingetippt.
+ *
+ * Der Klartext existiert NUR in dieser Antwort — in der Datenbank liegt
  * ausschließlich sein SHA-256. Ältere, noch offene Codes desselben Mitarbeiters
- * werden verbraucht, damit immer nur ein QR-Code gültig ist.
+ * werden entwertet, damit immer nur genau einer gültig ist.
  */
 export async function createEnrollmentToken(
   employeeId: string,
   revokeExisting: boolean,
 ): Promise<
-  | { ok: true; url: string; qr: string; expiresAt: string }
+  | { ok: true; code: string; url: string; qr: string; expiresAt: string }
   | { ok: false; error: string }
 > {
   await requireAppZugang();
@@ -318,13 +328,13 @@ export async function createEnrollmentToken(
     };
   }
 
-  const token = generateToken();
-  const tokenLookup = hashToken(token);
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const code = generatePairingCode();
+  const tokenLookup = hashToken(code);
+  const expiresAt = new Date(Date.now() + CODE_GUELTIG_MINUTEN * 60 * 1000);
 
   await db.transaction(async (tx) => {
     if (revokeExisting) {
-      // Bestehende Handys sperren — der neue QR-Code ersetzt sie.
+      // Bestehende Handys sperren — das neu gekoppelte ersetzt sie.
       await tx
         .update(employeeDevices)
         .set({ revoked: true })
@@ -357,7 +367,10 @@ export async function createEnrollmentToken(
     });
   });
 
-  const url = `${basis}/zeit/enroll/${token}`;
+  // Der QR enthält bewusst KEIN Geheimnis mehr, sondern nur die
+  // Installationsseite. Er ist eine Abkürzung zum Tippen der Adresse, kein
+  // Ausweis — dadurch steht der Code auch nicht in Server-Logs oder im Verlauf.
+  const url = `${basis}/zeit`;
   const qr = await QRCode.toDataURL(url, {
     errorCorrectionLevel: "M",
     margin: 1,
@@ -365,7 +378,13 @@ export async function createEnrollmentToken(
   });
 
   aktualisiereAnsichten();
-  return { ok: true, url, qr, expiresAt: expiresAt.toISOString() };
+  return {
+    ok: true,
+    code: formatiereCode(code),
+    url,
+    qr,
+    expiresAt: expiresAt.toISOString(),
+  };
 }
 
 /** Sperrt ein gekoppeltes Gerät (z. B. Handy verloren). */

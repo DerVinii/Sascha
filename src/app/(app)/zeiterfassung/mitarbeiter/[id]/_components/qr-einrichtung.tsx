@@ -2,12 +2,18 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, QrCode, X } from "lucide-react";
+import { Check, Copy, KeyRound, X } from "lucide-react";
 
 import { formatDateTime } from "@/lib/zeiterfassung";
 import { createEnrollmentToken } from "../../../actions";
 
-type Kopplung = { url: string; qr: string; expiresAt: string };
+type Kopplung = {
+  /** Klartext, kommt genau einmal vom Server und lebt nur in diesem State. */
+  code: string;
+  url: string;
+  qr: string;
+  expiresAt: string;
+};
 
 export function QrEinrichtung({
   employeeId,
@@ -28,8 +34,6 @@ export function QrEinrichtung({
   // Fehler beim Kopieren gehört in den Dialog — sonst liegt er unsichtbar darunter.
   const [kopierFehler, setKopierFehler] = useState<string | null>(null);
   const [bestaetigen, setBestaetigen] = useState(false);
-  // Der Klartext-Code kommt nur genau einmal vom Server — er lebt ausschließlich
-  // in diesem State, solange der Dialog offen ist.
   const [kopplung, setKopplung] = useState<Kopplung | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -65,24 +69,29 @@ export function QrEinrichtung({
           return;
         }
         setBestaetigen(false);
-        setKopplung({ url: res.url, qr: res.qr, expiresAt: res.expiresAt });
+        setKopplung({
+          code: res.code,
+          url: res.url,
+          qr: res.qr,
+          expiresAt: res.expiresAt,
+        });
         router.refresh();
       } catch {
-        setFehler("QR-Code konnte nicht erzeugt werden. Bitte erneut versuchen.");
+        setFehler("Code konnte nicht erzeugt werden. Bitte erneut versuchen.");
       }
     });
   }
 
-  async function linkKopieren() {
+  async function codeKopieren() {
     if (!kopplung) return;
     setKopierFehler(null);
     try {
-      await navigator.clipboard.writeText(kopplung.url);
+      await navigator.clipboard.writeText(kopplung.code);
       setKopiert(true);
       window.setTimeout(() => setKopiert(false), 2000);
     } catch {
       setKopierFehler(
-        "Kopieren hat nicht geklappt. Bitte den Link oben von Hand markieren.",
+        "Kopieren hat nicht geklappt. Bitte den Code von Hand abschreiben.",
       );
     }
   }
@@ -91,8 +100,9 @@ export function QrEinrichtung({
     <div className="rounded-xl border border-line bg-surface p-5 space-y-3">
       <h2 className="text-sm font-semibold text-ink">Gerät einrichten</h2>
       <p className="text-sm text-sub">
-        Der Mitarbeiter scannt den Code mit der Handykamera und ist danach
-        dauerhaft angemeldet. Ein Passwort braucht er nicht.
+        Der Mitarbeiter installiert die Stempeluhr als App auf seinem Handy und
+        tippt dort den Code ein, den du ihm nennst. Ein Passwort braucht er
+        nicht.
       </p>
 
       {hatAktiveGeraete && (
@@ -126,8 +136,8 @@ export function QrEinrichtung({
           disabled={pending || !aktiv}
           className="h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-1.5"
         >
-          <QrCode className="h-4 w-4" />
-          {pending ? "Wird erzeugt …" : "QR-Code erzeugen"}
+          <KeyRound className="h-4 w-4" />
+          {pending ? "Wird erzeugt …" : "Kopplungscode erzeugen"}
         </button>
         {!aktiv && (
           <span className="text-xs text-sub">
@@ -153,12 +163,12 @@ export function QrEinrichtung({
             </h2>
             <p className="text-sm text-ink">
               Das bisher gekoppelte Handy kann danach nicht mehr stempeln — auch
-              dann nicht, wenn der neue QR-Code noch gar nicht gescannt wurde.
+              dann nicht, wenn der neue Code noch gar nicht eingegeben wurde.
             </p>
             <p className="text-xs text-sub">
               Nur nötig, wenn das alte Handy verloren ging oder ersetzt wurde.
               Sonst den Haken entfernen: dann bleibt das alte Gerät angemeldet,
-              bis der neue Code gescannt ist.
+              bis der neue Code eingegeben ist.
             </p>
             {fehler && <p className="text-xs text-err">{fehler}</p>}
             <div className="flex flex-wrap justify-end gap-2 pt-1">
@@ -176,9 +186,7 @@ export function QrEinrichtung({
                 disabled={pending}
                 className="h-9 px-3 rounded-md text-sm font-medium bg-err text-white hover:opacity-90 disabled:opacity-50"
               >
-                {pending
-                  ? "Wird erzeugt …"
-                  : "Abmelden und Code erzeugen"}
+                {pending ? "Wird erzeugt …" : "Abmelden und Code erzeugen"}
               </button>
             </div>
           </div>
@@ -194,10 +202,10 @@ export function QrEinrichtung({
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-sm font-semibold text-ink">
-                QR-Code für {name}
+                Kopplungscode für {name}
               </h2>
               <button
                 type="button"
@@ -209,47 +217,73 @@ export function QrEinrichtung({
               </button>
             </div>
 
-            <div className="flex justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={kopplung.qr}
-                alt="QR-Code zur Geräte-Einrichtung"
-                className="w-56 h-56 rounded-md bg-white p-2"
-              />
-            </div>
-
-            <div className="space-y-1">
+            {/* Der Code ist die Hauptsache — groß genug zum Vorlesen. */}
+            <div className="rounded-lg border border-accent-line bg-accent-faint p-4 text-center">
               <p className="text-[11px] font-medium text-sub">
-                Alternativ dieser Link
+                Diesen Code vorlesen
               </p>
-              <p className="text-xs text-ink break-all select-all rounded-md border border-line bg-bg p-2">
-                {kopplung.url}
+              <p className="mt-1 font-mono text-3xl font-semibold tracking-[0.15em] text-ink select-all">
+                {kopplung.code}
               </p>
               <button
                 type="button"
-                onClick={linkKopieren}
-                className="h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg inline-flex items-center gap-1.5"
+                onClick={codeKopieren}
+                className="mt-3 h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg inline-flex items-center gap-1.5"
               >
                 {kopiert ? (
                   <Check className="h-4 w-4 text-ok" />
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                {kopiert ? "Kopiert" : "Link kopieren"}
+                {kopiert ? "Kopiert" : "Code kopieren"}
               </button>
               {kopierFehler && (
-                <p className="text-xs text-err">{kopierFehler}</p>
+                <p className="mt-2 text-xs text-err">{kopierFehler}</p>
               )}
             </div>
 
-            <p className="text-xs text-sub">
-              24 Stunden gültig, nur einmal verwendbar — gültig bis{" "}
-              {formatDateTime(kopplung.expiresAt)} Uhr. Sobald dieses Fenster
-              geschlossen ist, lässt sich der Code nicht mehr anzeigen; dann muss
-              ein neuer erzeugt werden.
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-ink">
+                So geht der Mitarbeiter vor
+              </p>
+              <ol className="space-y-1.5 text-xs text-sub">
+                <li>
+                  <span className="font-medium text-ink">1.</span> Diesen
+                  QR-Code mit der Handykamera scannen — er führt zur
+                  Installationsanleitung.
+                </li>
+                <li>
+                  <span className="font-medium text-ink">2.</span> Die
+                  Stempeluhr als App auf den Startbildschirm legen.
+                </li>
+                <li>
+                  <span className="font-medium text-ink">3.</span> Die App über
+                  das neue Symbol öffnen und den Code oben eintippen.
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={kopplung.qr}
+                alt="QR-Code zur Installationsanleitung"
+                className="w-40 h-40 rounded-md bg-white p-2"
+              />
+            </div>
+
+            <p className="text-center text-xs text-ink break-all select-all">
+              {kopplung.url}
             </p>
 
-            <div className="flex justify-end pt-1">
+            <p className="text-xs text-sub">
+              Der Code ist 30 Minuten gültig (bis{" "}
+              {formatDateTime(kopplung.expiresAt)} Uhr) und lässt sich nur
+              einmal verwenden. Sobald dieses Fenster geschlossen ist, kann er
+              nicht mehr angezeigt werden — dann einfach einen neuen erzeugen.
+            </p>
+
+            <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setKopplung(null)}

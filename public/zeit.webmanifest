@@ -1,0 +1,32 @@
+{
+  "name": "SK Zeit",
+  "short_name": "SK Zeit",
+  "description": "Ein- und Ausstempeln für das Team von SK – Dozent und Coach",
+  "start_url": "/zeit/stempel",
+  "scope": "/zeit",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f766e",
+  "theme_color": "#0f766e",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/zeit-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/zeit-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/zeit-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

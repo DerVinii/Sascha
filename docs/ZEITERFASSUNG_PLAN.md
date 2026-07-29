@@ -5,7 +5,7 @@
 
 ## 1. Ziel
 
-Sascha braucht eine Zeiterfassung für seine Mitarbeiter. Die Mitarbeiter stempeln per Handy — kein Terminal, keine App-Installation, keine Zugangsdaten, die sie sich merken müssen. Das Handy wird **einmalig per QR-Code gekoppelt** und ist danach dauerhaft als „dieses Gerät gehört Person X" bekannt.
+Sascha braucht eine Zeiterfassung für seine Mitarbeiter. Die Mitarbeiter stempeln per Handy — kein Terminal, keine Zugangsdaten, die sie sich merken müssen. Sie legen sich die Stempeluhr als **eigene App** auf den Startbildschirm und koppeln das Handy dort **einmalig per Kopplungscode**; danach ist es dauerhaft als „dieses Gerät gehört Person X" bekannt.
 
 Sascha selbst sieht in der Kommandozentrale, wer gerade eingestempelt ist, korrigiert vergessene oder falsche Zeiten, trägt Krankmeldungen ein, verwaltet Mitarbeiter und Geräte und exportiert Monatsabrechnungen als CSV.
 
@@ -16,20 +16,19 @@ Sascha selbst sieht in der Kommandozentrale, wer gerade eingestempelt ist, korri
 | **Admin** | `/zeiterfassung*` | Sascha | APP_PASSWORD-Gate der Middleware (wie der Rest der App), im `(app)`-Layout mit Sidebar/Header |
 | **Mitarbeiter** | `/zeit`, `/zeit/*` | Team | **bewusst vom Gate ausgenommen** — dafür Geräte-Cookie `sk_zeit_geraet`, serverseitig geprüft |
 
-Der Grund für die Trennung: Die Mitarbeiter kennen das APP_PASSWORD nicht und sollen es nie erfahren — es öffnet die komplette Kommandozentrale mit allen Kontakt- und Vertriebsdaten. Ein zweites Passwort nur für die Zeiterfassung wäre wieder etwas, das man vergisst, weitergibt oder aufschreibt. Stattdessen ist **das gekoppelte Gerät der Ausweis**: Wer den QR-Code einmal gescannt hat, ist danach identifiziert.
+Der Grund für die Trennung: Die Mitarbeiter kennen das APP_PASSWORD nicht und sollen es nie erfahren — es öffnet die komplette Kommandozentrale mit allen Kontakt- und Vertriebsdaten. Ein zweites Passwort nur für die Zeiterfassung wäre wieder etwas, das man vergisst, weitergibt oder aufschreibt. Stattdessen ist **das gekoppelte Gerät der Ausweis**: Wer den Code einmal eingegeben hat, ist danach identifiziert.
 
 Der Mitarbeiterbereich ist deshalb ohne Passwort erreichbar, aber **nicht ungeschützt**: Jede `/zeit`-Seite und jede zugehörige Server-Action ruft `requireDeviceEmployee()` aus `src/lib/server/zeiterfassung/auth.ts` auf. Ohne gültiges Gerät gibt es keine Daten und keine Mutation — Schutz liegt in der Anwendung, nicht in der Middleware.
 
 Mitarbeiter-Seiten:
 
 ```
-/zeit                  → leitet weiter auf /zeit/stempel
-/zeit/stempel          → Stempeluhr (Einstempeln / Ausstempeln, laufende Zeit, Krankmeldung)
-/zeit/enroll/[token]   → Ziel des QR-Codes: Einmal-Token einlösen, Gerät registrieren
+/zeit                  → Ziel des QR-Codes: Anleitung zur Installation als App
+/zeit/stempel          → Stempeluhr; ohne gekoppeltes Gerät die Code-Eingabe
 /zeit/meine-zeiten     → eigene Einträge, Monatsnavigation, Gerät abmelden
 ```
 
-Admin-Seiten: `/zeiterfassung` (Live-Übersicht), `/zeiterfassung/mitarbeiter` (Liste, Monatsexport), `/zeiterfassung/mitarbeiter/[id]` (QR-Kopplung, Geräte, Zeiten, Korrekturen).
+Admin-Seiten: `/zeiterfassung` (Live-Übersicht), `/zeiterfassung/mitarbeiter` (Liste, Monatsexport), `/zeiterfassung/mitarbeiter/[id]` (Kopplungscode, Geräte, Zeiten, Korrekturen).
 
 ### 2.1 Zwei Fallstricke in der Middleware
 
@@ -80,15 +79,29 @@ Wer hier etwas ändert, muss beide Sichten zusammen betrachten, sonst driften An
 
 ## 4. Ablauf der Geräte-Kopplung
 
-1. Sascha legt den Mitarbeiter unter `/zeiterfassung` an und erzeugt einen **Kopplungs-Code**.
-2. Die App generiert ein 32-Byte-Zufallstoken (`generateToken()`). In der DB landet **nur der SHA-256-Hash** (`tokenLookup`) — der Klartext existiert ausschließlich im QR-Code. Ein Datenbankleck gibt niemandem Zugang.
-3. Das Token ist **24 Stunden** gültig und **einmal** einlösbar (`consumed`). Der QR-Code zeigt auf die Kopplungs-Seite mit dem Token im Link.
-4. Der Mitarbeiter scannt mit der Handy-Kamera. Die Seite prüft das Token (nicht abgelaufen, nicht verbraucht, richtige Org), markiert es als verbraucht, legt ein `employee_devices`-Gerät an — wieder nur mit dem Hash — und setzt das Cookie `sk_zeit_geraet` (HttpOnly, `secure`, `sameSite: lax`).
+1. Sascha legt den Mitarbeiter unter `/zeiterfassung` an und erzeugt einen **Kopplungscode** (`createEnrollmentToken`). Angezeigt wird er groß zum Vorlesen, dazu ein QR-Code auf die Installationsseite `/zeit`.
+2. Der Code besteht aus 8 Zeichen eines Alphabets ohne verwechselbare Zeichen (kein 0/O, kein 1/I/L — siehe `src/lib/kopplungscode.ts`). In der DB landet **nur der SHA-256-Hash** (`tokenLookup`); der Klartext existiert ausschließlich in der einen Server-Antwort. Ein Datenbankleck gibt niemandem Zugang.
+3. Der Code ist **30 Minuten** gültig und **einmal** einlösbar (`consumed`). 31⁸ ≈ 8·10¹¹ Möglichkeiten bei genau einem gültigen Code je Mitarbeiter — Durchprobieren ist aussichtslos, ein Zählwerk für Fehlversuche wäre nur Ballast.
+4. Der Mitarbeiter scannt den QR, installiert die Stempeluhr als App (siehe §4.1) und tippt den Code **in der installierten App** ein. `mitCodeKoppeln` prüft (nicht abgelaufen, nicht verbraucht, richtige Org, Mitarbeiter aktiv), entwertet den Code, legt ein `employee_devices`-Gerät an — wieder nur mit dem Hash — und setzt das Cookie `sk_zeit_geraet` (HttpOnly, `secure`, `sameSite: lax`).
 5. Cookie-Laufzeit: **730 Tage**. Das Handy bleibt gekoppelt, bis es gesperrt wird oder der Nutzer Browserdaten löscht. Bei jedem Zugriff wird `lastSeenAt` aktualisiert; ein gesperrtes (`revoked`) Gerät fällt sofort raus.
 
-Verlorenes Handy = Gerät in der Admin-Ansicht sperren, neuen QR-Code erzeugen. Alter Zugang tot, kein Passwortwechsel für alle nötig. Der Mitarbeiter kann sein Gerät außerdem selbst abmelden (unter „Meine Zeiten") — praktisch beim Handywechsel oder wenn ein Diensthandy zurückgegeben wird.
+Verlorenes Handy = Gerät in der Admin-Ansicht sperren, neuen Code erzeugen. Alter Zugang tot, kein Passwortwechsel für alle nötig. Der Mitarbeiter kann sein Gerät außerdem selbst abmelden (unter „Meine Zeiten") — praktisch beim Handywechsel oder wenn ein Diensthandy zurückgegeben wird.
 
-Die Option „Bereits eingerichtete Geräte abmelden" beim Erzeugen eines neuen Codes ist **standardmäßig aus** und fragt vor dem Ausführen nach. Sie war zunächst vorbelegt, sperrt aber das laufende Handy in dem Moment, in dem der neue Code erzeugt wird — wird er dann nicht sofort gescannt, steht der Mitarbeiter ohne Stempelmöglichkeit da.
+Die Option „Bereits eingerichtete Geräte abmelden" beim Erzeugen eines neuen Codes ist **standardmäßig aus** und fragt vor dem Ausführen nach. Sie war zunächst vorbelegt, sperrt aber das laufende Handy in dem Moment, in dem der neue Code erzeugt wird — wird er dann nicht sofort eingelöst, steht der Mitarbeiter ohne Stempelmöglichkeit da.
+
+### 4.1 Warum erst installieren, dann koppeln
+
+Die Reihenfolge ist kein Detail, sondern der Grund für das ganze Code-Verfahren. Der ursprüngliche Weg war ein QR-Code mit dem Token **im Link**: scannen, im Browser einlösen, fertig. Das scheitert auf dem iPhone. Eine zum Startbildschirm hinzugefügte Web-App bekommt dort einen **eigenen Datenspeicher**, getrennt von Safari — das im Browser gesetzte Geräte-Cookie gilt in der App nicht. Der Mitarbeiter sähe „Gerät einrichten", und der Einmal-Code wäre bereits verbraucht.
+
+Deshalb wird der Code **in der App** eingegeben. Das funktioniert unabhängig davon, ob ein Gerät den Speicher teilt oder nicht — und bleibt richtig, falls Apple sein Verhalten ändert. Angenehme Nebenwirkung: Das Geheimnis steht nicht mehr in einer URL und damit nicht in Server-Logs, Browserverlauf oder Messenger-Vorschauen.
+
+Die Stempelseite `/zeit/stempel` ist zugleich die Kopplungsseite: Sie ist die `start_url` der App, ein frisch installiertes Handy landet also genau dort und zeigt ohne gültiges Cookie das Code-Feld. Eine separate Kopplungs-Route gäbe es dagegen nur einmal zu sehen — und wäre in der installierten App gar nicht erreichbar, weil dort niemand eine Adresse eintippt.
+
+### 4.2 Zwei getrennte Apps auf einem Handy
+
+`/zeit*` meldet ein eigenes Manifest (`public/zeit.webmanifest`, Name „SK Zeit", `scope: "/zeit"`, `start_url: "/zeit/stempel"`) mit eigenen Symbolen (teal-grüne Uhr statt dunklem „SK"; erzeugt von `scripts/generate-zeit-icons.mjs`). Dadurch lassen sich Kommandozentrale und Stempeluhr **unabhängig voneinander** installieren und liegen als zwei unterscheidbare Symbole nebeneinander.
+
+Wichtig für spätere Änderungen: Beide Manifeste sind **statische Dateien in `public/`** und werden über das Metadaten-Feld `manifest` eingehängt (Root-Layout bzw. `src/app/zeit/layout.tsx`). Die Next-Datei-Konvention `app/manifest.ts` wurde bewusst entfernt — sie hängt ihren Link unabhängig von den Metadaten ein und lässt sich in einem Unter-Layout **nicht** überschreiben; `/zeit` meldete damit weiterhin das Manifest der Kommandozentrale. Wer die Konvention zurückholt, bricht die zweite App.
 
 ## 5. Fachliche Regeln
 
@@ -111,8 +124,10 @@ Weil hier jemand seine *eigenen* Arbeitszeiten schreibt, ist das Fenster zusätz
 
 - **Migration**: `npx tsx scripts/migrate-zeiterfassung.ts` (legt die fünf Tabellen inkl. partiellem Unique-Index an, idempotent — zieht auch die spätere Umstellung des Protokolls nach). Ist bereits gelaufen.
 - **Prüfung der Zeitrechnung**: `npm run pruefe:zeiterfassung` — läuft mit `TZ=UTC` wie auf Vercel und prüft Umstellungstage, Nachtschichten, Monatsgrenzen, die Viertelstunden-Rundung und ungültige `?monat=`-Parameter. Nach jeder Änderung an `src/lib/zeiterfassung.ts` ausführen.
-- **Env `NEXT_PUBLIC_APP_URL`**: Basis-URL für den Link im QR-Code. **In Vercel gesetzt** (Production und Preview, Wert `https://sascha-wyvernai.vercel.app`). Ohne sie fällt die App auf den Host des Requests zurück, und das nur noch für `localhost` — bei einem fremden Host-Header bricht die Code-Erzeugung mit einer verständlichen Meldung ab, statt einen QR-Code zu erzeugen, der den Klartext-Token an einen fremden Server schickt. Im Dev zeigt der Code entsprechend auf `localhost`, funktioniert auf dem Handy also nicht: **Handy-Tests über die Produktions-URL** machen.
+- **Env `NEXT_PUBLIC_APP_URL`**: Basis-URL für den QR-Code auf die Installationsseite. **In Vercel gesetzt** (Production und Preview, Wert `https://sascha-wyvernai.vercel.app`). Ohne sie fällt die App auf den Host des Requests zurück, und das nur noch für `localhost` — bei einem fremden Host-Header bricht die Code-Erzeugung mit einer verständlichen Meldung ab, statt einen QR zu erzeugen, der auf einen fremden Server zeigt. Im Dev zeigt der QR entsprechend auf `localhost`, funktioniert auf dem Handy also nicht: **Handy-Tests über die Produktions-URL** machen.
   Wichtig: `NEXT_PUBLIC_`-Variablen werden **beim Build** fest eingesetzt. Wer den Wert ändert (z. B. später auf eine eigene Domain), muss anschließend neu deployen — ein bloßes Setzen in Vercel reicht nicht. Die Variable ist bewusst als *non-sensitive* angelegt, damit sie mit `vercel env pull` überprüfbar bleibt; ein Geheimnis ist sie ohnehin nicht.
 - **Produktion abgenommen (2026-07-29)** gegen `https://sascha-wyvernai.vercel.app`: Passwort-Gate greift für `/zeiterfassung` (307) und den CSV-Export (401), `/zeit/stempel` ist ohne Passwort erreichbar, der Punkt-Pfad-Angriff auf Server Actions wird abgewiesen, ein QR-Link führt zur Einrichtungsseite, das Geräte-Cookie identifiziert den Mitarbeiter, und der CSV-Export liefert BOM + CRLF. Der Kontostand der Zeiterfassungs-Tabellen ist dabei wieder auf null — es liegen noch keine echten Daten vor.
 - Keine Cron-Jobs, keine Webhooks, keine externen Dienste. Die Zeiterfassung hat keine Abhängigkeit außerhalb der eigenen Datenbank — das Vercel-Hobby-Cron-Limit ist hier irrelevant.
 - `qrcode` steht in `serverExternalPackages` (Next darf es nicht bundeln); QR-Codes werden serverseitig als Data-URL erzeugt.
+- **Symbole der Mitarbeiter-App**: `node scripts/generate-zeit-icons.mjs` (nutzt `sharp`). Nur nötig, wenn sich Motiv oder Farbe ändern — die erzeugten PNGs liegen im Repo.
+- **Offen: Test auf echten Geräten.** Der Ablauf „installieren, dann koppeln" ist genau deshalb so gebaut, weil das iPhone Safari und installierte App getrennt speichert. Vor dem Ausrollen an das Team einmal auf einem iPhone und einem Android-Gerät durchspielen: installieren, koppeln, App schließen, am nächsten Tag erneut öffnen — das Gerät muss angemeldet bleiben.
