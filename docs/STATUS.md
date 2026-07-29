@@ -5,6 +5,8 @@
 
 **Stand:** 2026-07-29 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
 
+> ⏱ **Zeiterfassung live (2026-07-29):** Deployt und gegen die Produktion abgenommen; `NEXT_PUBLIC_APP_URL` ist in Vercel gesetzt (nötig für die QR-Links — `NEXT_PUBLIC_`-Werte werden beim Build eingesetzt, eine Wertänderung braucht also ein Redeploy). Sascha kann unter `/zeiterfassung` den ersten Mitarbeiter anlegen.
+>
 > ⏱ **Zeiterfassung integriert (2026-07-29):** Neuer Reiter `/zeiterfassung` (Admin, hinter dem Passwort-Gate) + Mitarbeiterbereich `/zeit/*` (bewusst vom Gate ausgenommen, geschützt durch das Geräte-Cookie `sk_zeit_geraet`). Mitarbeiter stempeln per Handy, das Gerät wird einmalig per QR-Code gekoppelt. Fachlogik portiert aus einem bestehenden System eines anderen Kunden — **ohne** Geofence/Standortabfrage und ohne Außendienst-/Homeoffice-Flags. Plan & Architektur: [`ZEITERFASSUNG_PLAN.md`](ZEITERFASSUNG_PLAN.md).
 
 > ⚙️ **Einstellungen-Reiter ausgebaut (2026-07-03):** `/einstellungen` mit Unternavigation — **Organisation** (Name, Datenbestand), **Kontaktfelder** (Custom Fields, 7 Typen, Detail-Seite + Tabellen-Spalten), **Tags** (Verwaltung + Zuweisung + Migration unverwalteter Tags), **Integrationen** (Status + Verbindungstest Instantly/Places/Gemini), **Daten** (CSV-Exporte Kontakte/Firmen/Deals), **Darstellung** (Dunkelmodus Hell/Dunkel/System) und **Sicherheit** (Passwort-Gate, aktiv sobald Env `APP_PASSWORD` gesetzt ist). Plan: [`EINSTELLUNGEN_PLAN.md`](EINSTELLUNGEN_PLAN.md).
