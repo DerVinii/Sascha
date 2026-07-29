@@ -64,6 +64,7 @@ src/
     └── utils.ts                # cn() helper
 
 scripts/seed-org.ts             # Org + Standard-Pipeline anlegen
+scripts/migrate-zeiterfassung.ts # Tabellen der Zeiterfassung anlegen
 docs/                           # Specs & Kundenanfragen (PDF, TXT)
 ```
 
@@ -77,6 +78,14 @@ Siehe [src/db/schema.ts](src/db/schema.ts). Architektur-Plan im Plan-File Teil D
 - `pipelines`, `pipeline_stages`, `deals` — Vertriebs-CRM
 - `activities`, `notes` — Aufgaben & interne Kommentare
 - `email_threads`, `email_messages` — Mail-Historie
+
+**Zeiterfassung** (Migration: `npx tsx scripts/migrate-zeiterfassung.ts`):
+- `employees`, `employee_devices`, `enrollment_tokens` — Mitarbeiter + per QR gekoppelte Handys
+- `time_entries`, `time_edit_logs` — Stempelzeiten + Änderungsprotokoll
+
+Architektur & fachliche Regeln: [`docs/ZEITERFASSUNG_PLAN.md`](docs/ZEITERFASSUNG_PLAN.md).
+Optionale Env-Var `NEXT_PUBLIC_APP_URL` — Basis-URL für den Link im QR-Code; ohne sie
+wird der Request-Host genommen (im Dev also `localhost`, damit auf dem Handy unbrauchbar).
 
 **Schema angelegt, in Phase 1 ungenutzt (für Phase 2+):**
 - `automations` — Workflow-Engine

@@ -8,6 +8,7 @@ import {
   Users,
   Settings,
   CalendarDays,
+  Clock,
   Inbox,
   Filter,
   BarChart3,
@@ -29,6 +30,7 @@ const TOP: NavItem[] = [
 
 const BOTTOM: NavItem[] = [
   { href: "/kalender", label: "Kalender", icon: CalendarDays },
+  { href: "/zeiterfassung", label: "Zeiterfassung", icon: Clock },
 ];
 
 const BOTTOM_AFTER_POSTFACH: NavItem[] = [

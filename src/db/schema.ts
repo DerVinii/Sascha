@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -10,6 +11,7 @@ import {
   primaryKey,
   index,
   unique,
+  uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -674,3 +676,158 @@ export const pushKeys = pgTable("push_keys", {
     .defaultNow()
     .notNull(),
 });
+
+// ============================================================================
+// ZEITERFASSUNG
+// ============================================================================
+//
+// Mitarbeiter melden sich nie mit Passwort an: Das Handy wird einmalig per
+// QR-Code gekoppelt (enrollment_tokens → employee_devices), danach identifiziert
+// das Geräte-Cookie den Mitarbeiter. Admin ist implizit Sascha hinter dem
+// APP_PASSWORD-Gate — deshalb gibt es hier keine Rollen und kein "editedBy".
+
+export const employees = pgTable(
+  "employees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("employees_org_idx").on(t.orgId),
+    uniqueIndex("employees_org_name_unique").on(t.orgId, t.name),
+  ],
+);
+
+// Ein gekoppeltes Handy. Der Klartext-Token verlässt den Server nur einmal
+// (als Cookie beim Einrichten) — gespeichert wird ausschließlich sein SHA-256.
+export const employeeDevices = pgTable(
+  "employee_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    tokenLookup: text("token_lookup").notNull().unique(),
+    label: text("label"),
+    userAgent: text("user_agent"),
+    enrolledAt: timestamp("enrolled_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    revoked: boolean("revoked").default(false).notNull(),
+  },
+  (t) => [
+    index("employee_devices_employee_idx").on(t.employeeId),
+    index("employee_devices_org_idx").on(t.orgId),
+  ],
+);
+
+// Einmal-Token für die QR-Kopplung: 24 h gültig, danach verbraucht.
+export const enrollmentTokens = pgTable(
+  "enrollment_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    tokenLookup: text("token_lookup").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumed: boolean("consumed").default(false).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("enrollment_tokens_employee_idx").on(t.employeeId)],
+);
+
+// Eine Stempelung. clockOut = null bedeutet "läuft gerade".
+// Krankmeldungen liegen als fertige Einträge (08:00–16:00, sick = true) vor.
+export const timeEntries = pgTable(
+  "time_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    clockIn: timestamp("clock_in", { withTimezone: true }).notNull(),
+    clockOut: timestamp("clock_out", { withTimezone: true }),
+    sick: boolean("sick").default(false).notNull(),
+    wasEdited: boolean("was_edited").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("time_entries_employee_clockin_idx").on(t.employeeId, t.clockIn),
+    index("time_entries_org_idx").on(t.orgId),
+    // Höchstens ein laufender Eintrag pro Mitarbeiter — fängt auch den Fall ab,
+    // dass zwei schnelle Taps gleichzeitig einstempeln wollen.
+    uniqueIndex("time_entries_open_unique")
+      .on(t.employeeId)
+      .where(sql`clock_out IS NULL`),
+  ],
+);
+
+// Revisionssicherer Änderungsverlauf: jede Admin-Korrektur braucht eine
+// Begründung und wird pro geändertem Feld protokolliert.
+//
+// `timeEntryId` ist bewusst nullable mit ON DELETE SET NULL statt CASCADE:
+// Würde das Protokoll am Eintrag hängen, nähme das Löschen einer Zeit ihre
+// eigene Änderungsgeschichte mit — dann bliebe von einer korrigierten und
+// anschließend gelöschten Zeit keinerlei Spur. Arbeitszeitnachweise sind nach
+// § 16 Abs. 2 ArbZG zwei Jahre aufzubewahren, deshalb überlebt der Log-Eintrag
+// den Eintrag und trägt in `entryClockIn`/`entryClockOut` eine Kopie der Werte.
+//
+// Am Mitarbeiter hängt der Log dagegen weiterhin per CASCADE: Wird ein
+// Mitarbeiter vollständig gelöscht, sollen auch seine Protokolle verschwinden
+// (Löschersuchen nach DSGVO) — die UI warnt vor genau dieser Konsequenz.
+export const timeEditLogs = pgTable(
+  "time_edit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    timeEntryId: uuid("time_entry_id").references(() => timeEntries.id, {
+      onDelete: "set null",
+    }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    // "created" | "clockIn" | "clockOut" | "deleted"
+    fieldChanged: text("field_changed").notNull(),
+    oldValue: timestamp("old_value", { withTimezone: true }),
+    newValue: timestamp("new_value", { withTimezone: true }),
+    // Kopie der Eckwerte des Eintrags, damit ein gelöschter Eintrag im
+    // Protokoll noch benennbar bleibt.
+    entryClockIn: timestamp("entry_clock_in", { withTimezone: true }),
+    entryClockOut: timestamp("entry_clock_out", { withTimezone: true }),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("time_edit_logs_entry_idx").on(t.timeEntryId),
+    index("time_edit_logs_employee_idx").on(t.employeeId),
+  ],
+);

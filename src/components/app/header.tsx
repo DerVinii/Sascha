@@ -28,6 +28,12 @@ const TITLES: Record<string, { title: string; desc: string }> = {
     title: "Kalender",
     desc: "Termine, Meetings und gebuchte Calls im Überblick.",
   },
+  // Präfix-Match: deckt auch die Unterseiten ab (/zeiterfassung/mitarbeiter,
+  // /zeiterfassung/geraete, /zeiterfassung/[id] …).
+  "/zeiterfassung": {
+    title: "Zeiterfassung",
+    desc: "Stempelzeiten, Krankmeldungen und Geräte des Teams.",
+  },
   "/postfach/unibox": {
     title: "Unibox",
     desc: "Antworten aus den Instantly-Kampagnen lesen und beantworten.",

@@ -46,3 +46,8 @@ drizzle/
 # Reacher-Anleitung & alter n8n-Workflow (enthalten Klartext-Secrets) — nie committen
 Reacher - Anleitung fuer andere Projekte.md
 TRW Lg3 - find Emails.json
+
+# Referenzprojekt eines anderen Kunden (Vorlage für die Zeiterfassung, eigene
+# .env mit fremden DB-Zugängen) — nur lokal, nie committen
+ORE-group_Zeiterfassung/
+scratchpad/

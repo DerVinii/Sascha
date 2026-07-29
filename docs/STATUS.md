@@ -3,7 +3,9 @@
 > **Lebendige Dokumentation.** Quelle: [`CRM_Bildungsoperationssystem_Uebersicht.pdf`](CRM_Bildungsoperationssystem_Uebersicht.pdf) (Saschas PDF mit 12 Kategorien).
 > Diese Datei wird bei jedem Feature-Push aktualisiert.
 
-**Stand:** 2026-07-03 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
+**Stand:** 2026-07-29 · **Aktuelle Phase:** 1 (+ SalesSuite-CRM-Nachbau) · **Branch:** `main`
+
+> ⏱ **Zeiterfassung integriert (2026-07-29):** Neuer Reiter `/zeiterfassung` (Admin, hinter dem Passwort-Gate) + Mitarbeiterbereich `/zeit/*` (bewusst vom Gate ausgenommen, geschützt durch das Geräte-Cookie `sk_zeit_geraet`). Mitarbeiter stempeln per Handy, das Gerät wird einmalig per QR-Code gekoppelt. Fachlogik portiert aus einem bestehenden System eines anderen Kunden — **ohne** Geofence/Standortabfrage und ohne Außendienst-/Homeoffice-Flags. Plan & Architektur: [`ZEITERFASSUNG_PLAN.md`](ZEITERFASSUNG_PLAN.md).
 
 > ⚙️ **Einstellungen-Reiter ausgebaut (2026-07-03):** `/einstellungen` mit Unternavigation — **Organisation** (Name, Datenbestand), **Kontaktfelder** (Custom Fields, 7 Typen, Detail-Seite + Tabellen-Spalten), **Tags** (Verwaltung + Zuweisung + Migration unverwalteter Tags), **Integrationen** (Status + Verbindungstest Instantly/Places/Gemini), **Daten** (CSV-Exporte Kontakte/Firmen/Deals), **Darstellung** (Dunkelmodus Hell/Dunkel/System) und **Sicherheit** (Passwort-Gate, aktiv sobald Env `APP_PASSWORD` gesetzt ist). Plan: [`EINSTELLUNGEN_PLAN.md`](EINSTELLUNGEN_PLAN.md).
 
@@ -221,10 +223,32 @@
 
 ---
 
+## 13. Zeiterfassung (außerhalb des PDF)
+
+Nachträglich beauftragt, daher nicht Teil der ~84 PDF-Punkte und nicht in der Phase-1-Bilanz gezählt. Details: [`ZEITERFASSUNG_PLAN.md`](ZEITERFASSUNG_PLAN.md).
+
+| # | Punkt | Status | Wo / Anmerkung |
+|---|---|---|---|
+| 13.1 | Mitarbeiterverwaltung | ✅ | `/zeiterfassung` — Mitarbeiter anlegen, aktiv/inaktiv. Tabelle `employees`, unique `(org_id, name)` |
+| 13.2 | Gerätekopplung per QR-Code | ✅ | Einmal-Token (24 h, nur SHA-256 in der DB) → Geräte-Cookie `sk_zeit_geraet` (730 Tage). Tabellen `enrollment_tokens`, `employee_devices`; Geräte sperrbar |
+| 13.3 | Stempeln per Handy | ✅ | `/zeit/stempel` — Ein-/Ausstempeln ohne Login, Identität = gekoppeltes Gerät (`requireDeviceEmployee()`). Doppeltes Einstempeln fängt ein partieller Unique-Index in der DB ab. Eigene Zeiten unter `/zeit/meine-zeiten`, dort auch „Gerät abmelden" |
+| 13.4 | Live-Übersicht & Zeitenliste | ✅ | `/zeiterfassung` — wer ist eingestempelt, Einträge nach Tag/Woche/Monat (alle Berechnungen in Europe/Berlin über `src/lib/zeiterfassung.ts`) |
+| 13.5 | Krankmeldungen | ✅ | Der Mitarbeiter meldet sich selbst krank (Push an Sascha). Fertige Einträge 08:00–16:00 je Kalendertag, belegte Tage werden übersprungen, max. 62 Tage pro Vorgang — und höchstens 14 Tage rückwirkend / 30 Tage im Voraus, damit niemand sich Stunden in abgerechnete Monate bucht |
+| 13.6 | Zeitkorrekturen mit Protokoll | ✅ | Nur mit Begründung (≥ 5 Zeichen), auch beim Löschen; jede Änderung landet in `time_edit_logs`, Eintrag wird als korrigiert markiert. Das Protokoll hängt am **Mitarbeiter** (nicht am Eintrag) und überlebt daher das Löschen einer Zeit — gelöschte Einträge stehen in einem eigenen Abschnitt (§ 16 Abs. 2 ArbZG: 2 Jahre Aufbewahrung) |
+| 13.7 | CSV-Monatsexport | ✅ | Beginn/Ende auf die vorige Viertelstunde abgerundet, Dezimalstunden mit Komma, BOM + CRLF + Semikolon für Excel |
+| 13.8 | Geofence / Standortprüfung | ❌ | **Bewusst gestrichen** (Berechtigungsdialoge, ungenaue Ortung, rechtlich heikel) — ebenso Außendienst-/Homeoffice-Kennzeichen |
+| 13.9 | Urlaub, Pausen, Soll-/Überstunden, Löhne | ❌ 🔮 | Nicht im Umfang; Abrechnung läuft weiter außerhalb über den CSV-Export |
+| 13.10 | Vergessenes Ausstempeln | ⚠️ | Wird **nicht** automatisch beendet — der Eintrag läuft weiter (bewusst, keine erfundenen Zeiten), fällt in der Übersicht auf und wird korrigiert |
+
+---
+
 ## Tech-Debt & bekannte Verbesserungen
 
 ### 🐛 Sicherheit
 - **Passwort-Gate verfügbar, aber noch NICHT aktiv.** Seit 2026-07-03 existiert eine Middleware (`src/middleware.ts` + `/zugang`), die die gesamte App hinter ein Passwort legt — sie greift, sobald in Vercel die Env-Variable `APP_PASSWORD` gesetzt und redeployt wird (Anleitung: `/einstellungen/sicherheit`). Bis dahin ist die App weiterhin komplett öffentlich (Login wurde 2026-06-05 entfernt, Vercel-Protection deaktiviert). Webhook- und Selftest-Endpunkte sind vom Gate ausgenommen (eigene Tokens).
+- **`/zeit/*` ist bewusst vom Passwort-Gate ausgenommen** (Mitarbeiter kennen das `APP_PASSWORD` nicht) — Schutz ist stattdessen das Geräte-Cookie, das jede Seite und Action serverseitig prüft. ⚠️ Die Matcher-Ausnahme muss `zeit$|zeit/` lauten: ein bloßes `zeit` würde als Präfix auch den Admin-Bereich `/zeiterfassung` ungeschützt lassen.
+- **✅ Behoben (2026-07-29): Server Actions liefen am Passwort-Gate vorbei.** Der Matcher enthielt `.*\..*`, um statische Dateien durchzulassen — das nahm aber *jeden* Pfad mit einem Punkt vom Gate aus. Weil Next.js Server Actions über den `Next-Action`-Header ausführt und nicht über den Pfad, war damit ein `POST /crm/a.b` (oder `/pipelines/a.b`, `/zeiterfassung/mitarbeiter/a.b`) mit gültigem Action-Header **ohne Anmeldung** möglich; betroffen waren 37 der 113 Actions, die Action-IDs stehen im ausgelieferten JS. Der Ausschluss listet jetzt konkrete Endungen und ist mit `$` verankert; gegen einen Produktions-Build per `curl` gegengeprüft (Punkt-Pfade → 307 auf `/zugang`). **Merke: keine ungeankerten Punkt-Muster im Matcher.**
+- **Zweite Verteidigungslinie in der Zeiterfassung:** Alle Admin-Actions prüfen zusätzlich selbst (`requireAppZugang()` aus `src/lib/server/app-zugang.ts`), der CSV-Export ebenso. Grund: Ein Fehler im Matcher-Regex — oder ein vergessenes `APP_PASSWORD` auf einem Preview-Deployment — würde sonst sofort alle Arbeitszeiten freigeben. **`requireActiveOrg()` ist keine Autorisierung**, es liefert ohne Anmeldung immer die erste Org. Für die übrigen Sektionen (CRM, Pipelines, Postfach) steht diese zweite Prüfung noch aus.
 - **Org-Auflösung ohne User:** `getActiveOrg()` nimmt die erste Org in der DB (optional `ACTIVE_ORG_ID`). Kein Request-bezogener Multi-Tenant-Schutz mehr; `assignee`/`author` werden nicht mehr gesetzt (null).
 - **Drizzle nutzt Direct-Connection (postgres role) → RLS wird BYPASSED.** Server-Actions filtern manuell via `requireActiveOrg()`. Vor Production-Launch: separate Application-Role mit aktiver RLS, oder Supabase-JS-Client für Read-Operations
 - **AV-Vertrag mit Sascha noch offen** — wer ist DSGVO-Verantwortlicher?
