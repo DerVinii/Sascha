@@ -15,7 +15,10 @@ export async function getPushConfigAction(): Promise<{
   configured: boolean;
   publicKey: string | null;
 }> {
-  return { configured: isPushConfigured(), publicKey: getPublicVapidKey() };
+  return {
+    configured: await isPushConfigured(),
+    publicKey: await getPublicVapidKey(),
+  };
 }
 
 export async function subscribePushAction(sub: PushSub): Promise<void> {
@@ -38,10 +41,11 @@ export async function sendTestNotificationAction(): Promise<{
   message: string;
 }> {
   const org = await requireActiveOrg();
-  if (!isPushConfigured()) {
+  if (!(await isPushConfigured())) {
     return {
       ok: false,
-      message: "Push ist serverseitig nicht konfiguriert (VAPID-Keys fehlen).",
+      message:
+        "Push-Schlüssel konnten nicht geladen werden. Bitte später erneut versuchen.",
     };
   }
   await sendPushToOrg(org.id, {

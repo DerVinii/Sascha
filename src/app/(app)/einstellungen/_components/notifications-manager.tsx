@@ -68,7 +68,7 @@ export function NotificationsManager({
       const { configured, publicKey } = await getPushConfigAction();
       if (!configured || !publicKey) {
         setError(
-          "Der Server ist noch nicht für Push konfiguriert. Bitte die VAPID-Umgebungsvariablen in Vercel setzen.",
+          "Der Server konnte die Push-Schlüssel gerade nicht laden. Bitte in einem Moment erneut versuchen.",
         );
         return;
       }
@@ -183,20 +183,9 @@ export function NotificationsManager({
 
       {!serverConfigured && (
         <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs text-ink">
-          Hinweis: Der Server ist noch nicht für Push konfiguriert. Setze in
-          Vercel die Umgebungsvariablen{" "}
-          <code className="bg-bg px-1 py-0.5 rounded border border-line break-all">
-            VAPID_PUBLIC_KEY
-          </code>
-          ,{" "}
-          <code className="bg-bg px-1 py-0.5 rounded border border-line break-all">
-            VAPID_PRIVATE_KEY
-          </code>{" "}
-          und{" "}
-          <code className="bg-bg px-1 py-0.5 rounded border border-line break-all">
-            VAPID_SUBJECT
-          </code>
-          . Aktivieren geht danach.
+          Hinweis: Der Server konnte die Push-Schlüssel gerade nicht laden — das
+          deutet auf ein Problem mit der Datenbank hin. Lade die Seite in einem
+          Moment neu; danach sollte das Aktivieren funktionieren.
         </div>
       )}
 

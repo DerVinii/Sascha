@@ -657,3 +657,20 @@ export const pushSubscriptions = pgTable(
   },
   (t) => [index("push_subscriptions_org_idx").on(t.orgId)],
 );
+
+// VAPID-Schlüsselpaar für Web-Push — genau eine Zeile (id = 'singleton').
+// Ohne Schlüssel kann der Server keine Benachrichtigung signieren. Sie liegen
+// hier statt nur in Umgebungsvariablen, damit sich jede Umgebung ihr Paar beim
+// ersten Aufruf selbst anlegt; niemand muss etwas in Vercel nachtragen.
+// Der private Schlüssel ist ein Geheimnis, aber ein eng begrenztes: damit lassen
+// sich Benachrichtigungen an angemeldete Geräte schicken — keine Daten lesen.
+export const pushKeys = pgTable("push_keys", {
+  id: text("id").primaryKey().default("singleton"),
+  publicKey: text("public_key").notNull(),
+  privateKey: text("private_key").notNull(),
+  /** Kontaktadresse im VAPID-Header, z. B. "mailto:info@…". */
+  subject: text("subject").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

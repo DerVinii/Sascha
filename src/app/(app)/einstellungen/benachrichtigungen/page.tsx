@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BenachrichtigungenPage() {
   const org = await requireActiveOrg();
-  const configured = isPushConfigured();
+  const configured = await isPushConfigured();
   const deviceCount = configured ? await countSubscriptions(org.id) : 0;
 
   return (
