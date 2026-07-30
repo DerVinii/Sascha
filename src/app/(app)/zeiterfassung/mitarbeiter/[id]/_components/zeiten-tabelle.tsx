@@ -77,7 +77,6 @@ export function ZeitenTabelle({
   const [ende, setEnde] = useState("");
   const [grundBeginn, setGrundBeginn] = useState("");
   const [grundEnde, setGrundEnde] = useState("");
-  const [grundLoeschen, setGrundLoeschen] = useState("");
 
   const jetztDatum = useMemo(() => new Date(jetzt), [jetzt]);
 
@@ -176,15 +175,10 @@ export function ZeitenTabelle({
   function loeschenBestaetigen() {
     if (!loeschen) return;
     setFehler(null);
-    if (grundLoeschen.trim().length < 5) {
-      setFehler("Bitte eine Begründung mit mindestens 5 Zeichen angeben.");
-      return;
-    }
     const entryId = loeschen.id;
-    const grund = grundLoeschen.trim();
     startTransition(async () => {
       try {
-        const res = await deleteTimeEntry(entryId, grund);
+        const res = await deleteTimeEntry(entryId);
         if (!res.ok) {
           setFehler(res.error);
           return;
@@ -280,7 +274,6 @@ export function ZeitenTabelle({
                         type="button"
                         onClick={() => {
                           setFehler(null);
-                          setGrundLoeschen("");
                           setLoeschen(e);
                         }}
                         className="ml-3 text-xs text-err hover:underline inline-flex items-center gap-1"
@@ -505,21 +498,8 @@ export function ZeitenTabelle({
             </p>
             <p className="text-xs text-sub">
               Der Eintrag wird unwiderruflich gelöscht. Die Löschung bleibt mit
-              Zeitpunkt, Eckdaten und Begründung im Änderungsprotokoll vermerkt.
+              Zeitpunkt und Eckdaten im Änderungsprotokoll vermerkt.
             </p>
-
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-medium text-sub">
-                Begründung (nötig)
-              </label>
-              <textarea
-                rows={2}
-                value={grundLoeschen}
-                onChange={(ev) => setGrundLoeschen(ev.target.value)}
-                placeholder="z. B. Doppelt erfasst, Mitarbeiter war an dem Tag nicht da"
-                className={textFeldKlasse}
-              />
-            </div>
 
             {fehler && <p className="text-xs text-err">{fehler}</p>}
             <div className="flex justify-end gap-2 pt-1">

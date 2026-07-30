@@ -733,21 +733,10 @@ export async function updateTimeEntry(input: {
  * abgehängt. Ohne das wäre eine Löschung der einfachste Weg, eine korrigierte
  * Zeit spurlos verschwinden zu lassen.
  */
-export async function deleteTimeEntry(
-  entryId: string,
-  grund: string,
-): Promise<ZeitAktion> {
+export async function deleteTimeEntry(entryId: string): Promise<ZeitAktion> {
   await requireAppZugang();
   const org = await requireActiveOrg();
   if (!istUuid(entryId)) return { ok: false, error: "Eintrag nicht gefunden." };
-
-  const begruendung = (grund ?? "").trim();
-  if (begruendung.length < MIN_GRUND) {
-    return {
-      ok: false,
-      error: `Bitte eine Begründung mit mindestens ${MIN_GRUND} Zeichen angeben.`,
-    };
-  }
 
   const [vorhanden] = await db
     .select({
@@ -771,7 +760,11 @@ export async function deleteTimeEntry(
       newValue: null,
       entryClockIn: vorhanden.clockIn,
       entryClockOut: vorhanden.clockOut,
-      reason: begruendung,
+      // Für Korrekturen ist eine Begründung Pflicht — beim Löschen bewusst
+      // nicht: Das ist meist Aufräumen (Doppeleintrag, Fehlstempelung), und
+      // ein Pflichtfeld erzeugt dort nur Platzhaltertexte ohne Aussage.
+      // Der Vorgang selbst bleibt trotzdem protokolliert.
+      reason: "Gelöscht",
     });
 
     const weg = await tx
