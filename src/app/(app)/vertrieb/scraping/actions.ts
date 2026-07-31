@@ -600,6 +600,7 @@ async function runEmailFinderBatch(
     remaining,
     rowIds: completedIds,
     rateLimited: false,
+    abortReason: pool.abortReason ?? null,
   };
 }
 

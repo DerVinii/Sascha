@@ -193,6 +193,10 @@ export type RunBatchResult = {
   rowIds: string[];
   /** true, wenn eine Zeile am Gemini-Kontingent (429) scheiterte — Lauf stoppen. */
   rateLimited?: boolean;
+  /** Gesetzt, wenn der Lauf an der Umgebung scheiterte (Prüfserver nicht
+   *  erreichbar, Secret fehlt). Es wurde KEINE Zeile als Fehler markiert; der
+   *  Client soll den Lauf stoppen und die Meldung anzeigen. */
+  abortReason?: string | null;
 };
 
 export type LeadList = {

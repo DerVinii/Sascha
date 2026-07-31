@@ -80,6 +80,16 @@ export function useBatchRunner(cb: Callbacks) {
           acc = accumulate(acc, r);
           setProgress(acc);
           await cb.onBatch?.(r);
+          // Umgebungsproblem (Prüfserver/Secret): Es wurde bewusst keine Zelle
+          // als Fehler markiert — die Zeilen bleiben offen und lassen sich
+          // später erneut anstoßen.
+          if (r.abortReason) {
+            cb.onError?.(
+              `E-Mail-Prüfung nicht verfügbar: ${r.abortReason} ` +
+                "Die betroffenen Zeilen wurden nicht als Fehler markiert und können später erneut geprüft werden.",
+            );
+            break;
+          }
           // Gemini-Kontingent erschöpft (429): nicht weiter feuern — das würde die
           // Quota nur weiter belasten und den Zähler endlos hochzählen lassen.
           if (r.rateLimited) {

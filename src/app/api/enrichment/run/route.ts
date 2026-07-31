@@ -35,7 +35,13 @@ async function handle(req: NextRequest) {
         budgetMs: 45_000,
         isContinuation,
       });
-      if (summary.anyRemaining && !summary.rateLimited) {
+      // Bei einem Umgebungsfehler (Prüfserver/Secret) NICHT weiterketten — jeder
+      // Hop bräche sofort wieder ab und die Kette liefe endlos im Sekundentakt.
+      if (
+        summary.anyRemaining &&
+        !summary.rateLimited &&
+        !summary.configError
+      ) {
         await triggerEnrichmentRun({ continuation: true });
       }
     } catch {

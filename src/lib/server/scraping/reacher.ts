@@ -56,6 +56,14 @@ export const EMAIL_FINDER_CONCURRENCY = 10;
 /** Konfigurations-/Auth-Fehler — sofort abbrechen, Wiederholen bringt nichts. */
 class ReacherConfigError extends Error {}
 
+export const REACHER_SECRET_FEHLT =
+  "REACHER_SECRET ist nicht gesetzt — Umgebungsvariable in Vercel/.env.local hinterlegen.";
+
+/** Vorabprüfung, bevor ein Lauf auch nur eine Zelle anfasst. */
+export function reacherKonfiguriert(): boolean {
+  return !!process.env.REACHER_SECRET;
+}
+
 type ReacherVerdict = {
   reachable: "safe" | "risky" | "invalid" | "unknown";
   /** Domain nimmt alles an → Varianten-Test nicht aussagekräftig. */
@@ -69,11 +77,7 @@ type ReacherVerdict = {
 export async function checkEmail(email: string): Promise<ReacherVerdict> {
   const url = process.env.REACHER_API_URL || DEFAULT_REACHER_URL;
   const secret = process.env.REACHER_SECRET;
-  if (!secret) {
-    throw new ReacherConfigError(
-      "REACHER_SECRET ist nicht gesetzt — Umgebungsvariable in Vercel/.env.local hinterlegen.",
-    );
-  }
+  if (!secret) throw new ReacherConfigError(REACHER_SECRET_FEHLT);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), CHECK_TIMEOUT_MS);
@@ -176,7 +180,13 @@ export function extractEmailDomain(website: string): string | null {
   if (!s) return null;
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = `https://${s}`;
   try {
-    const host = new URL(s).hostname.toLowerCase().replace(/^www\./, "");
+    const host = new URL(s).hostname
+      .toLowerCase()
+      .replace(/^www\./, "")
+      // Wurzel-Punkt am Ende ("beispiel.de." — kommt aus getippten Webseiten-
+      // Feldern): Reacher findet dafür keine MX-Records und meldet die Domain
+      // fälschlich als „empfängt keine E-Mails".
+      .replace(/\.+$/, "");
     return host.includes(".") ? host : null;
   } catch {
     return null;
@@ -311,7 +321,12 @@ export function emailFinderMissingRows(
 // ----------------------------------------------------------------------------
 
 export type EmailFinderOutcome = {
-  status: "success" | "not_found" | "error" | "partial";
+  /** "aborted" = Umgebungsproblem (Secret fehlt, Prüfserver nicht erreichbar).
+   *  Die Zelle bleibt unangetastet, damit der Lead nicht dauerhaft als Fehler
+   *  dasteht — ein späterer Lauf holt ihn nach. */
+  status: "success" | "not_found" | "error" | "partial" | "aborted";
+  /** nur bei "aborted": woran die Umgebung scheiterte. */
+  reason?: string;
 };
 
 /** In der Zelle gespeicherter Fortschritt (unsichtbar fürs Grid/den Drawer). */
@@ -366,6 +381,38 @@ export async function runEmailFinderForRow(
       ...(state ? { finder: state } : {}),
     });
     return { status };
+  };
+
+  /**
+   * Umgebungsproblem statt Lead-Problem (Secret fehlt, Prüfserver antwortet
+   * nicht). Die Zelle wird bewusst NICHT auf "Fehler" gesetzt: Am Lead ist
+   * nichts falsch, die Prüfung war nur gerade nicht möglich. Ein Fehler-Status
+   * würde die Zeile dauerhaft rot färben, die Liste als „fertig" aus der
+   * Warteschlange nehmen und niemand würde es je wieder versuchen.
+   * Angefangene Varianten werden als Teil-Lauf gesichert und später fortgesetzt.
+   */
+  const abbrechen = async (
+    reason: string,
+    state: FinderState | null,
+    domain: string | null,
+  ): Promise<EmailFinderOutcome> => {
+    if (state && state.next > 0) {
+      await persist({
+        status: "running",
+        provider: "reacher",
+        runAt: new Date().toISOString(),
+        error: null,
+        value: "",
+        raw: {
+          email: null,
+          domain,
+          getestet: Object.keys(state.tried).length,
+          varianten: state.candidates.length,
+        },
+        finder: state,
+      });
+    }
+    return { status: "aborted", reason };
   };
 
   const { vorname, nachname, webseite } = finderInputs(column, src);
@@ -452,13 +499,10 @@ export async function runEmailFinderForRow(
       const message = e instanceof Error ? e.message : "Reacher-Fehler";
       consecutiveErrors++;
       if (e instanceof ReacherConfigError || consecutiveErrors >= 2) {
-        // Server nicht erreichbar / falsches Secret: Zeile abbrechen, Fortschritt
-        // bleibt erhalten (der nächste Lauf setzt genau hier wieder an).
-        return finish("error", {
-          error: message.slice(0, 300),
-          state,
-          domain,
-        });
+        // Falsches/fehlendes Secret oder Server nicht erreichbar: den ganzen
+        // Lauf abbrechen, ohne die Zeile als Fehler zu markieren. Der
+        // Fortschritt bleibt erhalten, der nächste Lauf setzt genau hier an.
+        return abbrechen(message.slice(0, 300), state, domain);
       }
       state.tried[email] = "unknown";
       state.next++;
@@ -529,6 +573,10 @@ export type EmailFinderPoolResult = {
   results: { src: RowSources; outcome: EmailFinderOutcome }[];
   /** true = es ist noch Arbeit offen (Teil-Lauf ODER nicht begonnene Zeilen). */
   remaining: boolean;
+  /** Gesetzt, wenn die Umgebung den Lauf verhindert hat (Secret fehlt,
+   *  Prüfserver nicht erreichbar). Dann wurde KEINE Zelle als Fehler markiert
+   *  und alle Zeilen sind weiterhin offen. */
+  abortReason?: string | null;
 };
 
 /**
@@ -561,9 +609,21 @@ export async function runEmailFinderPool(
   const results: { src: RowSources; outcome: EmailFinderOutcome }[] = [];
   let idx = 0;
   let remaining = false;
+  let abortReason: string | null = null;
+
+  // Fehlt das Secret, scheitert JEDE Zeile am ersten Check. Das einmal vorab
+  // prüfen, statt die Liste zeilenweise mit Fehlern zu überziehen.
+  if (rows.length > 0 && !reacherKonfiguriert()) {
+    return { results, remaining: true, abortReason: REACHER_SECRET_FEHLT };
+  }
 
   const worker = async () => {
     for (;;) {
+      // Umgebung defekt: keine weitere Zeile anfassen.
+      if (abortReason) {
+        if (idx < rows.length) remaining = true;
+        return;
+      }
       // Nur eine neue Zeile beginnen, wenn genug Restbudget da ist.
       if (Date.now() >= opts.deadline - EMAIL_FINDER_MIN_ROW_MS) {
         if (idx < rows.length) remaining = true;
@@ -580,6 +640,12 @@ export async function runEmailFinderPool(
         deadline: opts.deadline,
         restart,
       });
+      if (outcome.status === "aborted") {
+        // Zeile ist unverändert offen geblieben — nicht als erledigt zählen.
+        abortReason = outcome.reason ?? "Prüfserver nicht erreichbar.";
+        remaining = true;
+        return;
+      }
       results.push({ src, outcome });
       if (outcome.status === "partial") remaining = true;
     }
@@ -589,5 +655,5 @@ export async function runEmailFinderPool(
     Array.from({ length: Math.min(concurrency, rows.length) }, () => worker()),
   );
 
-  return { results, remaining };
+  return { results, remaining, abortReason };
 }

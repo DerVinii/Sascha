@@ -263,6 +263,10 @@ export type DrainSummary = {
   processedRows: number;
   anyRemaining: boolean; // es gibt noch offene Arbeit -> Chain fortsetzen
   rateLimited: boolean;
+  /** Umgebungsproblem (z. B. Reacher-Secret fehlt / Prüfserver tot): Der Lauf
+   *  pausiert, die Liste bleibt eingereiht und die Kette wird NICHT weiter
+   *  gedreht — sonst würde sie im Sekundentakt ins Leere feuern. */
+  configError?: string | null;
 };
 
 /** Wie lange gilt eine Liste als „von einem lebenden Worker bearbeitet". */
@@ -302,6 +306,7 @@ export async function drainQueuedLists(opts: {
   let processedRows = 0;
   let anyRemaining = false;
   let rateLimited = false;
+  let configError: string | null = null;
 
   const queued = await db
     .select({
@@ -398,6 +403,7 @@ export async function drainQueuedLists(opts: {
       });
       processedRows += pool.results.length;
       if (pool.remaining) listRemaining = true;
+      if (pool.abortReason) configError = pool.abortReason;
     }
 
     // Heartbeat nachziehen.
@@ -422,6 +428,17 @@ export async function drainQueuedLists(opts: {
       });
       break;
     }
+    if (configError) {
+      // Liste bleibt bewusst eingereiht (enrichmentQueuedAt unangetastet): Es
+      // liegt an der Umgebung, nicht an den Leads. Der nächste Cron-Lauf oder
+      // ein „Update cells" nimmt sie unverändert wieder auf. Kette NICHT
+      // fortsetzen — jeder Hop würde sofort wieder abbrechen.
+      await meldeRecherche(list, {
+        title: "Lead-Recherche pausiert",
+        body: `${list.name}: E-Mail-Prüfung gerade nicht möglich — keine Zeile wurde als Fehler markiert.`,
+      });
+      break;
+    }
     if (listRemaining) {
       anyRemaining = true; // Budget erschöpft, Zeilen offen
     } else {
@@ -441,5 +458,5 @@ export async function drainQueuedLists(opts: {
     }
   }
 
-  return { processedRows, anyRemaining, rateLimited };
+  return { processedRows, anyRemaining, rateLimited, configError };
 }
