@@ -20,8 +20,11 @@ export default async function ScrapingPage({
   if (!data) redirect("/vertrieb");
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div>
+    // h-full + min-h-0: die Seite füllt genau den sichtbaren Bereich, damit die
+    // Lead-Tabelle darunter selbst scrollt und ihr waagerechter Schieberegler
+    // immer am unteren Bildschirmrand steht (statt am Ende einer langen Liste).
+    <div className="p-4 md:p-6 flex h-full min-h-0 flex-col gap-4">
+      <div className="shrink-0">
         <Link
           href="/vertrieb"
           className="inline-flex items-center gap-1.5 text-xs text-sub hover:text-ink transition"

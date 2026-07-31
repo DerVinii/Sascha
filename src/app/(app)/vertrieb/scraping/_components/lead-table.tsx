@@ -481,7 +481,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     44 + visibleColumns.reduce((w, c) => w + c.width, 0) + 44;
 
   return (
-    <div className="space-y-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <TableToolbar
         views={views}
         activeViewId={activeViewId}
@@ -521,7 +521,10 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       {total === 0 ? (
         <EmptyState onOpenSource={() => setSourceOpen(true)} />
       ) : (
-        <div className="rounded-xl border border-line bg-surface overflow-auto">
+        // flex-1 + min-h-0: die Tabelle scrollt in sich statt die Seite zu
+        // verlängern — so bleibt der waagerechte Schieberegler (immer sichtbar
+        // dank scroll-sichtbar) dauerhaft am unteren Rand der Liste.
+        <div className="flex-1 min-h-0 rounded-xl border border-line bg-surface overflow-auto scroll-sichtbar">
           <table
             className="border-collapse text-sm"
             style={{ width: tableWidth }}

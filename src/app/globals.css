@@ -74,6 +74,34 @@
 }
 
 @layer components {
+  /* Schieberegler dauerhaft anzeigen. macOS blendet Overlay-Scrollbars sonst
+     aus, sobald man nicht scrollt — bei der breiten Lead-Tabelle ist der
+     waagerechte Regler aber die Hauptnavigation und muss immer sichtbar sein. */
+  .scroll-sichtbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-sub) / 0.45) transparent;
+  }
+  .scroll-sichtbar::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+    -webkit-appearance: none;
+  }
+  .scroll-sichtbar::-webkit-scrollbar-track {
+    background: rgb(var(--c-bg));
+    border-top: 1px solid rgb(var(--c-line));
+  }
+  .scroll-sichtbar::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-sub) / 0.45);
+    border: 2px solid rgb(var(--c-bg));
+    border-radius: 999px;
+  }
+  .scroll-sichtbar::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--c-sub) / 0.7);
+  }
+  .scroll-sichtbar::-webkit-scrollbar-corner {
+    background: rgb(var(--c-bg));
+  }
+
   .pill {
     @apply inline-flex items-center gap-1 px-2 py-px rounded-full text-[11px] font-medium;
   }
