@@ -15,6 +15,7 @@ import {
   Braces,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { menuPosition, type MenuRect } from "@/lib/dropdown-position";
 import { instantlyVarToken } from "@/lib/scraping-types";
 import type {
   CampaignStep,
@@ -49,6 +50,19 @@ type RunProgress = {
   skippedNoEmail: number;
   skippedDuplicate: number;
 };
+
+/** Wunschmaße des Variablen-Menüs; beide Werte werden bei Platzmangel gekürzt. */
+const VAR_MENU_WIDTH = 256;
+const VAR_MENU_MAX_HEIGHT = 240;
+
+/** Menü am Knopf ausrichten — immer vollständig im Fenster (siehe menuPosition). */
+function berechneVarMenuPos(knopf: DOMRect): MenuRect {
+  return menuPosition(knopf, {
+    width: VAR_MENU_WIDTH,
+    maxHeight: VAR_MENU_MAX_HEIGHT,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+  });
+}
 
 export function CampaignSetupModal({
   open,
@@ -93,10 +107,13 @@ export function CampaignSetupModal({
     null,
   );
   const varBtnRef = useRef<HTMLButtonElement | null>(null);
+  const varMenuRef = useRef<HTMLDivElement | null>(null);
   const [varMenuOpen, setVarMenuOpen] = useState(false);
-  const [varMenuPos, setVarMenuPos] = useState<{ left: number; top: number }>({
+  const [varMenuPos, setVarMenuPos] = useState<MenuRect>({
     left: 0,
     top: 0,
+    width: VAR_MENU_WIDTH,
+    maxHeight: VAR_MENU_MAX_HEIGHT,
   });
 
   const loadSetup = useCallback(async () => {
@@ -147,6 +164,28 @@ export function CampaignSetupModal({
     };
   }, [open, listId, skipAlreadySent, skipWorkspaceDuplicates]);
 
+  // Offenes Variablen-Menü nachführen: bei Größenänderung (Handy drehen,
+  // Tastatur auf/zu) neu ausrichten, beim Scrollen außerhalb schließen — sonst
+  // klebt es an einer Stelle, an der der Knopf längst nicht mehr steht. Scrollen
+  // IN der Liste ist davon ausgenommen, sonst ließe sie sich nicht bedienen.
+  useEffect(() => {
+    if (!varMenuOpen) return;
+    const neuAusrichten = () => {
+      const r = varBtnRef.current?.getBoundingClientRect();
+      if (r) setVarMenuPos(berechneVarMenuPos(r));
+    };
+    const beimScrollen = (e: Event) => {
+      if (varMenuRef.current?.contains(e.target as Node)) return;
+      setVarMenuOpen(false);
+    };
+    window.addEventListener("resize", neuAusrichten);
+    window.addEventListener("scroll", beimScrollen, true);
+    return () => {
+      window.removeEventListener("resize", neuAusrichten);
+      window.removeEventListener("scroll", beimScrollen, true);
+    };
+  }, [varMenuOpen]);
+
   function updateStep(i: number, patch: Partial<CampaignStep>) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
@@ -159,7 +198,7 @@ export function CampaignSetupModal({
 
   function openVarMenu() {
     const r = varBtnRef.current?.getBoundingClientRect();
-    if (r) setVarMenuPos({ left: r.left, top: r.bottom + 4 });
+    if (r) setVarMenuPos(berechneVarMenuPos(r));
     setVarMenuOpen((v) => !v);
   }
 
@@ -642,8 +681,14 @@ export function CampaignSetupModal({
             onClick={() => setVarMenuOpen(false)}
           />
           <div
-            style={{ left: varMenuPos.left, top: varMenuPos.top }}
-            className="fixed z-[61] w-64 max-h-60 overflow-y-auto rounded-lg border border-line bg-surface shadow-xl py-1"
+            ref={varMenuRef}
+            style={{
+              left: varMenuPos.left,
+              top: varMenuPos.top,
+              width: varMenuPos.width,
+              maxHeight: varMenuPos.maxHeight,
+            }}
+            className="fixed z-[61] overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface shadow-xl py-1"
           >
             {variables.length === 0 ? (
               <div className="px-3 py-2 text-xs text-sub">
