@@ -100,6 +100,11 @@ export async function runEnrichmentForRow(
   column: LeadColumn,
   src: RowSources,
   columns: LeadColumn[],
+  /** keepExisting: bereits gefüllte Kontaktfelder nicht anfassen. Gesetzt, wenn
+   *  der Lauf über eine andere Spalte angestoßen wurde ("Fehlende ausführen" auf
+   *  E-Mail) — dann soll die Suche die Lücke schließen und nicht den Namen
+   *  ersetzen, der schon dasteht. Bei "Alle erzwingen" bewusst aus. */
+  opts?: { keepExisting?: boolean },
 ): Promise<RowOutcome> {
   // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
   if (column.config.ai?.prompt) {
@@ -194,9 +199,12 @@ export async function runEnrichmentForRow(
       // Ein zweiter Lauf (z. B. "Fehlende ausführen" auf der Spalte E-Mail für
       // eine Zeile, die den Namen längst hat) darf gute Daten nicht leeren.
       if (column.key === ENRICHMENT_KEY) {
-        set.firstName = firstName ?? src.contact.firstName;
-        set.lastName = lastName ?? src.contact.lastName;
-        set.email = email ?? src.contact.email;
+        const behalten = opts?.keepExisting === true;
+        const uebernehmen = (neu: string | null, alt: string | null) =>
+          behalten ? (alt ?? neu) : (neu ?? alt);
+        set.firstName = uebernehmen(firstName, src.contact.firstName);
+        set.lastName = uebernehmen(lastName, src.contact.lastName);
+        set.email = uebernehmen(email, src.contact.email);
       }
       await db
         .update(contacts)

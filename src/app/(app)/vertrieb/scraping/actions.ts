@@ -503,8 +503,17 @@ export async function runEnrichmentBatchAction(input: {
     scopeTotal = candidates.length;
   }
 
+  // Fremd-angestoßener Lauf ohne "Force": vorhandene Kontaktfelder behalten.
+  // "Fehlende ausführen" auf E-Mail soll die E-Mail nachtragen, nicht den
+  // bereits gefundenen Ansprechpartner gegen einen anderen tauschen.
+  const keepExisting =
+    engine.key !== column.key &&
+    ("rowIds" in input.scope || input.scope.mode !== "force");
+
   const results = await Promise.all(
-    toProcess.map((src) => runEnrichmentForRow(org.id, engine, src, columns)),
+    toProcess.map((src) =>
+      runEnrichmentForRow(org.id, engine, src, columns, { keepExisting }),
+    ),
   );
 
   let succeeded = 0;
