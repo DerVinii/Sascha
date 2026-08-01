@@ -37,6 +37,31 @@ export function isPipelineStageColumn(key: string): boolean {
 }
 
 /**
+ * Standard-Spalten, die von einer festen Engine gefüllt werden — Wert: der Key
+ * der Spalte, die den Lauf ausführt. Vorname/Nachname/E-Mail kommen alle drei
+ * aus der Geschäftsführer-Suche, die Anrede aus ihrem eigenen festen Prompt.
+ *
+ * Diese Spalten bekommen im Spaltenmenü "Fehlende ausführen" und "Alle
+ * erzwingen" statt "Mit KI ausfüllen": Der Prompt steht fest, es gibt nichts
+ * einzugeben.
+ */
+export const ENGINE_FILLED_COLUMNS: Record<string, string> = {
+  firstName: ENRICHMENT_KEY,
+  lastName: ENRICHMENT_KEY,
+  email: ENRICHMENT_KEY,
+  [SALUTATION_KEY]: SALUTATION_KEY,
+};
+
+/** Key der Spalte, die den Lauf für `key` ausführt (null = keine Engine). */
+export function engineForColumn(key: string): string | null {
+  return ENGINE_FILLED_COLUMNS[key] ?? null;
+}
+
+export function isEngineFilledColumn(key: string): boolean {
+  return engineForColumn(key) !== null;
+}
+
+/**
  * Kern-Spalten mit festem Key, die nicht gelöscht werden dürfen — diese Felder
  * werden vom Enrichment zurückgeschrieben und in Instantly-Kampagnen gebraucht.
  */

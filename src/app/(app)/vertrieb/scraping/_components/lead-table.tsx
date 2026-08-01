@@ -26,6 +26,7 @@ import {
   ENRICHMENT_KEY,
   PIPELINE_STAGE_KEY,
   isPipelineStageColumn,
+  engineForColumn,
 } from "@/lib/scraping-types";
 import { useBatchRunner } from "./use-batch-runner";
 import { LeadCellView } from "./lead-cell";
@@ -281,9 +282,16 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const runColumn = (columnKey: string, mode: "missing" | "force") => {
     setError(null);
     if (mode === "force") {
+      // Vorname/Nachname/E-Mail kommen aus einer gemeinsamen Suche — wer eine
+      // davon erzwingt, rechnet zwangsläufig alle drei neu. Das gehört in die
+      // Rückfrage, sonst ist der überschriebene Name eine Überraschung.
+      const zusammen =
+        engineForColumn(columnKey) === ENRICHMENT_KEY
+          ? " Vorname, Nachname und E-Mail werden dabei gemeinsam neu gesucht."
+          : "";
       if (
         !confirm(
-          `Wirklich ALLE ${total} Zeilen neu berechnen? Das verbraucht entsprechend viele Gemini-Aufrufe.`,
+          `Wirklich ALLE ${total} Zeilen neu berechnen?${zusammen} Das verbraucht entsprechend viele Gemini-Aufrufe.`,
         )
       )
         return;

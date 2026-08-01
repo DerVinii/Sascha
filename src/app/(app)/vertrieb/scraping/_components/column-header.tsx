@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   isUserColumn,
   isPipelineStageColumn,
+  isEngineFilledColumn,
   type LeadColumn,
 } from "@/lib/scraping-types";
 
@@ -83,9 +84,15 @@ export function ColumnHeader({
   const [draft, setDraft] = useState(column.label);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const runnable = column.kind === "enrichment" || !!column.config.ai;
-  // "Mit KI ausfüllen" für eigene Daten-/KI-Spalten (nicht Source, nicht find_dm).
-  const canAi = column.kind !== "source" && !column.config.provider;
+  // Vorname/Nachname/E-Mail/Anrede werden von einer festen Engine gefüllt und
+  // sind deshalb genauso ausführbar wie Email_Entscheider.
+  const engineFilled = isEngineFilledColumn(column.key);
+  const runnable =
+    column.kind === "enrichment" || !!column.config.ai || engineFilled;
+  // "Mit KI ausfüllen" für eigene Daten-/KI-Spalten (nicht Source, nicht find_dm)
+  // — und nicht für die Engine-Spalten: deren Prompt steht fest.
+  const canAi =
+    column.kind !== "source" && !column.config.provider && !engineFilled;
   // Umbenennen & Löschen nur bei selbst angelegten Spalten (Standard-Spalten wie
   // Firma/Telefon/Vorname bleiben unverändert).
   const canEditColumn = isUserColumn(column);

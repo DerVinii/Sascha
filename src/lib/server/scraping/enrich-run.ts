@@ -190,10 +190,13 @@ export async function runEnrichmentForRow(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const set: any = { customFields: cellPatch(column.key, cell) };
       // Nur die kanonische Enrichment schreibt in die Kontakt-Felder zurück.
+      // Findet der neue Lauf ein Feld nicht (NF), bleibt der alte Wert stehen:
+      // Ein zweiter Lauf (z. B. "Fehlende ausführen" auf der Spalte E-Mail für
+      // eine Zeile, die den Namen längst hat) darf gute Daten nicht leeren.
       if (column.key === ENRICHMENT_KEY) {
-        set.firstName = firstName;
-        set.lastName = lastName;
-        set.email = email;
+        set.firstName = firstName ?? src.contact.firstName;
+        set.lastName = lastName ?? src.contact.lastName;
+        set.email = email ?? src.contact.email;
       }
       await db
         .update(contacts)

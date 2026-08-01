@@ -79,6 +79,10 @@ function storedCell(
 export function salutationMissingRows(
   column: LeadColumn,
   all: RowSources[],
+  /** retryNotFound: auch Zeilen mitnehmen, an denen das Modell schon gescheitert
+   *  ist. Für den ausdrücklichen Klick auf "Fehlende ausführen" — dort will der
+   *  Nutzer genau die leeren Zellen sehen, egal warum sie leer sind. */
+  opts?: { retryNotFound?: boolean },
 ): RowSources[] {
   // Hat der Nutzer der Spalte einen eigenen KI-Prompt gegeben, gehört sie ihm:
   // dann füllt sie die KI-Spalten-Mechanik und nicht dieser Standard-Lauf.
@@ -86,7 +90,8 @@ export function salutationMissingRows(
   return all.filter((src) => {
     if (!salutationReady(src.contact)) return false;
     const cell = storedCell(src, column.key);
-    if (cell?.status === "not_found" || cell?.status === "running") return false;
+    if (cell?.status === "running") return false;
+    if (cell?.status === "not_found" && !opts?.retryNotFound) return false;
     const wert = cell?.value == null ? "" : String(cell.value).trim();
     return wert === "";
   });

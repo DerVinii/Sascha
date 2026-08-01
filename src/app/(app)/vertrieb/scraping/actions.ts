@@ -61,8 +61,14 @@ import {
   cellPatch,
   runEnrichmentForRow,
   pendingCountForList,
+  isRateLimitError,
   ENRICH_STALE_MS,
 } from "@/lib/server/scraping/enrich-run";
+import {
+  runSalutationForRow,
+  salutationMissingRows,
+  salutationReady,
+} from "@/lib/server/scraping/salutation";
 import {
   emailFinderCellNeedsRun,
   emailFinderReady,
@@ -71,6 +77,7 @@ import {
 import {
   instantlyVarToken,
   isUserColumn,
+  engineForColumn,
   EMAIL_FINDER_KEY,
   PIPELINE_STAGE_KEY,
   SALUTATION_KEY,
@@ -418,9 +425,7 @@ export async function runEnrichmentBatchAction(input: {
 }): Promise<RunBatchResult> {
   const org = await requireActiveOrg();
   const column = await getColumnByKey(org.id, input.columnKey);
-  if (!column || (column.kind !== "enrichment" && !column.config.ai)) {
-    throw new Error("Spalte ist keine Enrichment-/KI-Spalte.");
-  }
+  if (!column) throw new Error("Spalte nicht gefunden.");
 
   const columns = await getColumns(org.id, input.listId);
   const all = await loadLeadRows(org.id, input.listId);
@@ -429,6 +434,29 @@ export async function runEnrichmentBatchAction(input: {
   // Abrechnung (Teil-Läufe fortsetzen statt neu starten) — siehe unten.
   if (column.key === EMAIL_FINDER_KEY) {
     return runEmailFinderBatch(org.id, column, columns, all, input.scope);
+  }
+
+  // Anrede: eigene Engine mit festem Prompt (salutation.ts).
+  if (column.key === SALUTATION_KEY) {
+    return runSalutationBatch(org.id, column, all, input.scope);
+  }
+
+  // Vorname/Nachname/E-Mail haben keine eigene Engine — sie werden von der
+  // Geschäftsführer-Suche befüllt. Der Lauf greift deshalb auf deren Spalte
+  // zurück, ausgewählt werden die Zeilen aber nach der angeklickten Spalte
+  // (z. B. "E-Mail fehlt", auch wenn der Name längst dasteht).
+  const engineKey = engineForColumn(column.key);
+  const engine =
+    engineKey && engineKey !== column.key
+      ? ((await getColumnByKey(org.id, engineKey)) ?? null)
+      : column;
+  if (!engine) {
+    throw new Error(
+      "Die Spalte 'Geschäftsführer finden' fehlt — ohne sie kann nichts nachgeschlagen werden.",
+    );
+  }
+  if (engine.kind !== "enrichment" && !engine.config.ai) {
+    throw new Error("Spalte ist keine Enrichment-/KI-Spalte.");
   }
 
   const limit = clamp(
@@ -459,7 +487,12 @@ export async function runEnrichmentBatchAction(input: {
     // excludeRowIds = in diesem Lauf bereits versuchte Zeilen; nicht erneut ziehen,
     // sonst würden Fehler-Zellen (die weiter „braucht Run" sind) den Lauf in eine
     // Endlosschleife treiben.
-    const onlyRunIf = column.config.runSettings?.onlyRunIf;
+    // Bei einer Engine-Spalte (Vorname/… → Geschäftsführer-Suche) zählt bewusst
+    // NICHT deren "Only run if": Der Nutzer hat genau diese Spalte angeklickt.
+    const onlyRunIf =
+      engine.key === column.key
+        ? column.config.runSettings?.onlyRunIf
+        : undefined;
     const exclude = new Set(input.scope.excludeRowIds ?? []);
     const candidates = all.filter((src) => {
       if (exclude.has(src.contact.id)) return false;
@@ -471,7 +504,7 @@ export async function runEnrichmentBatchAction(input: {
   }
 
   const results = await Promise.all(
-    toProcess.map((src) => runEnrichmentForRow(org.id, column, src, columns)),
+    toProcess.map((src) => runEnrichmentForRow(org.id, engine, src, columns)),
   );
 
   let succeeded = 0;
@@ -495,6 +528,82 @@ export async function runEnrichmentBatchAction(input: {
   revalidatePath("/vertrieb/scraping");
   revalidatePath("/vertrieb");
   revalidatePath("/crm");
+
+  return {
+    processed: toProcess.length,
+    succeeded,
+    notFound,
+    failed,
+    remaining,
+    rowIds: toProcess.map((s) => s.contact.id),
+    rateLimited,
+  };
+}
+
+/**
+ * Foreground-Batch für die Spalte "Anrede": derselbe feste Prompt wie beim
+ * "Update cells"-Lauf (salutation.ts). "Fehlende ausführen" nimmt nur leere
+ * Zellen, "Alle erzwingen" rechnet jede Zeile neu — beides aber nur für Zeilen
+ * mit Vor- UND Nachnamen, ohne die es keine Anrede geben kann.
+ */
+async function runSalutationBatch(
+  orgId: string,
+  column: LeadColumn,
+  all: RowSources[],
+  scope: RunScope,
+): Promise<RunBatchResult> {
+  const limit = clamp(("limit" in scope ? scope.limit : undefined) ?? 4, 1, 8);
+  const bereit = all.filter((src) => salutationReady(src.contact));
+
+  let toProcess: RowSources[] = [];
+  let scopeTotal = 0;
+  const offset =
+    !("rowIds" in scope) && scope.mode === "force"
+      ? Math.max(0, scope.offset ?? 0)
+      : 0;
+
+  if ("rowIds" in scope) {
+    const map = new Map(bereit.map((s) => [s.contact.id, s]));
+    const ordered = scope.rowIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as RowSources[];
+    toProcess = ordered.slice(0, limit);
+    scopeTotal = ordered.length;
+  } else if (scope.mode === "force") {
+    toProcess = bereit.slice(offset, offset + limit);
+    scopeTotal = bereit.length;
+  } else {
+    const exclude = new Set(scope.excludeRowIds ?? []);
+    const candidates = salutationMissingRows(column, all, {
+      retryNotFound: true,
+    }).filter((src) => !exclude.has(src.contact.id));
+    toProcess = candidates.slice(0, limit);
+    scopeTotal = candidates.length;
+  }
+
+  const results = await Promise.all(
+    toProcess.map((src) => runSalutationForRow(orgId, column, src)),
+  );
+
+  let succeeded = 0;
+  let notFound = 0;
+  let failed = 0;
+  let rateLimited = false;
+  for (const r of results) {
+    if (r.status === "success") succeeded++;
+    else if (r.status === "not_found") notFound++;
+    else {
+      failed++;
+      if (r.error && isRateLimitError(r.error)) rateLimited = true;
+    }
+  }
+
+  const remaining =
+    !("rowIds" in scope) && scope.mode === "force"
+      ? Math.max(0, bereit.length - (offset + toProcess.length))
+      : Math.max(0, scopeTotal - toProcess.length);
+
+  revalidatePath("/vertrieb/scraping");
 
   return {
     processed: toProcess.length,
