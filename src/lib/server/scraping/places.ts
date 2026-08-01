@@ -25,7 +25,8 @@ export type ScrapedPlace = {
   formattedAddress: string | null;
   phone: string | null;
   websiteUri: string | null;
-  googleMapsUri: string | null;
+  /** Immer gesetzt — notfalls aus der Place-ID gebaut (mapsUrlFromPlaceId). */
+  googleMapsUri: string;
   rating: number | null;
 };
 
@@ -48,16 +49,27 @@ export function extractDomain(url?: string | null): string | null {
   }
 }
 
+/**
+ * Maps-Link aus der Place-ID bauen. Rückfallebene für die seltenen Treffer, bei
+ * denen Google kein `googleMapsUri` mitschickt — die Spalte "Google Maps" soll
+ * bei JEDEM gescrapten Lead gefüllt sein. Das ist die von Google dokumentierte
+ * Link-Form und führt auf denselben Eintrag.
+ */
+export function mapsUrlFromPlaceId(placeId: string): string {
+  return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(placeId)}`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizePlace(p: any): ScrapedPlace | null {
   if (!p?.id) return null;
+  const placeId = String(p.id);
   return {
-    placeId: String(p.id),
+    placeId,
     name: p.displayName?.text ?? p.displayName ?? "(ohne Namen)",
     formattedAddress: p.formattedAddress ?? null,
     phone: p.nationalPhoneNumber ?? null,
     websiteUri: p.websiteUri ?? null,
-    googleMapsUri: p.googleMapsUri ?? null,
+    googleMapsUri: p.googleMapsUri || mapsUrlFromPlaceId(placeId),
     rating: typeof p.rating === "number" ? p.rating : null,
   };
 }

@@ -63,6 +63,13 @@ export async function GET(req: Request) {
     const places = await searchPlaces(niche, city);
     out.count = places.length;
     out.sample = places.slice(0, 3).map((p) => p.name);
+    // Spalte "Google Maps": Der Link muss bei JEDEM Treffer dabei sein — wo
+    // Google keinen mitschickt, wird er aus der Place-ID gebaut.
+    out.gmaps = {
+      alleGesetzt: places.every((p) => !!p.googleMapsUri),
+      ausPlaceIdGebaut: places.filter((p) => p.googleMapsUri.includes("place_id:"))
+        .length,
+    };
 
     if (mode === "enrich" && places[0]) {
       // testet den Gemini-Pfad end-to-end (nur Booleans zurück, keine PII).
