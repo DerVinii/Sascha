@@ -20,6 +20,9 @@ Antworte AUSSCHLIESSLICH mit dem reinen Ergebniswert für diese eine Zelle:
 export async function runAiColumn(
   prompt: string,
   rowContext: Record<string, unknown>,
+  /** search: false schaltet das Google-Grounding ab (spart Zeit, wenn die
+   *  Aufgabe reines Modellwissen ist — z. B. die Anrede aus dem Vornamen). */
+  opts?: { search?: boolean },
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -38,7 +41,7 @@ export async function runAiColumn(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts: [{ text: userText }] }],
-        tools: [{ google_search: {} }],
+        tools: opts?.search === false ? undefined : [{ google_search: {} }],
         generationConfig: { temperature: 0.2 },
       }),
       cache: "no-store",

@@ -73,6 +73,7 @@ import {
   isUserColumn,
   EMAIL_FINDER_KEY,
   PIPELINE_STAGE_KEY,
+  SALUTATION_KEY,
 } from "@/lib/scraping-types";
 import type {
   LeadColumn,
@@ -286,11 +287,16 @@ export async function listLeadTableAction(input: {
   // erscheinen ausschließlich in ihrem eigenen Ordner).
   const columns = await ensureDefaultColumns(org.id, listId);
 
-  // "Email_Entscheider" steht IMMER direkt rechts von "E-Mail" — Position wird
-  // nur fürs Rendering erzwungen (nicht gespeichert), damit auch Umsortieren
-  // die Regel nicht bricht.
+  // Rechts von "E-Mail" stehen IMMER erst "Anrede", dann "Email_Entscheider" —
+  // die Positionen werden nur fürs Rendering erzwungen (nicht gespeichert),
+  // damit auch Umsortieren die Regel nicht bricht.
   const emailCol = columns.find((c) => c.key === "email");
+  const anredeCol = columns.find((c) => c.key === SALUTATION_KEY);
   const finderCol = columns.find((c) => c.key === EMAIL_FINDER_KEY);
+  if (emailCol && anredeCol) {
+    anredeCol.position = emailCol.position + 0.25;
+    anredeCol.pinned = emailCol.pinned;
+  }
   if (emailCol && finderCol) {
     finderCol.position = emailCol.position + 0.5;
     finderCol.pinned = emailCol.pinned;

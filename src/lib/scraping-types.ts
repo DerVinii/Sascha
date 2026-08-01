@@ -15,6 +15,15 @@ export const ENRICHMENT_KEY = "find_dm";
 export const EMAIL_FINDER_KEY = "email_entscheider";
 
 /**
+ * Schlüssel der Standard-Spalte "Anrede" ("Herr Aris"). Wird beim "Update cells"-
+ * Lauf direkt nach Vorname/Nachname aus genau diesen beiden Feldern formuliert;
+ * der Prompt dafür steht fest im Code (server/scraping/salutation.ts) und ist
+ * bewusst nicht über die Oberfläche änderbar. Ansonsten verhält sich die Spalte
+ * wie Vorname/Nachname/E-Mail: frei editierbar, aber nicht umbenenn-/löschbar.
+ */
+export const SALUTATION_KEY = "anrede";
+
+/**
  * Schlüssel der System-Spalte "Pipeline-Phase". Diese Spalte existiert NICHT in
  * `lead_columns`, sondern wird beim Laden der Tabelle nur dann synthetisch
  * eingefügt, wenn der Ordner mit einer Pipeline verbunden ist. Sie ist
@@ -53,6 +62,7 @@ export const BUILTIN_COLUMN_KEYS = [
   "firstName",
   "lastName",
   "email",
+  SALUTATION_KEY,
   EMAIL_FINDER_KEY,
 ] as const;
 

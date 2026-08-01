@@ -23,6 +23,11 @@ import {
 import { runProvider } from "./providers";
 import { runAiColumn } from "./ai-column";
 import { emailFinderMissingRows, runEmailFinderPool } from "./reacher";
+import {
+  runSalutationForRow,
+  salutationMissingRows,
+  SALUTATION_KEY,
+} from "./salutation";
 import { sendPushToOrg } from "@/lib/server/push";
 import type { LeadColumn } from "@/lib/scraping-types";
 
@@ -239,7 +244,7 @@ function missingRows(column: LeadColumn, columns: LeadColumn[], all: RowSources[
 
 /**
  * Wie viele Zeilen einer Liste noch offen sind (für Status/Fortschritt).
- * Zählt beide Phasen: Geschäftsführer-Suche (find_dm) UND die anschließende
+ * Zählt alle drei Phasen: Geschäftsführer-Suche (find_dm), die Anrede und die
  * Entscheider-E-Mail-Verifizierung (email_entscheider).
  */
 export async function pendingCountForList(
@@ -248,11 +253,17 @@ export async function pendingCountForList(
 ): Promise<number> {
   const columns = await getColumns(orgId);
   const dmColumn = columns.find((c) => c.key === ENRICHMENT_KEY) ?? null;
+  const anredeColumn = columns.find((c) => c.key === SALUTATION_KEY) ?? null;
   const emailColumn = columns.find((c) => c.key === EMAIL_FINDER_KEY) ?? null;
-  if (!dmColumn && !emailColumn) return 0;
+  if (!dmColumn && !anredeColumn && !emailColumn) return 0;
 
   const all = await loadLeadRows(orgId, listId);
   let pending = dmColumn ? missingRows(dmColumn, columns, all).length : 0;
+  if (anredeColumn) {
+    // Zeilen, die erst durch Phase 1 einen Namen bekommen, sind hier noch nicht
+    // mitgezählt — der Wert ist eine Untergrenze und wächst im Lauf nach.
+    pending += salutationMissingRows(anredeColumn, all).length;
+  }
   if (emailColumn) {
     pending += emailFinderMissingRows(emailColumn, columns, all, null).length;
   }
@@ -342,9 +353,10 @@ export async function drainQueuedLists(opts: {
 
     const columns = await getColumns(list.orgId);
     const dmColumn = columns.find((c) => c.key === ENRICHMENT_KEY) ?? null;
+    const anredeColumn = columns.find((c) => c.key === SALUTATION_KEY) ?? null;
     const emailColumn =
       columns.find((c) => c.key === EMAIL_FINDER_KEY) ?? null;
-    if (!dmColumn && !emailColumn) {
+    if (!dmColumn && !anredeColumn && !emailColumn) {
       // Keine Engine-Spalte -> Liste aus der Queue nehmen.
       await db
         .update(leadLists)
@@ -380,6 +392,31 @@ export async function drainQueuedLists(opts: {
         }
       }
       if (i < missing.length && !rateLimited) listRemaining = true;
+    }
+
+    // --- Phase 1.5: Anrede formulieren (Gemini, fester Prompt) -------------
+    // Läuft erst, wenn Phase 1 für die Liste durch ist — vorher stünden die
+    // Namen noch nicht in der Zeile. Und VOR Phase 2, weil die E-Mail-Prüfung
+    // das ganze Zeitbudget schlucken kann und die Anrede sonst nie drankäme.
+    if (anredeColumn && !rateLimited && !listRemaining) {
+      const all = await loadLeadRows(list.orgId, list.id);
+      const todo = salutationMissingRows(anredeColumn, all);
+
+      let i = 0;
+      for (; i < todo.length; i++) {
+        if (Date.now() >= deadline) break;
+        const outcome = await runSalutationForRow(
+          list.orgId,
+          anredeColumn,
+          todo[i],
+        );
+        processedRows++;
+        if (outcome.error && isRateLimitError(outcome.error)) {
+          rateLimited = true;
+          break;
+        }
+      }
+      if (i < todo.length && !rateLimited) listRemaining = true;
     }
 
     // --- Phase 2: Entscheider-E-Mail verifizieren (Reacher) -----------------

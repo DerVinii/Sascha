@@ -10,7 +10,11 @@
 import { db } from "@/db";
 import { contacts, leadColumns } from "@/db/schema";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
-import { EMAIL_FINDER_KEY, ENRICHMENT_KEY } from "@/lib/scraping-types";
+import {
+  EMAIL_FINDER_KEY,
+  ENRICHMENT_KEY,
+  SALUTATION_KEY,
+} from "@/lib/scraping-types";
 import type {
   CellStatus,
   LeadCell,
@@ -20,7 +24,7 @@ import type {
   OnlyRunIf,
 } from "@/lib/scraping-types";
 
-export { EMAIL_FINDER_KEY, ENRICHMENT_KEY };
+export { EMAIL_FINDER_KEY, ENRICHMENT_KEY, SALUTATION_KEY };
 
 /** jsonb-Merge, der cells[columnKey] setzt und alles andere erhält. */
 export function cellPatch(columnKey: string, cell: Record<string, unknown>) {
@@ -167,11 +171,28 @@ export const DEFAULT_COLUMNS: ColumnSeed[] = [
     config: { source: "contact.email" },
   },
   {
+    key: SALUTATION_KEY,
+    label: "Anrede",
+    kind: "data",
+    dataType: "text",
+    position: 10,
+    width: 180,
+    pinned: false,
+    color: null,
+    hidden: false,
+    // Bewusst wie Vorname/Nachname/E-Mail konfiguriert: eine normale Daten-Spalte
+    // ohne Provider und ohne KI-Prompt — dadurch ist ihr Spaltenmenü identisch
+    // (sortieren, färben, ausblenden, manuell überschreiben) und der Prompt für
+    // die Anrede bleibt fest im Code (salutation.ts). Kein `source`, der Wert
+    // liegt also in customFields.cells["anrede"].
+    config: {},
+  },
+  {
     key: EMAIL_FINDER_KEY,
     label: "Email_Entscheider",
     kind: "enrichment",
     dataType: "email",
-    position: 10,
+    position: 11,
     width: 240,
     pinned: false,
     color: null,
