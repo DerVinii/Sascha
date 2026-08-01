@@ -50,12 +50,20 @@ export function ColumnConfigModal({ open, onClose, column, onSave }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)" }}
+      style={{
+        background: "rgba(15,23,42,0.45)",
+        // Sicherheitsabstand zu Notch und Home-Indikator (viewport-fit=cover);
+        // auf Desktop sind die Insets 0 → bleibt bei den 1rem aus p-4.
+        paddingTop: "calc(env(safe-area-inset-top) + 1rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-2xl overflow-hidden">
+      {/* max-h-full + flex-col: auf niedrigen Bildschirmen scrollt der Inhalt,
+          statt Kopf- und Fußzeile aus dem Bild zu schieben. */}
+      <div className="w-full max-w-md max-h-full flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-info" />
@@ -63,12 +71,17 @@ export function ColumnConfigModal({ open, onClose, column, onSave }: Props) {
               Run-Einstellungen — {column.label}
             </h3>
           </div>
-          <button onClick={onClose} className="text-sub hover:text-ink">
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+          <button
+            onClick={onClose}
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto">
           <div>
             <div className="text-[11px] uppercase tracking-wide text-sub mb-1.5">
               Provider (Waterfall)

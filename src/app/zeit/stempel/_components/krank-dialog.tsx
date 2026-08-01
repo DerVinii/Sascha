@@ -87,7 +87,7 @@ export function KrankDialog() {
       <button
         type="button"
         onClick={() => setOffen(true)}
-        className="w-full h-9 px-3 inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-line bg-surface text-sub hover:bg-bg hover:text-ink transition"
+        className="w-full h-11 md:h-9 px-3 inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-line bg-surface text-sub hover:bg-bg hover:text-ink transition"
       >
         <Thermometer className="h-4 w-4" />
         Krank melden
@@ -96,17 +96,26 @@ export function KrankDialog() {
       {offen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          // Der Abstand oben/unten muss die Safe-Area einschließen: auf dem
+          // iPhone liegt der Dialog sonst unter Dynamic Island bzw.
+          // Home-Indikator. Ohne Notch sind die Insets 0 → 1rem wie gehabt.
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) schliessen();
           }}
         >
-          <div className="rounded-xl border border-line bg-surface w-full max-w-sm shadow-xl">
+          <div className="rounded-xl border border-line bg-surface w-full max-w-sm shadow-xl max-h-full overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="text-sm font-semibold text-ink">Krank melden</h3>
               <button
                 type="button"
                 onClick={schliessen}
-                className="text-sub hover:text-ink"
+                // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />
@@ -119,7 +128,7 @@ export function KrankDialog() {
                 <button
                   type="button"
                   onClick={() => setOffen(false)}
-                  className="w-full h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90"
+                  className="w-full h-11 md:h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90"
                 >
                   Fertig
                 </button>
@@ -183,14 +192,14 @@ export function KrankDialog() {
                     type="button"
                     onClick={schliessen}
                     disabled={pending}
-                    className="flex-1 h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg disabled:opacity-50"
+                    className="flex-1 h-11 md:h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg disabled:opacity-50"
                   >
                     Abbrechen
                   </button>
                   <button
                     type="submit"
                     disabled={pending}
-                    className="flex-1 h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-50"
+                    className="flex-1 h-11 md:h-9 px-3 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {pending ? "Speichern …" : "Krank melden"}
                   </button>

@@ -425,171 +425,176 @@ function TrendChart({ daily }: { daily: DailyPoint[] }) {
         ))}
       </div>
 
-      {/* Plot */}
-      <div className="relative">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
-          className="w-full aspect-[720/260] select-none"
-          onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
-        >
-          <defs>
-            <linearGradient id="sentGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgb(var(--c-accent))" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="rgb(var(--c-accent))" stopOpacity="0" />
-            </linearGradient>
-          </defs>
+      {/* Plot — auf schmalen Handys waagerecht scrollbar: bei voller
+          Breite skaliert das SVG so stark herunter, dass Achsen- und
+          Datumsbeschriftungen unlesbar werden. Ab md greift die
+          Mindestbreite nicht mehr → Desktop unverändert. */}
+      <div className="overflow-x-auto scroll-sichtbar">
+        <div className="relative min-w-[560px] md:min-w-0">
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${VB_W} ${VB_H}`}
+            className="w-full aspect-[720/260] select-none"
+            onMouseMove={onMove}
+            onMouseLeave={() => setHover(null)}
+          >
+            <defs>
+              <linearGradient id="sentGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgb(var(--c-accent))" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="rgb(var(--c-accent))" stopOpacity="0" />
+              </linearGradient>
+            </defs>
 
-          {/* Y-Grid + Labels */}
-          {ticks.map((v) => {
-            const gy = y(v);
-            return (
-              <g key={v}>
-                <line
-                  x1={PAD_L}
-                  y1={gy}
-                  x2={VB_W - PAD_R}
-                  y2={gy}
-                  stroke="rgb(var(--c-line))"
-                  strokeOpacity={0.6}
-                  strokeWidth={1}
-                />
+            {/* Y-Grid + Labels */}
+            {ticks.map((v) => {
+              const gy = y(v);
+              return (
+                <g key={v}>
+                  <line
+                    x1={PAD_L}
+                    y1={gy}
+                    x2={VB_W - PAD_R}
+                    y2={gy}
+                    stroke="rgb(var(--c-line))"
+                    strokeOpacity={0.6}
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={PAD_L - 6}
+                    y={gy + 3}
+                    textAnchor="end"
+                    className="fill-sub"
+                    style={{ fontSize: 10 }}
+                  >
+                    {fmtCompact(v)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* X-Ticks */}
+            {daily.map((d, i) =>
+              i % xStep === 0 ? (
                 <text
-                  x={PAD_L - 6}
-                  y={gy + 3}
-                  textAnchor="end"
+                  key={d.date}
+                  x={x(i)}
+                  y={VB_H - 6}
+                  textAnchor="middle"
                   className="fill-sub"
                   style={{ fontSize: 10 }}
                 >
-                  {fmtCompact(v)}
+                  {fmtDayLabel(d.date)}
                 </text>
-              </g>
-            );
-          })}
+              ) : null,
+            )}
 
-          {/* X-Ticks */}
-          {daily.map((d, i) =>
-            i % xStep === 0 ? (
-              <text
-                key={d.date}
-                x={x(i)}
-                y={VB_H - 6}
-                textAnchor="middle"
-                className="fill-sub"
-                style={{ fontSize: 10 }}
-              >
-                {fmtDayLabel(d.date)}
-              </text>
-            ) : null,
-          )}
+            {hasData && (
+              <>
+                {/* Flächen (nur „Gesendet") */}
+                {activeSeries
+                  .filter((s) => s.area)
+                  .map((s) => (
+                    <path key={`area-${s.key}`} d={areaPath(s.get)} fill="url(#sentGrad)" />
+                  ))}
 
-          {hasData && (
-            <>
-              {/* Flächen (nur „Gesendet") */}
-              {activeSeries
-                .filter((s) => s.area)
-                .map((s) => (
-                  <path key={`area-${s.key}`} d={areaPath(s.get)} fill="url(#sentGrad)" />
-                ))}
+                {/* Linien */}
+                {activeSeries.map((s) =>
+                  n === 1 ? (
+                    <circle
+                      key={`pt-${s.key}`}
+                      cx={x(0)}
+                      cy={y(s.get(daily[0]))}
+                      r={3}
+                      fill={`rgb(var(${s.color}))`}
+                    />
+                  ) : (
+                    <path
+                      key={`line-${s.key}`}
+                      d={linePath(s.get)}
+                      fill="none"
+                      stroke={`rgb(var(${s.color}))`}
+                      strokeWidth={1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ),
+                )}
+              </>
+            )}
 
-              {/* Linien */}
-              {activeSeries.map((s) =>
-                n === 1 ? (
+            {/* Hover-Führungslinie + Punkte */}
+            {hoverPoint && hasData && (
+              <>
+                <line
+                  x1={x(hover!)}
+                  y1={PAD_T}
+                  x2={x(hover!)}
+                  y2={BASE_Y}
+                  stroke="rgb(var(--c-accent))"
+                  strokeOpacity={0.4}
+                  strokeWidth={1}
+                />
+                {activeSeries.map((s) => (
                   <circle
-                    key={`pt-${s.key}`}
-                    cx={x(0)}
-                    cy={y(s.get(daily[0]))}
-                    r={3}
+                    key={`hp-${s.key}`}
+                    cx={x(hover!)}
+                    cy={y(s.get(hoverPoint))}
+                    r={2.5}
                     fill={`rgb(var(${s.color}))`}
                   />
-                ) : (
-                  <path
-                    key={`line-${s.key}`}
-                    d={linePath(s.get)}
-                    fill="none"
-                    stroke={`rgb(var(${s.color}))`}
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ),
-              )}
-            </>
+                ))}
+              </>
+            )}
+          </svg>
+
+          {/* Leer-Overlay */}
+          {!hasData && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
+              <BarChart3 className="h-8 w-8 text-sub/40" />
+              <div className="text-sm text-sub">
+                Noch keine Versanddaten im gewählten Zeitraum.
+              </div>
+              <div className="text-[11px] text-sub">
+                Sobald deine erste Kampagne sendet, erscheint hier der Verlauf.
+              </div>
+            </div>
           )}
 
-          {/* Hover-Führungslinie + Punkte */}
+          {/* Tooltip */}
           {hoverPoint && hasData && (
-            <>
-              <line
-                x1={x(hover!)}
-                y1={PAD_T}
-                x2={x(hover!)}
-                y2={BASE_Y}
-                stroke="rgb(var(--c-accent))"
-                strokeOpacity={0.4}
-                strokeWidth={1}
-              />
-              {activeSeries.map((s) => (
-                <circle
-                  key={`hp-${s.key}`}
-                  cx={x(hover!)}
-                  cy={y(s.get(hoverPoint))}
-                  r={2.5}
-                  fill={`rgb(var(${s.color}))`}
-                />
-              ))}
-            </>
+            <div
+              className="absolute top-1 z-10 pointer-events-none rounded-lg border border-line bg-surface shadow-lg px-3 py-2 text-xs min-w-[9rem]"
+              style={{
+                left: `${hoverLeftPct}%`,
+                transform: flip
+                  ? "translateX(calc(-100% - 10px))"
+                  : "translateX(10px)",
+              }}
+            >
+              <div className="text-sub mb-1">{fmtDayLabel(hoverPoint.date)}</div>
+              <div className="space-y-0.5">
+                {activeSeries.map((s) => (
+                  <div
+                    key={`tt-${s.key}`}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-sub">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: `rgb(var(${s.color}))` }}
+                      />
+                      {s.label}
+                    </span>
+                    <span className="font-medium text-ink tabular-nums">
+                      {fmtInt(s.get(hoverPoint))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-        </svg>
-
-        {/* Leer-Overlay */}
-        {!hasData && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
-            <BarChart3 className="h-8 w-8 text-sub/40" />
-            <div className="text-sm text-sub">
-              Noch keine Versanddaten im gewählten Zeitraum.
-            </div>
-            <div className="text-[11px] text-sub">
-              Sobald deine erste Kampagne sendet, erscheint hier der Verlauf.
-            </div>
-          </div>
-        )}
-
-        {/* Tooltip */}
-        {hoverPoint && hasData && (
-          <div
-            className="absolute top-1 z-10 pointer-events-none rounded-lg border border-line bg-surface shadow-lg px-3 py-2 text-xs min-w-[9rem]"
-            style={{
-              left: `${hoverLeftPct}%`,
-              transform: flip
-                ? "translateX(calc(-100% - 10px))"
-                : "translateX(10px)",
-            }}
-          >
-            <div className="text-sub mb-1">{fmtDayLabel(hoverPoint.date)}</div>
-            <div className="space-y-0.5">
-              {activeSeries.map((s) => (
-                <div
-                  key={`tt-${s.key}`}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="inline-flex items-center gap-1.5 text-sub">
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: `rgb(var(${s.color}))` }}
-                    />
-                    {s.label}
-                  </span>
-                  <span className="font-medium text-ink tabular-nums">
-                    {fmtInt(s.get(hoverPoint))}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -760,10 +765,11 @@ function SortableTh({
         active ? (sort.dir === "desc" ? "descending" : "ascending") : "none"
       }
     >
+      {/* py/-my: vergrößert nur die Fingerfläche, die Kopfzeile bleibt gleich hoch. */}
       <button
         onClick={() => onSort(sortKey)}
         aria-label={`Nach ${label} sortieren`}
-        className={`inline-flex items-center gap-1 uppercase tracking-wide transition ${
+        className={`inline-flex items-center gap-1 uppercase tracking-wide transition py-2.5 -my-2.5 ${
           active ? "text-ink" : "hover:text-ink"
         }`}
       >
@@ -799,7 +805,7 @@ function RangeControl({
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`h-8 px-3 text-xs rounded-md transition ${
+          className={`h-10 md:h-8 px-3 text-xs rounded-md transition ${
             range === o.value
               ? "bg-accent text-white shadow-sm"
               : "text-sub hover:text-ink"

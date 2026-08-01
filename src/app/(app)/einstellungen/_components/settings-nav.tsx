@@ -28,7 +28,9 @@ export function SettingsNav() {
             <li key={item.href} className="shrink-0">
               <Link
                 href={item.href}
-                className={`h-9 px-3 inline-flex md:flex items-center gap-2 rounded-md text-sm whitespace-nowrap transition ${
+                // h-10 auf Touch (die Reiter liegen dort in einer schmalen
+                // Scroll-Zeile), ab md wieder 36px wie bisher.
+                className={`h-10 md:h-9 px-3 inline-flex md:flex items-center gap-2 rounded-md text-sm whitespace-nowrap transition ${
                   active
                     ? "bg-surface border border-line text-ink font-medium"
                     : "text-sub hover:text-ink hover:bg-surface"

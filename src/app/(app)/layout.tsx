@@ -58,7 +58,16 @@ export default async function AppLayout({
             <MobileNav orgName={org.name} pipelines={sidebarPipelines} />
           }
         />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        {/* paddingBottom mit safe-area-inset-bottom: der scrollende Bereich
+            reicht bei viewport-fit=cover bis an die Geräteunterkante — ohne
+            Inset läge der letzte Inhalt einer langen Seite unter dem
+            Home-Indikator. Auf Desktop ist der Inset 0 → unverändert. */}
+        <main
+          className="flex-1 overflow-y-auto"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

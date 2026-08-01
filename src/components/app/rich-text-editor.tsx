@@ -394,7 +394,9 @@ export function RichTextEditor({
             e.target.value = "";
           }}
           title="Schriftart"
-          className="h-7 rounded border border-line bg-surface px-1 text-xs text-ink focus:outline-none"
+          // h-9 auf Touch: Handys erzwingen 16px Schrift in Formularfeldern
+          // (globals.css) — in 28px hohen Feldern wird das eng. Ab md wie bisher.
+          className="h-9 md:h-7 rounded border border-line bg-surface px-1 text-xs text-ink focus:outline-none"
         >
           <option value="">Schriftart</option>
           {FONTS.map((f) => (
@@ -411,7 +413,7 @@ export function RichTextEditor({
             e.target.value = "";
           }}
           title="Schriftgröße"
-          className="h-7 rounded border border-line bg-surface px-1 text-xs text-ink focus:outline-none"
+          className="h-9 md:h-7 rounded border border-line bg-surface px-1 text-xs text-ink focus:outline-none"
         >
           <option value="">Größe</option>
           {SIZES.map((s) => (
@@ -506,19 +508,21 @@ export function RichTextEditor({
               if (e.key === "Escape") setLinkOpen(false);
             }}
             placeholder="https://…"
-            className="h-7 flex-1 min-w-0 rounded border border-line bg-surface px-2 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent/40"
+            // Zeile auf Touch durchgehend 36px hoch (Trefferfläche + 16px
+            // Pflichtschriftgröße auf dem Handy), ab md wieder 28px.
+            className="h-9 md:h-7 flex-1 min-w-0 rounded border border-line bg-surface px-2 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent/40"
           />
           <button
             type="button"
             onClick={applyLink}
-            className="h-7 px-2.5 rounded bg-accent text-white text-xs font-medium hover:bg-accent-hover transition"
+            className="h-9 md:h-7 px-2.5 rounded bg-accent text-white text-xs font-medium hover:bg-accent-hover transition"
           >
             Einfügen
           </button>
           <button
             type="button"
             onClick={() => setLinkOpen(false)}
-            className="h-7 w-7 inline-flex items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition"
+            className="h-9 w-9 md:h-7 md:w-7 inline-flex items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition"
             aria-label="Abbrechen"
           >
             <X className="h-3.5 w-3.5" />
@@ -707,9 +711,10 @@ function ToolButton({
       // Fokus im Editor lassen — sonst geht die Auswahl beim Klick verloren.
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="h-7 w-7 inline-flex items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition"
+      // Auf Touch 36px Trefferfläche, ab md wieder die kompakten 28px.
+      className="h-9 w-9 md:h-7 md:w-7 inline-flex items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition"
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4 md:h-3.5 md:w-3.5" />
     </button>
   );
 }
@@ -729,9 +734,9 @@ function ColorButton({
   return (
     <label
       title={label}
-      className="relative h-7 w-7 inline-flex flex-col items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition cursor-pointer"
+      className="relative h-9 w-9 md:h-7 md:w-7 inline-flex flex-col items-center justify-center rounded text-sub hover:text-ink hover:bg-bg transition cursor-pointer"
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4 md:h-3.5 md:w-3.5" />
       <span
         aria-hidden
         className="mt-0.5 h-[3px] w-4 rounded-sm"

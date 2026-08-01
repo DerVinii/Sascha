@@ -182,7 +182,7 @@ export function Einrichtung({
         <button
           type="button"
           onClick={() => void koppeln()}
-          className="mt-3 h-9 w-full rounded-md border border-line bg-surface text-sm font-medium text-ink hover:bg-bg"
+          className="mt-3 h-11 md:h-9 w-full rounded-md border border-line bg-surface text-sm font-medium text-ink hover:bg-bg"
         >
           Hier im Browser anmelden
         </button>

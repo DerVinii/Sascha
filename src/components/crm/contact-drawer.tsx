@@ -168,8 +168,12 @@ function ContactDrawer({
           "fixed z-50 bg-surface shadow-2xl flex flex-col transition-transform duration-300 ease-out",
           // Mobile: Bottom-Sheet
           "inset-x-0 bottom-0 max-h-[90dvh] rounded-t-2xl",
-          // Desktop: rechtes Einschiebefenster
+          // Desktop: rechtes Einschiebefenster. Reicht dort bis an die
+          // Bildschirmoberkante → safe-area-Inset oben, damit der Kopf nicht
+          // unter der Statusleiste liegt (auf Desktop 0). Beim Bottom-Sheet
+          // wäre der Inset oben nur toter Raum, deshalb nur ab sm.
           "sm:inset-y-0 sm:left-auto sm:right-0 sm:bottom-auto sm:h-dvh sm:w-[480px] sm:max-h-none sm:rounded-t-none",
+          "sm:[padding-top:env(safe-area-inset-top)]",
           shown
             ? "translate-y-0 sm:translate-x-0"
             : "translate-y-full sm:translate-y-0 sm:translate-x-full",
@@ -190,14 +194,19 @@ function ContactDrawer({
           <button
             onClick={close}
             aria-label="Schließen"
-            className="h-9 w-9 -mr-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+            // Auf Touch größere Trefferfläche (40px), ab sm wie bisher.
+            className="h-10 w-10 sm:h-9 sm:w-9 -mr-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Inhalt */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        {/* Inhalt — der Inset unten hält die letzte Zeile über dem
+            Home-Indikator (Panel klebt an der Geräteunterkante). */}
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           {isLoading && !detail ? (
             <div className="p-10 text-center text-sm text-sub">
               <Loader2 className="h-5 w-5 mx-auto mb-2 animate-spin" />

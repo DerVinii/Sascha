@@ -155,7 +155,7 @@ function Column({ stage, deals }: { stage: BoardStage; deals: BoardDeal[] }) {
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-[55vh] p-2 space-y-2 bg-bg/60 rounded-b-lg border border-t-0 border-line ${
+        className={`flex-1 min-h-[55dvh] p-2 space-y-2 bg-bg/60 rounded-b-lg border border-t-0 border-line ${
           isOver ? "bg-accent/10 ring-1 ring-inset ring-accent/40" : ""
         }`}
       >
@@ -195,7 +195,9 @@ function Card({
       } ${dragging ? "shadow-lg rotate-2" : "hover:border-sub"}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium text-ink truncate">
+        {/* min-w-0: ohne das schrumpft der Titel als Flex-Kind nicht und
+            schiebt den Betrag aus der Karte. */}
+        <span className="text-sm font-medium text-ink truncate min-w-0">
           {deal.title}
         </span>
         {deal.valueEur != null && (

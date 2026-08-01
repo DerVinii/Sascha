@@ -126,7 +126,9 @@ export function SidebarContent({
                   href={`/pipelines/${p.id}`}
                   onClick={onNavigate}
                   className={cn(
-                    "block px-3 py-1.5 rounded-md text-[13px] truncate transition",
+                    // py-2.5 auf Touch (Drawer), ab md wieder kompakt wie
+                    // bisher — Unterpunkte waren sonst nur ~26px hoch.
+                    "block px-3 py-2.5 md:py-1.5 rounded-md text-[13px] truncate transition",
                     active
                       ? "text-white font-medium"
                       : "text-slate-400 hover:text-white",
@@ -162,7 +164,8 @@ export function SidebarContent({
               href={s.href}
               onClick={onNavigate}
               className={cn(
-                "block px-3 py-1.5 rounded-md text-[13px] truncate transition",
+                // siehe Pipelines-Unterpunkte: auf Touch höher, ab md wie bisher.
+                "block px-3 py-2.5 md:py-1.5 rounded-md text-[13px] truncate transition",
                 pathname === s.href
                   ? "text-white font-medium"
                   : "text-slate-400 hover:text-white",

@@ -172,17 +172,28 @@ export function EventDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.55)" }}
+      // Der Abstand oben/unten muss die Safe-Area einschließen: auf dem iPhone
+      // läge der Dialog sonst unter Dynamic Island bzw. Home-Indikator. Ohne
+      // Notch sind die Insets 0 → 1rem wie gehabt.
+      style={{
+        background: "rgba(15,23,42,0.55)",
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+      {/* max-h-full statt 90vh: iOS rechnet vh ohne Safe-Area, der Dialog wäre
+          sonst höher als der sichtbare Bereich. Ab md bleibt es bei 90vh. */}
+      <div className="bg-surface rounded-xl w-full max-w-lg shadow-xl max-h-full md:max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line sticky top-0 bg-surface z-10">
           <h3 className="text-sm font-semibold text-ink">{heading}</h3>
           <button
             onClick={onClose}
-            className="text-sub hover:text-ink"
+            // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch an
+            // derselben Stelle, die Tippfläche wächst auf 40 × 40.
+            className="-m-3 h-10 w-10 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
             aria-label="Schließen"
           >
             <X className="h-4 w-4" />

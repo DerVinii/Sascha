@@ -57,7 +57,7 @@ export function GeraetAbmelden() {
           setFehler(null);
           setOffen(true);
         }}
-        className="h-9 px-3 inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-line bg-surface text-sub hover:bg-bg hover:text-ink transition"
+        className="h-11 md:h-9 px-3 inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium border border-line bg-surface text-sub hover:bg-bg hover:text-ink transition"
       >
         <LogOut className="h-4 w-4" />
         Gerät abmelden
@@ -66,11 +66,17 @@ export function GeraetAbmelden() {
       {offen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          // Abstand oben/unten inklusive Safe-Area, sonst liegt der Dialog auf
+          // dem iPhone unter Dynamic Island bzw. Home-Indikator.
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) schliessen();
           }}
         >
-          <div className="rounded-xl border border-line bg-surface w-full max-w-sm shadow-xl">
+          <div className="rounded-xl border border-line bg-surface w-full max-w-sm shadow-xl max-h-full overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="text-sm font-semibold text-ink">
                 Dieses Gerät abmelden?
@@ -78,7 +84,9 @@ export function GeraetAbmelden() {
               <button
                 type="button"
                 onClick={schliessen}
-                className="text-sub hover:text-ink"
+                // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />
@@ -99,7 +107,7 @@ export function GeraetAbmelden() {
                   type="button"
                   onClick={schliessen}
                   disabled={pending}
-                  className="flex-1 h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg disabled:opacity-50"
+                  className="flex-1 h-11 md:h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface text-ink hover:bg-bg disabled:opacity-50"
                 >
                   Abbrechen
                 </button>
@@ -107,7 +115,7 @@ export function GeraetAbmelden() {
                   type="button"
                   onClick={abmelden}
                   disabled={pending}
-                  className="flex-1 h-9 px-3 rounded-md text-sm font-medium bg-err text-white hover:opacity-90 disabled:opacity-50"
+                  className="flex-1 h-11 md:h-9 px-3 rounded-md text-sm font-medium bg-err text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {pending ? "Wird abgemeldet …" : "Abmelden"}
                 </button>

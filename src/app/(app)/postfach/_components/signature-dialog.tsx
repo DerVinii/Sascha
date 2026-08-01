@@ -173,14 +173,16 @@ export function SignatureDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-      <div className="w-full sm:max-w-3xl bg-surface sm:rounded-xl border border-line shadow-xl flex flex-col max-h-[94dvh]">
+      {/* Auf dem Handy hängt das Blatt unten (items-end): bei 94dvh läge die
+          Kopfzeile hinter Uhrzeit/Dynamic Island — deshalb dort niedriger. */}
+      <div className="w-full sm:max-w-3xl bg-surface sm:rounded-xl border border-line shadow-xl flex flex-col max-h-[88dvh] sm:max-h-[94dvh]">
         <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
           <h2 className="text-sm font-semibold text-ink">
             Signaturen und Briefpapier
           </h2>
           <button
             onClick={close}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+            className="h-10 w-10 -mr-1 md:h-8 md:w-8 md:mr-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
             aria-label="Schließen"
           >
             <X className="h-4 w-4" />
@@ -225,7 +227,7 @@ export function SignatureDialog({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setNewName("")}
-                    className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
+                    className="h-10 px-3 md:h-8 md:px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Neu
@@ -233,7 +235,7 @@ export function SignatureDialog({
                   <button
                     onClick={() => selectedId && remove(selectedId)}
                     disabled={!selectedId}
-                    className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-err hover:border-err/40 transition disabled:opacity-50"
+                    className="h-10 px-3 md:h-8 md:px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-err hover:border-err/40 transition disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     Löschen
@@ -253,17 +255,17 @@ export function SignatureDialog({
                       if (e.key === "Escape") setNewName(null);
                     }}
                     placeholder="Name, z. B. Sascha Kühn"
-                    className="h-8 flex-1 min-w-0 rounded-md border border-line bg-bg px-2 text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    className="h-10 md:h-8 flex-1 min-w-0 rounded-md border border-line bg-bg px-2 text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
                   />
                   <button
                     onClick={create}
-                    className="h-8 px-2.5 rounded-md bg-accent text-white text-xs font-medium hover:bg-accent-hover transition"
+                    className="h-10 px-3 md:h-8 md:px-2.5 shrink-0 rounded-md bg-accent text-white text-xs font-medium hover:bg-accent-hover transition"
                   >
                     Anlegen
                   </button>
                   <button
                     onClick={() => setNewName(null)}
-                    className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+                    className="h-10 w-10 md:h-8 md:w-8 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
                     aria-label="Abbrechen"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -289,7 +291,7 @@ export function SignatureDialog({
                       setDirty(true);
                     }}
                     placeholder="Name der Signatur"
-                    className="h-7 w-48 rounded-md border border-line bg-bg px-2 text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    className="h-10 w-full md:h-7 md:w-48 min-w-0 rounded-md border border-line bg-bg px-2 text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-1 focus:ring-accent/40"
                   />
                 </>
               )}

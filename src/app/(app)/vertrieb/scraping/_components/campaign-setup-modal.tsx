@@ -337,12 +337,20 @@ export function CampaignSetupModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)" }}
+      style={{
+        background: "rgba(15,23,42,0.45)",
+        // Sicherheitsabstand zu Notch und Home-Indikator (viewport-fit=cover);
+        // auf Desktop sind die Insets 0 → bleibt bei den 1rem aus p-4.
+        paddingTop: "calc(env(safe-area-inset-top) + 1rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
-      <div className="w-full max-w-2xl max-h-[90dvh] flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
+      {/* max-h-full auf dem Handy: 90dvh wären mittig zentriert höher als der
+          Platz zwischen Notch und Home-Indikator. Ab md bleibt es bei 90dvh. */}
+      <div className="w-full max-w-2xl max-h-full md:max-h-[90dvh] flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div>
             <h3 className="text-sm font-semibold text-ink inline-flex items-center gap-2">
@@ -354,10 +362,12 @@ export function CampaignSetupModal({
               {step === 1 ? "Leads auswählen" : "Copy schreiben"}
             </p>
           </div>
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
           <button
             onClick={onClose}
             disabled={busy}
-            className="text-sub hover:text-ink disabled:opacity-40"
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>
@@ -467,16 +477,18 @@ export function CampaignSetupModal({
                                   delayDays: Number(e.target.value),
                                 })
                               }
-                              className="h-6 w-14 px-1.5 rounded border border-line bg-surface text-ink text-xs focus:outline-none"
+                              className="h-9 md:h-6 w-14 px-1.5 rounded border border-line bg-surface text-ink text-xs focus:outline-none"
                             />
                             Tage
                           </label>
                         )}
                         {steps.length > 1 && (
+                          // p-3/-m-3: 40px Fingerfläche, ohne das Layout zu ändern.
                           <button
                             onClick={() => removeStep(i)}
-                            className="text-sub hover:text-err"
+                            className="shrink-0 p-3 -m-3 text-sub hover:text-err"
                             title="Schritt entfernen"
+                            aria-label="Schritt entfernen"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -514,7 +526,7 @@ export function CampaignSetupModal({
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={addFollowup}
-                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+                    className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Follow-up hinzufügen
@@ -523,7 +535,7 @@ export function CampaignSetupModal({
                     ref={varBtnRef}
                     type="button"
                     onClick={openVarMenu}
-                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+                    className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
                   >
                     <Braces className="h-3.5 w-3.5 text-info" />
                     Variable einfügen
@@ -543,7 +555,7 @@ export function CampaignSetupModal({
                       type="button"
                       onClick={() => setLive(true)}
                       className={cn(
-                        "h-7 px-3.5 rounded-full text-xs font-semibold transition inline-flex items-center gap-1.5",
+                        "h-9 md:h-7 px-3.5 rounded-full text-xs font-semibold transition inline-flex items-center gap-1.5",
                         live ? "bg-ok text-white shadow" : "text-sub hover:text-ink",
                       )}
                     >
@@ -559,7 +571,7 @@ export function CampaignSetupModal({
                       type="button"
                       onClick={() => setLive(false)}
                       className={cn(
-                        "h-7 px-3.5 rounded-full text-xs font-semibold transition",
+                        "h-9 md:h-7 px-3.5 rounded-full text-xs font-semibold transition",
                         !live
                           ? "bg-sidebar text-white shadow"
                           : "text-sub hover:text-ink",
@@ -701,7 +713,7 @@ export function CampaignSetupModal({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insertVariable(v.token)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 md:py-1.5 text-left text-sm text-ink hover:bg-bg"
                 >
                   <span className="truncate">{v.label}</span>
                   <code className="text-[10px] text-sub shrink-0">{`{{${v.token}}}`}</code>

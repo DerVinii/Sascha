@@ -47,13 +47,26 @@ export function CellDetailsDrawer({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="h-full w-full max-w-sm bg-surface shadow-2xl flex flex-col">
+      {/* Vollbild-Panel auf dem Handy: Kopfzeile muss an Notch und Home-Indikator
+          vorbei (viewport-fit=cover). Desktop-Insets = 0. */}
+      <div
+        className="h-full w-full max-w-sm bg-surface shadow-2xl flex flex-col"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-info" />
             <h3 className="text-sm font-semibold text-ink">Zell-Details</h3>
           </div>
-          <button onClick={onClose} className="text-sub hover:text-ink">
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+          <button
+            onClick={onClose}
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -110,7 +123,7 @@ export function CellDetailsDrawer({
                             ? "Bereits als Spalte vorhanden"
                             : "Als eigene Spalte hinzufügen"
                         }
-                        className="shrink-0 inline-flex items-center gap-1 h-7 px-2 rounded-md border border-line text-xs text-ink hover:bg-bg transition disabled:opacity-40"
+                        className="shrink-0 inline-flex items-center gap-1 h-9 md:h-7 px-2 rounded-md border border-line text-xs text-ink hover:bg-bg transition disabled:opacity-40"
                       >
                         <Plus className="h-3 w-3" />
                         Spalte

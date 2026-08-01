@@ -157,11 +157,18 @@ export function MitarbeiterListe({
       {bestaetigen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          // Abstand oben/unten inklusive Safe-Area, sonst liegt der Dialog auf
+          // dem iPhone unter Dynamic Island bzw. Home-Indikator. Ohne Notch
+          // sind die Insets 0 — dort bleibt es bei den 1rem aus `p-4`.
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget && !pending) setBestaetigen(null);
           }}
         >
-          <div className="rounded-xl border border-line bg-surface w-full max-w-md shadow-xl">
+          <div className="rounded-xl border border-line bg-surface w-full max-w-md shadow-xl max-h-full overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h2 className="text-sm font-semibold text-ink">
                 Mitarbeiter deaktivieren?

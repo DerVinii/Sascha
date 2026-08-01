@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { readableTextColor } from "@/lib/pipeline-templates";
+import { menuPosition } from "@/lib/dropdown-position";
 import {
   isPipelineStageColumn,
   type LeadCell as Cell,
@@ -202,11 +203,14 @@ export function LeadCellView({
     return (
       <div className="group/cell flex w-full items-center gap-1.5">
         {onOpenDetails ? (
+          // p-2/-m-2: der 6px-Punkt bekommt eine 22px-Fingerfläche, ohne die
+          // Zeile zu verändern (negativer Rand hebt das Polster auf).
           <button
             type="button"
             onClick={onOpenDetails}
             title="Enrichment-Details ansehen"
-            className="shrink-0 -m-1 p-1"
+            aria-label="Enrichment-Details ansehen"
+            className="shrink-0 -m-2 p-2"
           >
             <span className="block h-1.5 w-1.5 rounded-full bg-ok" />
           </button>
@@ -252,6 +256,7 @@ function StageDropdown({
     top: number;
     left: number;
     minWidth: number;
+    maxHeight: number;
   } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const stages = column.config.pipeline?.stages ?? [];
@@ -264,10 +269,22 @@ function StageDropdown({
 
   // Menü relativ zum Button per fixed-Position rendern (Portal), sonst würde es
   // vom overflow-hidden der Zelle / overflow-auto der Tabelle abgeschnitten.
+  // menuPosition hält es vollständig im Bild — auf dem Handy stand es sonst
+  // rechts neben dem Rand (breite Tabelle) oder unten außerhalb.
   const place = () => {
     const r = btnRef.current?.getBoundingClientRect();
-    if (r)
-      setPos({ top: r.bottom + 4, left: r.left, minWidth: Math.max(r.width, 184) });
+    if (!r) return;
+    const m = menuPosition(r, {
+      width: Math.max(r.width, 184),
+      maxHeight: 256,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    setPos({
+      top: m.top,
+      left: m.left,
+      minWidth: m.width,
+      maxHeight: m.maxHeight,
+    });
   };
 
   useEffect(() => {
@@ -294,7 +311,8 @@ function StageDropdown({
           setOpen((v) => !v);
         }}
         className={cn(
-          "inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 text-xs font-medium disabled:cursor-default",
+          // py-1.5 auf Touch: die Pille bleibt sonst eine 20px hohe Trefferfläche.
+          "inline-flex max-w-full items-center gap-1 rounded-full py-1.5 md:py-0.5 pl-2 pr-1.5 text-xs font-medium disabled:cursor-default",
           !hasValue && "text-slate-500",
         )}
         style={{
@@ -319,8 +337,14 @@ function StageDropdown({
               onClick={() => setOpen(false)}
             />
             <div
-              className="fixed z-[61] max-h-64 overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1"
-              style={{ top: pos.top, left: pos.left, minWidth: pos.minWidth }}
+              className="fixed z-[61] overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                minWidth: pos.minWidth,
+                maxWidth: "calc(100vw - 1rem)",
+                maxHeight: pos.maxHeight,
+              }}
             >
               {stages.length === 0 ? (
                 <div className="px-3 py-1.5 text-xs text-sub">Keine Phasen.</div>
@@ -334,7 +358,7 @@ function StageDropdown({
                         setOpen(false);
                         if (!active) onSelect?.(s.id);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-bg transition"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 md:py-1.5 text-left text-sm text-ink hover:bg-bg transition"
                     >
                       <span
                         className="h-3 w-3 shrink-0 rounded-full ring-1 ring-line"
@@ -362,7 +386,7 @@ function RunDot({ onClick, title }: { onClick: () => void; title: string }) {
         onClick();
       }}
       title={title}
-      className="opacity-100 md:opacity-0 md:group-hover/cell:opacity-100 focus-visible:opacity-100 transition shrink-0 inline-flex h-5 w-5 items-center justify-center rounded bg-brand text-white hover:bg-sidebar-soft"
+      className="opacity-100 md:opacity-0 md:group-hover/cell:opacity-100 focus-visible:opacity-100 transition shrink-0 inline-flex h-7 w-7 md:h-5 md:w-5 items-center justify-center rounded bg-brand text-white hover:bg-sidebar-soft"
     >
       <Play className="h-3 w-3" />
     </button>

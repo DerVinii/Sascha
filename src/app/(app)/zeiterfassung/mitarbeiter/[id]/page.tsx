@@ -210,8 +210,9 @@ export default async function MitarbeiterDetailSeite({
   }));
 
   const hatAktiveGeraete = geraete.some((g) => !g.revoked);
+  // Auf dem Handy 40 × 40 (Tippfläche), ab md wieder die schlanken 32 × 32.
   const navKlasse =
-    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg";
+    "inline-flex h-10 w-10 md:h-8 md:w-8 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg";
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl">

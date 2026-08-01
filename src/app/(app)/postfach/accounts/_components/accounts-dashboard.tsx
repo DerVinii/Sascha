@@ -150,7 +150,9 @@ export function AccountsDashboard({
             Aktualisieren
           </button>
         </div>
-        <div className="overflow-x-auto">
+        {/* scroll-sichtbar: Die Tabelle hat neun Spalten — auf dem Handy ist
+            der waagerechte Regler der einzige Hinweis auf den Rest. */}
+        <div className="overflow-x-auto scroll-sichtbar">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-sub border-b border-line bg-bg/50">

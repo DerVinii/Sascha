@@ -130,15 +130,26 @@ export function CsvImportModal({
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(15,23,42,0.55)" }}
+          style={{
+            background: "rgba(15,23,42,0.55)",
+            // Sicherheitsabstand zu Notch und Home-Indikator (viewport-fit=cover);
+            // auf Desktop sind die Insets 0 → bleibt bei den 1rem aus p-4.
+            paddingTop: "calc(env(safe-area-inset-top) + 1rem)",
+            paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) close();
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-2xl shadow-xl max-h-[90dvh] overflow-hidden flex flex-col">
+          <div className="bg-surface rounded-xl w-full max-w-2xl shadow-xl max-h-[85dvh] md:max-h-[90dvh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <h3 className="text-sm font-semibold">Leads aus CSV importieren</h3>
-              <button onClick={close} className="text-sub hover:text-ink">
+              {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+              <button
+                onClick={close}
+                aria-label="Schließen"
+                className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -265,7 +276,7 @@ export function CsvImportModal({
               )}
             </div>
 
-            <div className="flex justify-end gap-2 px-5 py-3 border-t border-line">
+            <div className="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-line">
               <button
                 onClick={close}
                 className="h-9 px-4 text-sm text-sub hover:text-ink"

@@ -21,7 +21,12 @@ export function BulkRunBar({
 }: Props) {
   if (count === 0) return null;
   return (
-    <div className="fixed bottom-6 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 flex justify-center">
+    // bottom per safe-area: auf dem Handy säße die Leiste sonst halb hinter dem
+    // Home-Indikator. Auf Desktop ist der Inset 0 → weiterhin 1.5rem.
+    <div
+      className="fixed inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 flex justify-center"
+      style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+    >
       <div className="flex items-center gap-2 sm:gap-3 max-w-full rounded-full bg-sidebar text-white shadow-2xl pl-4 pr-2 py-2">
         <span className="text-sm font-medium whitespace-nowrap">
           <span className="sm:hidden">{count} ausgewählt</span>

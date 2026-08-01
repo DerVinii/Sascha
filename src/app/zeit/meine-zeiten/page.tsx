@@ -153,8 +153,12 @@ export default async function MeineZeitenPage({
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-3">
         {/* Die einzige <h1> der Seite steht im Layout ("Zeiterfassung"). */}
-        <h2 className="text-base font-semibold text-ink">Meine Zeiten</h2>
-        <span className="text-xs text-sub truncate">
+        <h2 className="text-base font-semibold text-ink shrink-0">
+          Meine Zeiten
+        </h2>
+        {/* min-w-0: ohne das greift truncate im Flex-Kind nicht und ein langer
+            Name schiebt die Zeile über den Bildschirmrand hinaus. */}
+        <span className="min-w-0 text-xs text-sub truncate">
           {session.employee.name}
         </span>
       </div>
@@ -180,7 +184,7 @@ export default async function MeineZeitenPage({
         <Link
           href={`/zeit/meine-zeiten?monat=${vorherigerMonat}`}
           aria-label="Vorheriger Monat"
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg"
+          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg"
         >
           <ChevronLeft className="h-4 w-4" />
         </Link>
@@ -191,14 +195,14 @@ export default async function MeineZeitenPage({
           <Link
             href={`/zeit/meine-zeiten?monat=${naechsterMonat}`}
             aria-label="Nächster Monat"
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg"
+            className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md border border-line bg-surface text-ink hover:bg-bg"
           >
             <ChevronRight className="h-4 w-4" />
           </Link>
         ) : (
           <span
             aria-hidden
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface text-sub opacity-40"
+            className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md border border-line bg-surface text-sub opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
           </span>

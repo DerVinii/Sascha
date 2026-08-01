@@ -65,20 +65,33 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)" }}
+      style={{
+        background: "rgba(15,23,42,0.45)",
+        // Sicherheitsabstand zu Notch und Home-Indikator (viewport-fit=cover);
+        // auf Desktop sind die Insets 0 → bleibt bei den 1rem aus p-4.
+        paddingTop: "calc(env(safe-area-inset-top) + 1rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-2xl overflow-hidden">
+      {/* max-h-full + flex-col: auf dem Handy scrollt das Formular, die Knöpfe
+          unten bleiben erreichbar. */}
+      <div className="w-full max-w-md max-h-full flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <h3 className="text-sm font-semibold text-ink">Lead manuell hinzufügen</h3>
-          <button onClick={onClose} className="text-sub hover:text-ink">
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+          <button
+            onClick={onClose}
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="p-5 space-y-3 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-medium text-sub">Vorname</span>

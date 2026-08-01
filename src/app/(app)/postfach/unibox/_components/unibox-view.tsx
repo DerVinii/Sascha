@@ -377,7 +377,7 @@ export function UniboxView({
               <div className="px-3 sm:px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                 <button
                   onClick={() => setSelectedKey(null)}
-                  className="sm:hidden h-9 w-9 -ml-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+                  className="sm:hidden h-10 w-10 -ml-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
                   aria-label="Zurück zur Liste"
                 >
                   <ChevronLeft className="h-5 w-5" />
@@ -612,7 +612,9 @@ function MessageBody({
   </style></head><body>${html}</body></html>`;
 
   return (
-    <div>
+    // overflow-x-auto: HTML-Mails mit fester Breite scrollen im Kasten, statt
+    // die Blase über den Bildschirmrand hinaus zu schieben.
+    <div className="overflow-x-auto scroll-sichtbar">
       {hasRemote && !remoteContent && (
         <button
           type="button"

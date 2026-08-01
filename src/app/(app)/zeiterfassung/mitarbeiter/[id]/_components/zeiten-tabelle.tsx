@@ -58,6 +58,16 @@ function zeitOderStrich(iso: string | null): string {
  */
 const LANGE_LAUFZEIT_MINUTEN = 16 * 60;
 
+/**
+ * Randabstand der Vollbild-Overlays inklusive Safe-Area: auf dem iPhone liegt
+ * der Dialog sonst unter Dynamic Island bzw. Home-Indikator. Ohne Notch sind
+ * die Insets 0 — dort bleibt es bei den 1rem aus `p-4`.
+ */
+const OVERLAY_ABSTAND = {
+  paddingTop: "max(1rem, env(safe-area-inset-top))",
+  paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+};
+
 export function ZeitenTabelle({
   eintraege,
   jetzt,
@@ -309,13 +319,14 @@ export function ZeitenTabelle({
       {bearbeiten && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(ev) => {
             if (ev.target === ev.currentTarget && !pending) setBearbeiten(null);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-sm font-semibold text-ink">Zeit korrigieren</h2>
               <button
@@ -323,7 +334,9 @@ export function ZeitenTabelle({
                 onClick={() => setBearbeiten(null)}
                 disabled={pending}
                 aria-label="Schließen"
-                className="text-sub hover:text-ink disabled:opacity-50"
+                // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -415,13 +428,14 @@ export function ZeitenTabelle({
       {verlauf && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(ev) => {
             if (ev.target === ev.currentTarget) setVerlauf(null);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-[90vh] overflow-y-auto">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-ink">
@@ -434,7 +448,9 @@ export function ZeitenTabelle({
                 onClick={() => setVerlauf(null)}
                 disabled={pending}
                 aria-label="Schließen"
-                className="text-sub hover:text-ink disabled:opacity-50"
+                // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -481,13 +497,14 @@ export function ZeitenTabelle({
       {loeschen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(ev) => {
             if (ev.target === ev.currentTarget && !pending) setLoeschen(null);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <h2 className="text-sm font-semibold text-ink">Eintrag löschen?</h2>
             <p className="text-sm text-ink">
               {formatDate(loeschen.clockIn)} ·{" "}

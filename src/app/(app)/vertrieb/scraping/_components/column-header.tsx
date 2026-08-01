@@ -182,7 +182,7 @@ export function ColumnHeader({
         <>
           <div className="fixed inset-0 z-[60]" onClick={close} />
           <div
-            className="fixed z-[61] w-52 max-h-[70vh] overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1 text-sm"
+            className="fixed z-[61] w-52 max-h-[70dvh] overflow-auto rounded-lg border border-line bg-surface shadow-xl py-1 text-sm"
             style={{ top: pos.top, left: pos.left }}
           >
             <MenuItem
@@ -327,7 +327,8 @@ function MenuItem({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg transition",
+        // py-2.5 auf Touch: ~40px hohe Einträge, ab md wieder kompakt.
+        "flex w-full items-center gap-2 px-3 py-2.5 md:py-1.5 text-left hover:bg-bg transition",
         danger ? "text-err" : "text-ink",
       )}
     >

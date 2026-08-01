@@ -579,14 +579,14 @@ function ContactsTableInner({
                   <div className="mt-3 flex items-center justify-between">
                     <button
                       onClick={addFilter}
-                      className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+                      className="h-10 md:h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
                     >
                       <Plus className="h-4 w-4" />
                       Filter hinzufügen
                     </button>
                     <button
                       onClick={() => setFilterOpen(false)}
-                      className={`h-8 px-3 inline-flex items-center rounded-md text-sm font-medium transition ${BLUE}`}
+                      className={`h-10 md:h-8 px-3 inline-flex items-center rounded-md text-sm font-medium transition ${BLUE}`}
                     >
                       Fertig
                     </button>
@@ -690,7 +690,7 @@ function ContactsTableInner({
                     <div className="flex rounded-md border border-line overflow-hidden mb-2 text-sm">
                       <button
                         onClick={() => setTagMode("add")}
-                        className={`flex-1 h-8 ${
+                        className={`flex-1 h-10 md:h-8 ${
                           tagMode === "add"
                             ? "bg-accent text-white"
                             : "bg-surface text-sub hover:bg-bg"
@@ -700,7 +700,7 @@ function ContactsTableInner({
                       </button>
                       <button
                         onClick={() => setTagMode("remove")}
-                        className={`flex-1 h-8 border-l border-line ${
+                        className={`flex-1 h-10 md:h-8 border-l border-line ${
                           tagMode === "remove"
                             ? "bg-accent text-white"
                             : "bg-surface text-sub hover:bg-bg"
@@ -740,7 +740,7 @@ function ContactsTableInner({
                     <button
                       onClick={applyTags}
                       disabled={pending || tagPick.size === 0}
-                      className={`mt-2 w-full h-8 inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium transition ${BLUE} disabled:opacity-50`}
+                      className={`mt-2 w-full h-10 md:h-8 inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium transition ${BLUE} disabled:opacity-50`}
                     >
                       <Check className="h-4 w-4" />
                       {tagMode === "add" ? "Hinzufügen" : "Entfernen"}
@@ -910,7 +910,7 @@ function ContactsTableInner({
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span>
               Zeige {filtered.length === 0 ? 0 : start + 1}–
               {Math.min(start + perPage, filtered.length)} von {filtered.length}{" "}
@@ -1043,7 +1043,7 @@ function ConditionRow({
       <button
         onClick={onRemove}
         aria-label="Bedingung entfernen"
-        className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-err transition"
+        className="h-10 w-10 md:h-8 md:w-8 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-err transition"
       >
         <X className="h-4 w-4" />
       </button>

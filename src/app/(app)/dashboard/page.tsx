@@ -216,7 +216,7 @@ export default async function DashboardPage() {
             </div>
             <Link
               href="/crm"
-              className="text-xs text-sub hover:text-ink inline-flex items-center gap-1"
+              className="text-xs text-sub hover:text-ink inline-flex items-center gap-1 shrink-0 p-2 -m-2"
             >
               Alle <ArrowRight className="h-3 w-3" />
             </Link>
@@ -233,7 +233,11 @@ export default async function DashboardPage() {
                   "(ohne Namen)";
                 return (
                   <li key={c.id} className="px-5 py-3 flex items-center gap-3">
-                    <StatusPill status={c.status} />
+                    {/* shrink-0: sonst quetscht der Name auf dem Handy die
+                        Status-Pille zusammen und ihr Text bricht um. */}
+                    <span className="shrink-0">
+                      <StatusPill status={c.status} />
+                    </span>
                     <div className="flex-1 min-w-0">
                       <Link
                         href={`/crm/${c.id}`}
@@ -279,7 +283,7 @@ export default async function DashboardPage() {
                 return (
                   <li key={t.id} className="px-5 py-3 flex items-center gap-3">
                     <span
-                      className={`h-2 w-2 rounded-full ${
+                      className={`h-2 w-2 shrink-0 rounded-full ${
                         overdue ? "bg-err" : "bg-warn"
                       }`}
                     />

@@ -102,13 +102,15 @@ export function TableToolbar(props: Props) {
     <div className="space-y-2 shrink-0">
       {/* Zeile 1: Views + Aktionen */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1 overflow-x-auto">
+        {/* min-w-0: erst dadurch greift overflow-x-auto — ohne das schiebt die
+            Ansichten-Leiste die Seite auf dem Handy waagerecht auf. */}
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {views.map((v) => (
             <button
               key={v.id}
               onClick={() => onSelectView(v.id)}
               className={cn(
-                "h-7 px-2.5 rounded-md text-xs font-medium whitespace-nowrap transition",
+                "h-9 md:h-7 px-2.5 rounded-md text-xs font-medium whitespace-nowrap transition",
                 activeViewId === v.id
                   ? "bg-brand text-white"
                   : "text-sub hover:bg-bg hover:text-ink",
@@ -122,14 +124,16 @@ export function TableToolbar(props: Props) {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onOpenSource}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            title="Google Maps scrapen"
+            aria-label="Google Maps scrapen"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
           >
             <MapPin className="h-3.5 w-3.5 text-info" />
             <span className="hidden sm:inline">Scrapen</span>
           </button>
           <button
             onClick={onOpenCsv}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
             title="CSV importieren"
           >
             <Upload className="h-3.5 w-3.5" />
@@ -137,7 +141,7 @@ export function TableToolbar(props: Props) {
           </button>
           <button
             onClick={onAddManual}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
             title="Lead manuell hinzufügen"
           >
             <UserPlus className="h-3.5 w-3.5" />
@@ -151,7 +155,7 @@ export function TableToolbar(props: Props) {
                 ? "Anreicherung läuft bereits im Hintergrund"
                 : "Vorname, Nachname & E-Mail finden — danach automatisch die Entscheider-E-Mail verifizieren (Spalte Email_Entscheider)"
             }
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-50"
           >
             {bgActive ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-info" />
@@ -162,7 +166,7 @@ export function TableToolbar(props: Props) {
           </button>
           <button
             onClick={onSetupCampaign}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
             title={
               hasCampaign
                 ? "Kampagne bearbeiten: Copy, Absender & Live-Status ändern"
@@ -177,7 +181,7 @@ export function TableToolbar(props: Props) {
           <button
             onClick={onLinkPipeline}
             className={cn(
-              "h-8 px-3 inline-flex items-center gap-1.5 rounded-md border text-sm font-medium transition",
+              "h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border text-sm font-medium transition",
               linkedPipelineName
                 ? "border-accent-line bg-accent-faint text-accent hover:bg-accent-soft"
                 : "border-line bg-surface text-ink hover:bg-bg",
@@ -195,14 +199,16 @@ export function TableToolbar(props: Props) {
           </button>
           <a
             href={exportHref}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
             title="Als CSV exportieren"
           >
             <Download className="h-3.5 w-3.5" />
           </a>
           <button
             onClick={onAddColumn}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition"
+            title="Spalte / Enrichment hinzufügen"
+            aria-label="Spalte / Enrichment hinzufügen"
+            className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition"
           >
             <Plus className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Add enrichment</span>
@@ -222,9 +228,12 @@ export function TableToolbar(props: Props) {
             <span className="text-sub">{labelFor(f.columnKey)}</span>
             <span>{OPS.find((o) => o.value === f.op)?.label}</span>
             {f.value && <span className="font-medium">{f.value}</span>}
+            {/* p-2/-m-2 (pl-2.5 ersetzt das alte ml-0.5): größere Fingerfläche,
+                ohne den Chip auch nur ein Pixel zu verändern. */}
             <button
               onClick={() => onRemoveFilter(i)}
-              className="ml-0.5 text-sub hover:text-err"
+              aria-label="Filter entfernen"
+              className="p-2 -m-2 pl-2.5 text-sub hover:text-err"
             >
               <X className="h-3 w-3" />
             </button>
@@ -237,13 +246,15 @@ export function TableToolbar(props: Props) {
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Suchen …"
-            className="h-7 pl-7 pr-2 w-40 rounded-md border border-line bg-surface text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-2 focus:ring-info/30"
+            className="h-9 md:h-7 pl-7 pr-2 w-40 rounded-md border border-line bg-surface text-xs text-ink placeholder:text-sub focus:outline-none focus:ring-2 focus:ring-info/30"
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-3 text-xs">
+        {/* min-w-0 + flex-wrap: der lange Fortschrittstext darf auf dem Handy
+            umbrechen, statt die Leiste waagerecht aufzuschieben. */}
+        <div className="ml-auto flex min-w-0 items-center gap-3 text-xs">
           {progress.running ? (
-            <div className="flex items-center gap-2 text-info">
+            <div className="flex flex-wrap items-center gap-2 text-info">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>
                 {progress.label}: {progress.processed} verarbeitet ·{" "}
@@ -260,7 +271,7 @@ export function TableToolbar(props: Props) {
               </button>
             </div>
           ) : bgActive ? (
-            <div className="flex items-center gap-2 text-info">
+            <div className="flex flex-wrap items-center gap-2 text-info">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>
                 Anreicherung läuft im Hintergrund
@@ -304,7 +315,7 @@ function FilterPopover({
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-xs text-ink hover:bg-bg transition"
+        className="h-9 md:h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-xs text-ink hover:bg-bg transition"
       >
         <Filter className="h-3.5 w-3.5" />
         Filter
@@ -312,11 +323,12 @@ function FilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-8 z-50 w-72 rounded-lg border border-line bg-surface shadow-xl p-3 space-y-2">
+          {/* top folgt der Knopfhöhe (auf Touch h-9, ab md h-7). */}
+          <div className="absolute left-0 top-10 md:top-8 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-surface shadow-xl p-3 space-y-2">
             <select
               value={columnKey}
               onChange={(e) => setColumnKey(e.target.value)}
-              className="w-full h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
+              className="w-full h-9 md:h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
             >
               {visible.map((c) => (
                 <option key={c.key} value={c.key}>
@@ -327,7 +339,7 @@ function FilterPopover({
             <select
               value={op}
               onChange={(e) => setOp(e.target.value as FilterOp)}
-              className="w-full h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
+              className="w-full h-9 md:h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
             >
               {OPS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -340,7 +352,7 @@ function FilterPopover({
                 <select
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
-                  className="w-full h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
+                  className="w-full h-9 md:h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
                 >
                   <option value="">Status wählen …</option>
                   {STATUSES.map((s) => (
@@ -354,12 +366,12 @@ function FilterPopover({
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   placeholder="Wert …"
-                  className="w-full h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
+                  className="w-full h-9 md:h-8 px-2 rounded-md border border-line bg-bg text-sm text-ink focus:outline-none"
                 />
               ))}
             <button
               onClick={add}
-              className="w-full h-8 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition"
+              className="w-full h-9 md:h-8 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition"
             >
               Filter hinzufügen
             </button>

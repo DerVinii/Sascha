@@ -76,7 +76,10 @@ export function PipelineManagerModal({
               <h3 className="text-sm font-semibold">Pipeline verwalten</h3>
               <button
                 onClick={() => setOpen(false)}
-                className="text-sub hover:text-ink"
+                // -m-3 p-3: vergrößert die Tippfläche auf dem Handy auf 40px,
+                // ohne die Position des Kreuzes zu verschieben. Auf Desktop
+                // wieder neutral.
+                className="text-sub hover:text-ink -m-3 p-3 md:m-0 md:p-0"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />
@@ -161,7 +164,7 @@ export function PipelineManagerModal({
               {error && <p className="text-xs text-err">{error}</p>}
 
               {/* Pipeline löschen */}
-              <div className="pt-3 border-t border-line flex items-center justify-between">
+              <div className="pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] text-sub">
                   {pipelineCount <= 1
                     ? "Letzte Pipeline – nicht löschbar."
@@ -179,7 +182,7 @@ export function PipelineManagerModal({
                       setOpen(false);
                     }
                   }}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-err text-sm font-medium hover:bg-err/10 transition disabled:opacity-40"
+                  className="h-10 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-err text-sm font-medium hover:bg-err/10 transition disabled:opacity-40"
                 >
                   <Trash2 className="h-4 w-4" />
                   Pipeline löschen
@@ -239,12 +242,15 @@ function StageRow({
       <div className="relative">
         <button
           onClick={() => setPalette((v) => !v)}
-          className="h-6 w-6 rounded-full border border-line shrink-0"
+          className="h-8 w-8 md:h-6 md:w-6 rounded-full border border-line shrink-0"
           style={{ background: stage.color ?? "#e2e8f0" }}
           aria-label="Farbe wählen"
         />
+        {/* Auf dem Handy größere Farbpunkte (32px statt 24px) — dafür sechs
+            statt acht pro Reihe, sonst passt die Palette nicht auf 393px.
+            top-full+mt-1 entspricht auf Desktop exakt dem bisherigen top-7. */}
         {palette && (
-          <div className="absolute z-10 top-7 left-0 bg-surface border border-line rounded-md p-2 shadow-lg grid grid-cols-8 gap-1.5 w-[236px]">
+          <div className="absolute z-10 top-full mt-1 left-0 bg-surface border border-line rounded-md p-2 shadow-lg grid grid-cols-6 md:grid-cols-8 gap-1.5 w-[240px] md:w-[236px]">
             {STAGE_COLORS.map((c) => (
               <button
                 key={c}
@@ -252,7 +258,7 @@ function StageRow({
                   onColor(c);
                   setPalette(false);
                 }}
-                className="h-6 w-6 rounded-full border border-line"
+                className="h-8 w-8 md:h-6 md:w-6 rounded-full border border-line"
                 style={{ background: c }}
                 aria-label={c}
               />

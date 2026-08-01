@@ -46,7 +46,15 @@ export function SourcePanel({ open, onClose, listId, onImported }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="h-full w-full max-w-md bg-surface shadow-2xl flex flex-col">
+      {/* Vollbild-Panel auf dem Handy: Kopf- und Fußzeile müssen an Notch und
+          Home-Indikator vorbei (viewport-fit=cover). Desktop-Insets = 0. */}
+      <div
+        className="h-full w-full max-w-md bg-surface shadow-2xl flex flex-col"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-info" />
@@ -54,7 +62,12 @@ export function SourcePanel({ open, onClose, listId, onImported }: Props) {
               Source: Google Maps
             </h3>
           </div>
-          <button onClick={onClose} className="text-sub hover:text-ink">
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+          <button
+            onClick={onClose}
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

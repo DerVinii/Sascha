@@ -166,7 +166,12 @@ export function AddColumnPanel({ open, onClose, onCreate }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4"
-      style={{ background: "rgba(15,23,42,0.45)" }}
+      style={{
+        background: "rgba(15,23,42,0.45)",
+        // Sicherheitsabstand zum Home-Indikator (viewport-fit=cover); auf Desktop
+        // ist der Inset 0 → bleibt bei den 1rem aus p-4.
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           reset();
@@ -174,17 +179,19 @@ export function AddColumnPanel({ open, onClose, onCreate }: Props) {
         }
       }}
     >
-      <div className="w-full max-w-lg rounded-xl bg-surface shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg max-h-full flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-line">
           <h3 className="text-sm font-semibold text-ink">
             {selected ? "Spalte benennen" : "Spalte hinzufügen"}
           </h3>
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
           <button
             onClick={() => {
               reset();
               onClose();
             }}
-            className="text-sub hover:text-ink"
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
           >
             <X className="h-4 w-4" />
           </button>

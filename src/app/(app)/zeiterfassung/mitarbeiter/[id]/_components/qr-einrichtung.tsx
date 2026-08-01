@@ -10,6 +10,16 @@ import {
   type Einladung,
 } from "../../../_components/einladung-anzeige";
 
+/**
+ * Randabstand der Vollbild-Overlays inklusive Safe-Area: auf dem iPhone liegt
+ * der Dialog sonst unter Dynamic Island bzw. Home-Indikator. Ohne Notch sind
+ * die Insets 0 — dort bleibt es bei den 1rem aus `p-4`.
+ */
+const OVERLAY_ABSTAND = {
+  paddingTop: "max(1rem, env(safe-area-inset-top))",
+  paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+};
+
 export function QrEinrichtung({
   employeeId,
   name,
@@ -126,13 +136,14 @@ export function QrEinrichtung({
       {bestaetigen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(e) => {
             if (e.target === e.currentTarget && !pending) setBestaetigen(false);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <h2 className="text-sm font-semibold text-ink">
               Bisherige Geräte jetzt abmelden?
             </h2>
@@ -171,13 +182,14 @@ export function QrEinrichtung({
       {kopplung && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(e) => {
             if (e.target === e.currentTarget) setKopplung(null);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-4 max-h-full overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-sm font-semibold text-ink">
                 Einrichtungs-Link für {name}
@@ -186,7 +198,9 @@ export function QrEinrichtung({
                 type="button"
                 onClick={() => setKopplung(null)}
                 aria-label="Schließen"
-                className="text-sub hover:text-ink"
+                // -m-3 gleicht die Fläche wieder aus: das Kreuz bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
               >
                 <X className="h-4 w-4" />
               </button>

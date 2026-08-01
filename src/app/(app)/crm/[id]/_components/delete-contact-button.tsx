@@ -31,7 +31,7 @@ export function DeleteContactButton({
             if (e.target === e.currentTarget && !pending) setOpen(false);
           }}
         >
-          <div className="bg-surface rounded-xl w-full max-w-sm shadow-xl p-5">
+          <div className="bg-surface rounded-xl w-full max-w-sm shadow-xl p-5 max-h-[85dvh] overflow-y-auto">
             <h3 className="text-sm font-semibold text-ink">Lead löschen?</h3>
             <p className="text-sm text-sub mt-2">
               Möchtest du{" "}

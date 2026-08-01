@@ -10,7 +10,16 @@ export default async function ZugangPage({
   const { fehler, next } = await searchParams;
 
   return (
-    <main className="min-h-dvh flex items-center justify-center bg-bg px-4">
+    // Safe-Area: die Karte darf auf dem iPhone nicht unter Dynamic Island oder
+    // Home-Indikator geraten, wenn sie einmal fast die volle Höhe braucht.
+    // Ohne Notch sind die Insets 0 → Darstellung unverändert.
+    <main
+      className="min-h-dvh flex items-center justify-center bg-bg px-4"
+      style={{
+        paddingTop: "max(1.5rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
+      }}
+    >
       <div className="max-w-sm w-full bg-surface border border-line rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand text-white font-bold text-sm">
@@ -49,7 +58,7 @@ export default async function ZugangPage({
           )}
           <button
             type="submit"
-            className="w-full h-9 bg-brand text-white text-sm font-medium rounded-md hover:bg-sidebar-soft transition"
+            className="w-full h-11 md:h-9 bg-brand text-white text-sm font-medium rounded-md hover:bg-sidebar-soft transition"
           >
             Anmelden
           </button>

@@ -13,6 +13,16 @@ import {
   setEmployeeActive,
 } from "../../../actions";
 
+/**
+ * Randabstand der Vollbild-Overlays inklusive Safe-Area: auf dem iPhone liegt
+ * der Dialog sonst unter Dynamic Island bzw. Home-Indikator. Ohne Notch sind
+ * die Insets 0 — dort bleibt es bei den 1rem aus `p-4`.
+ */
+const OVERLAY_ABSTAND = {
+  paddingTop: "max(1rem, env(safe-area-inset-top))",
+  paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+};
+
 export function MitarbeiterKopf({
   id,
   name,
@@ -200,7 +210,9 @@ export function MitarbeiterKopf({
                 onClick={() => setUmbenennen(true)}
                 aria-label="Namen ändern"
                 title="Namen ändern"
-                className="text-sub hover:text-ink"
+                // -m-3 gleicht die Fläche wieder aus: der Stift bleibt optisch
+                // an derselben Stelle, die Tippfläche wächst auf 40 × 40.
+                className="-m-3 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -262,6 +274,7 @@ export function MitarbeiterKopf({
       {deaktivierDialog && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(e) => {
             if (e.target === e.currentTarget && !pending)
               setDeaktivierDialog(false);
@@ -269,7 +282,7 @@ export function MitarbeiterKopf({
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <h2 className="text-sm font-semibold text-ink">
               Mitarbeiter deaktivieren?
             </h2>
@@ -310,13 +323,14 @@ export function MitarbeiterKopf({
       {loeschDialog && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          style={OVERLAY_ABSTAND}
           onClick={(e) => {
             if (e.target === e.currentTarget && !pending) setLoeschDialog(false);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <h2 className="text-sm font-semibold text-ink">
               {name} wirklich löschen?
             </h2>

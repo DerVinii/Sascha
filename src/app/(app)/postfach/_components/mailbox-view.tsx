@@ -545,7 +545,9 @@ export function MailboxView({
           <span>{error}</span>
           <button
             onClick={() => setError(null)}
-            className="text-err/70 hover:text-err"
+            // -m-2 gleicht die Fläche wieder aus: das Kreuz bleibt optisch an
+            // derselben Stelle, die Tippfläche wächst auf 36 × 36.
+            className="-m-2 h-9 w-9 shrink-0 inline-flex items-center justify-center text-err/70 hover:text-err"
             aria-label="Schließen"
           >
             <X className="h-4 w-4" />
@@ -807,7 +809,7 @@ export function MailboxView({
                     <button
                       onClick={loadMore}
                       disabled={isMoreLoading}
-                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
+                      className="h-10 px-4 sm:h-8 sm:px-3 inline-flex items-center gap-1.5 rounded-md border border-line text-xs font-medium text-sub hover:text-ink hover:bg-bg transition disabled:opacity-50"
                     >
                       {isMoreLoading ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1203,11 +1205,13 @@ function Reader({
 }) {
   return (
     <>
-      <div className="px-3 sm:px-4 py-2.5 border-b border-line flex items-center gap-1.5 flex-wrap">
+      {/* gap-1 auf dem Handy: mit den größeren Touch-Knöpfen passt die Leiste
+          sonst nicht mehr in eine Zeile. */}
+      <div className="px-3 sm:px-4 py-2.5 border-b border-line flex items-center gap-1 md:gap-1.5 flex-wrap">
         <button
           onClick={onBack}
-          className="md:hidden h-9 w-9 -ml-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
-          aria-label="Zurück"
+          className="md:hidden h-10 w-10 -ml-1 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+          aria-label="Zurück zur Liste"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -1236,11 +1240,19 @@ function Reader({
         </h1>
         <div className="mt-1.5 text-xs text-sub space-y-0.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-ink">{addressText(msg.from)}</span>
+            <span className="font-medium text-ink break-words min-w-0">
+              {addressText(msg.from)}
+            </span>
+            {/* break-all: lange Adressen haben keine Trennstelle und würden
+                auf dem Handy sonst über den Rand hinauslaufen. */}
             {msg.from && (
-              <span className="text-sub/80">&lt;{msg.from.address}&gt;</span>
+              <span className="text-sub/80 break-all min-w-0">
+                &lt;{msg.from.address}&gt;
+              </span>
             )}
-            <span className="ml-auto">{formatFull(msg.date)}</span>
+            <span className="ml-auto whitespace-nowrap">
+              {formatFull(msg.date)}
+            </span>
           </div>
           {msg.to.length > 0 && (
             <div className="truncate">An: {addressListText(msg.to)}</div>
@@ -1257,7 +1269,9 @@ function Reader({
                 href={`/api/postfach/attachment?folder=${encodeURIComponent(
                   msg.folder,
                 )}&uid=${msg.uid}&index=${att.index}`}
-                className="inline-flex items-center gap-2 rounded-md border border-line bg-bg px-2.5 py-1.5 text-xs text-ink hover:bg-surface transition max-w-full"
+                // min-h auf Touch: der Anhang ist ein Download-Link und wäre
+                // mit 1.5 Polsterung nur ~28px hoch.
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-bg px-2.5 py-1.5 min-h-[40px] md:min-h-0 text-xs text-ink hover:bg-surface transition max-w-full"
                 download
               >
                 <Paperclip className="h-3.5 w-3.5 text-sub shrink-0" />
@@ -1293,10 +1307,12 @@ function ToolbarButton({
   danger?: boolean;
 }) {
   return (
+    // Auf dem Handy trägt der Knopf nur das Symbol (Label erst ab xl) — ohne
+    // Mindestmaß wäre die Tippfläche nur 32 × 32.
     <button
       onClick={onClick}
       title={label}
-      className={`h-8 px-2 inline-flex items-center gap-1.5 rounded-md text-xs font-medium transition ${
+      className={`h-10 min-w-[40px] justify-center md:h-8 md:min-w-0 px-2 inline-flex items-center gap-1.5 rounded-md text-xs font-medium transition ${
         danger
           ? "text-sub hover:text-err hover:bg-err/5"
           : active
@@ -1327,18 +1343,20 @@ function MoveMenu({
         onClick={() => setOpen((v) => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         title="Verschieben"
-        className="h-8 px-2 inline-flex items-center gap-1.5 rounded-md text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
+        className="h-10 min-w-[40px] justify-center md:h-8 md:min-w-0 px-2 inline-flex items-center gap-1.5 rounded-md text-xs font-medium text-sub hover:text-ink hover:bg-bg transition"
       >
         <Folder className="h-4 w-4" />
         <span className="hidden xl:inline">Verschieben</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-9 z-20 w-48 max-h-72 overflow-y-auto rounded-md border border-line bg-surface shadow-lg py-1">
+        // top-full statt fester Höhe: das Menü hängt so auch am höheren
+        // Touch-Knopf direkt unter dem Auslöser.
+        <div className="absolute right-0 top-full mt-1 z-20 w-48 max-w-[calc(100vw-2rem)] max-h-72 overflow-y-auto rounded-md border border-line bg-surface shadow-lg py-1">
           {targets.map((f) => (
             <button
               key={f.path}
               onMouseDown={() => onMove(f.path)}
-              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-bg transition truncate"
+              className="w-full text-left px-3 py-2.5 md:py-1.5 text-xs text-ink hover:bg-bg transition truncate"
             >
               {folderLabel(f)}
             </button>
@@ -1601,7 +1619,7 @@ function Composer({
           <h2 className="text-sm font-semibold text-ink">{state.title}</h2>
           <button
             onClick={onClose}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
+            className="h-10 w-10 -mr-1 md:h-8 md:w-8 md:mr-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
             aria-label="Schließen"
           >
             <X className="h-4 w-4" />
@@ -1670,16 +1688,20 @@ function Composer({
               {files.map((f, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink max-w-full"
                 >
-                  <Paperclip className="h-3 w-3 text-sub" />
+                  <Paperclip className="h-3 w-3 text-sub shrink-0" />
                   <span className="truncate max-w-[160px]">{f.name}</span>
-                  <span className="text-sub">{formatBytes(f.size)}</span>
+                  <span className="text-sub shrink-0">
+                    {formatBytes(f.size)}
+                  </span>
+                  {/* Negative Ränder: das Kreuz bleibt optisch an derselben
+                      Stelle, die Tippfläche wächst auf 32 × 32. */}
                   <button
                     onClick={() =>
                       setFiles((prev) => prev.filter((_, j) => j !== i))
                     }
-                    className="text-sub hover:text-err"
+                    className="-my-1.5 -mr-1 h-8 w-8 md:m-0 md:h-auto md:w-auto shrink-0 inline-flex items-center justify-center text-sub hover:text-err"
                     aria-label="Entfernen"
                   >
                     <X className="h-3 w-3" />
@@ -1695,7 +1717,7 @@ function Composer({
             <span>{note}</span>
             <button
               onClick={() => setNote(null)}
-              className="text-err/70 hover:text-err shrink-0"
+              className="-m-2 h-9 w-9 md:m-0 md:h-auto md:w-auto shrink-0 inline-flex items-center justify-center text-err/70 hover:text-err"
               aria-label="Schließen"
             >
               <X className="h-3.5 w-3.5" />
@@ -1816,7 +1838,10 @@ function MessageBody({
   </style></head><body>${html}</body></html>`;
 
   return (
-    <div className="max-w-3xl">
+    // overflow-x-auto: Newsletter mit fester Breite (Tabellen-Layouts) sind
+    // oft breiter als 393px — sie scrollen dann im Kasten statt die ganze
+    // Seite waagerecht zu verschieben.
+    <div className="max-w-3xl overflow-x-auto scroll-sichtbar">
       {hasRemote && !remoteContent && (
         <button
           type="button"

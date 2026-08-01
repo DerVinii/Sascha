@@ -169,7 +169,7 @@ function PipelineDetailInner({
     <div className="p-4 md:p-6 space-y-4">
       {/* Kopf */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold text-ink">
+        <h2 className="text-xl font-semibold text-ink min-w-0">
           {pipelineName}{" "}
           <span className="text-sm font-normal text-sub">
             {deals.length} Datensätze
@@ -183,7 +183,7 @@ function PipelineDetailInner({
           trigger={(open) => (
             <button
               onClick={open}
-              className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
+              className="h-9 px-3 shrink-0 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
             >
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Pipeline-Einstellungen</span>
@@ -228,7 +228,7 @@ function PipelineDetailInner({
                   className="fixed inset-0 z-10"
                   onClick={() => setColsOpen(false)}
                 />
-                <div className="absolute left-0 sm:left-auto sm:right-0 top-10 z-20 w-48 bg-surface border border-line rounded-md shadow-lg p-1.5">
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-10 z-20 w-48 max-w-[calc(100vw-2rem)] bg-surface border border-line rounded-md shadow-lg p-1.5">
                   {COLS.map((c) => (
                     <label
                       key={c.key}
@@ -435,7 +435,7 @@ function PipelineDetailInner({
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span>
                   Zeige {stageDeals.length === 0 ? 0 : start + 1}–
                   {Math.min(start + perPage, stageDeals.length)} von{" "}

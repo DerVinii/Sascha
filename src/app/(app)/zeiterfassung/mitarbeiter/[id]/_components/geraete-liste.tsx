@@ -135,13 +135,20 @@ export function GeraeteListe({ geraete }: { geraete: Geraet[] }) {
       {abmelden && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          // Abstand oben/unten inklusive Safe-Area, sonst liegt der Dialog auf
+          // dem iPhone unter Dynamic Island bzw. Home-Indikator. Ohne Notch
+          // sind die Insets 0 — dort bleibt es bei den 1rem aus `p-4`.
+          style={{
+            paddingTop: "max(1rem, env(safe-area-inset-top))",
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget && !pending) setAbmelden(null);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3">
+          <div className="rounded-xl border border-line bg-surface p-5 w-full max-w-md space-y-3 max-h-full overflow-y-auto">
             <h2 className="text-sm font-semibold text-ink">Gerät abmelden?</h2>
             <p className="text-sm text-ink">
               „{geraeteName(abmelden.label, abmelden.userAgent)}“ kann danach

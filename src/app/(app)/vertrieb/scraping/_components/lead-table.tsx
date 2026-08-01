@@ -569,7 +569,8 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
                   <button
                     onClick={() => setAddColumnOpen(true)}
                     title="Spalte hinzufügen"
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-sub hover:bg-surface hover:text-ink"
+                    aria-label="Spalte hinzufügen"
+                    className="inline-flex h-8 w-8 md:h-6 md:w-6 items-center justify-center rounded text-sub hover:bg-surface hover:text-ink"
                   >
                     <Plus className="h-4 w-4" />
                   </button>

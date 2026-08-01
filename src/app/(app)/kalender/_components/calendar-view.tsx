@@ -404,7 +404,9 @@ function EventChip({
           onOpen(item);
         }}
         title={item.title}
-        className="w-full flex items-center rounded px-1.5 py-[3px] text-left transition hover:brightness-95"
+        // Auf dem Handy höher: in der Wochenansicht sind die Chips die einzige
+        // Möglichkeit, einen Termin anzutippen — 3px Polsterung wären zu wenig.
+        className="w-full flex items-center rounded px-1.5 py-2 md:py-[3px] text-left transition hover:brightness-95"
         style={{ backgroundColor: color, color: readableOn(color) }}
       >
         <span className="text-[11px] font-medium truncate">{item.title}</span>
@@ -420,7 +422,7 @@ function EventChip({
         onOpen(item);
       }}
       title={item.title}
-      className="w-full flex items-center gap-1.5 rounded px-1.5 py-[2px] text-left transition hover:bg-bg/70"
+      className="w-full flex items-center gap-1.5 rounded px-1.5 py-2 md:py-[2px] text-left transition hover:bg-bg/70"
     >
       <span
         className="h-2 w-2 rounded-full shrink-0"
@@ -452,7 +454,9 @@ function WeekGrid({
   onOpenItem: (i: CalendarItem) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
+    // scroll-sichtbar: Das Raster ist 720px breit — auf dem Handy ist der
+    // waagerechte Schieberegler der einzige Hinweis, dass es seitlich weitergeht.
+    <div className="overflow-x-auto scroll-sichtbar">
       <div className="grid grid-cols-7 min-w-[720px]">
         {days.map((d) => {
           const isToday = sameDay(d, today);
@@ -525,7 +529,17 @@ function DayPanel({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="h-full w-full max-w-md bg-surface shadow-xl flex flex-col">
+      {/* safe-area-Insets: Der Drawer deckt bei viewport-fit=cover die ganze
+          Höhe ab — ohne Polsterung liegt die Kopfzeile (samt Schließen-Knopf)
+          hinter Uhrzeit/Dynamic Island und der Fußknopf unter dem
+          Home-Indikator. Auf Geräten ohne Notch sind die Insets 0. */}
+      <div
+        className="h-full w-full max-w-md bg-surface shadow-xl flex flex-col"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <div className="flex items-start justify-between px-5 py-4 border-b border-line">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-ink capitalize">
@@ -539,7 +553,7 @@ function DayPanel({
           </div>
           <button
             onClick={onClose}
-            className="text-sub hover:text-ink"
+            className="-mr-2 -mt-1 h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink transition"
             aria-label="Schließen"
           >
             <X className="h-4 w-4" />

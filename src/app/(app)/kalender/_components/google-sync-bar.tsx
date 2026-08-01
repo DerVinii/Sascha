@@ -60,12 +60,13 @@ export function GoogleSyncBar({
 
   if (!connected) {
     return (
-      <div className="mb-3 flex items-center gap-2 text-xs text-sub">
-        <Calendar className="h-3.5 w-3.5" />
+      // flex-wrap: auf schmalen Handys rutscht der Link sonst aus dem Bild.
+      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sub">
+        <Calendar className="h-3.5 w-3.5 shrink-0" />
         <span>Google Kalender nicht verbunden.</span>
         <Link
           href="/einstellungen/kalender"
-          className="text-accent-ink underline underline-offset-2 hover:opacity-80"
+          className="inline-flex items-center min-h-[36px] md:min-h-0 text-accent-ink underline underline-offset-2 hover:opacity-80"
         >
           Verbinden
         </Link>
@@ -74,13 +75,15 @@ export function GoogleSyncBar({
   }
 
   return (
-    <div className="mb-3 flex items-center gap-2 text-xs text-sub">
-      <Calendar className="h-3.5 w-3.5 text-ok" />
+    // flex-wrap: Text, Sync-Knopf und Ergebnis-Meldung passen auf 393px nicht
+    // in eine Zeile — ohne Umbruch würde die Meldung abgeschnitten.
+    <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sub">
+      <Calendar className="h-3.5 w-3.5 text-ok shrink-0" />
       <span>Google synchronisiert · zuletzt {fmtTime(lastSyncedAt)}</span>
       <button
         onClick={() => runSync(false)}
         disabled={pending}
-        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:text-ink disabled:opacity-60"
+        className="inline-flex items-center gap-1 rounded px-2 py-0.5 min-h-[36px] md:min-h-0 md:px-1.5 hover:text-ink disabled:opacity-60"
         title="Jetzt synchronisieren"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`} />

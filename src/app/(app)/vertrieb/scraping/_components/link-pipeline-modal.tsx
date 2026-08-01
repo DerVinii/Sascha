@@ -116,23 +116,36 @@ export function LinkPipelineModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)" }}
+      style={{
+        background: "rgba(15,23,42,0.45)",
+        // Sicherheitsabstand zu Notch und Home-Indikator (viewport-fit=cover);
+        // auf Desktop sind die Insets 0 → bleibt bei den 1rem aus p-4.
+        paddingTop: "calc(env(safe-area-inset-top) + 1rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)",
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl bg-surface shadow-2xl overflow-hidden">
+      {/* max-h-full + flex-col: auf dem Handy scrollt der Inhalt, die Knöpfe
+          unten bleiben erreichbar. */}
+      <div className="w-full max-w-md max-h-full flex flex-col rounded-xl bg-surface shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <h3 className="text-sm font-semibold text-ink inline-flex items-center gap-2">
             <Workflow className="h-4 w-4 text-accent" />
             Mit Pipeline verbinden
           </h3>
-          <button onClick={onClose} className="text-sub hover:text-ink">
+          {/* p-3/-m-3: 40px Fingerfläche, ohne das Layout zu verändern. */}
+          <button
+            onClick={onClose}
+            aria-label="Schließen"
+            className="shrink-0 p-3 -m-3 text-sub hover:text-ink"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto">
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-sub py-6 justify-center">
               <Loader2 className="h-4 w-4 animate-spin" /> Lädt …
@@ -147,7 +160,7 @@ export function LinkPipelineModal({
                   <button
                     onClick={disconnect}
                     disabled={saving}
-                    className="inline-flex items-center gap-1 shrink-0 h-6 px-2 rounded border border-accent-line bg-surface text-accent hover:bg-accent-soft transition disabled:opacity-50"
+                    className="inline-flex items-center gap-1 shrink-0 h-8 md:h-6 px-2 rounded border border-accent-line bg-surface text-accent hover:bg-accent-soft transition disabled:opacity-50"
                   >
                     <Unlink className="h-3 w-3" />
                     Trennen

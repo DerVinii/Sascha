@@ -148,7 +148,7 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
                   <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-bg shrink-0">
                     <FolderOpen className="h-5 w-5 text-info" />
                   </div>
-                  <div className="min-w-0 pr-6">
+                  <div className="min-w-0 pr-10 md:pr-6">
                     <div className="text-sm font-medium text-ink truncate">
                       {list.name}
                     </div>
@@ -160,9 +160,11 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
                 </div>
               </Link>
 
+              {/* Auf dem Handy größer (Fingerfläche), ab md wieder 28 px. */}
               <button
                 onClick={() => setMenuId(menuId === list.id ? null : list.id)}
-                className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink"
+                aria-label="Kampagnen-Menü"
+                className="absolute right-2 top-2 inline-flex h-10 w-10 md:h-7 md:w-7 items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink"
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
@@ -172,17 +174,17 @@ export function FolderGrid({ lists }: { lists: LeadList[] }) {
                     className="fixed inset-0 z-40"
                     onClick={() => setMenuId(null)}
                   />
-                  <div className="absolute right-2 top-10 z-50 w-40 rounded-lg border border-line bg-surface shadow-xl py-1 text-sm">
+                  <div className="absolute right-2 top-12 md:top-10 z-50 w-40 rounded-lg border border-line bg-surface shadow-xl py-1 text-sm">
                     <button
                       onClick={() => rename(list)}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-bg"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 md:py-1.5 text-left text-ink hover:bg-bg"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                       Umbenennen
                     </button>
                     <button
                       onClick={() => remove(list)}
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-err hover:bg-bg"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 md:py-1.5 text-left text-err hover:bg-bg"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Löschen

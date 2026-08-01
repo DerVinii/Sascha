@@ -206,7 +206,7 @@ export default async function ContactDetailPage({
       <div>
         <Link
           href="/crm"
-          className="inline-flex items-center gap-1 text-xs text-sub hover:text-ink mb-3"
+          className="inline-flex items-center gap-1 text-xs text-sub hover:text-ink mb-3 py-2 -mt-2 md:py-0 md:mt-0"
         >
           <ChevronLeft className="h-3 w-3" />
           Alle Kontakte

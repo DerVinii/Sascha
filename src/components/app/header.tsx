@@ -84,7 +84,8 @@ export function Header({ mobileNav }: { mobileNav?: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-3">
           <button
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink transition"
+            // Auf Touch 40px Trefferfläche, ab md wie bisher 32px.
+            className="h-10 w-10 -mr-2 md:h-8 md:w-8 md:mr-0 inline-flex items-center justify-center rounded-md text-sub hover:bg-bg hover:text-ink transition"
             aria-label="Benachrichtigungen"
           >
             <Bell className="h-4 w-4" />

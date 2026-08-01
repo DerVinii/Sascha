@@ -145,7 +145,10 @@ export function NewDealModal({
               <h3 className="text-sm font-semibold">Neuer Deal</h3>
               <button
                 onClick={() => setOpen(false)}
-                className="text-sub hover:text-ink"
+                // -m-3 p-3: vergrößert die Tippfläche auf dem Handy auf 40px,
+                // ohne die Position des Kreuzes zu verschieben. Auf Desktop
+                // wieder neutral.
+                className="text-sub hover:text-ink -m-3 p-3 md:m-0 md:p-0"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />
@@ -207,7 +210,7 @@ export function NewDealModal({
               )}
 
               {/* Pipeline + Phase */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-medium text-sub mb-1">
                     Pipeline
@@ -243,7 +246,7 @@ export function NewDealModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-medium text-sub mb-1">
                     Wert (€)
