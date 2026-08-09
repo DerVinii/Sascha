@@ -458,6 +458,37 @@ export const instantlyEmails = pgTable(
   ],
 );
 
+/**
+ * Wiederverwendbare Kampagnen-Texte („Vorlagen"): der komplette Satz aus erster
+ * Mail und Follow-ups, unter einem Namen gespeichert. Bewusst pro Organisation
+ * und NICHT pro Liste — dieselbe Ansprache wird in mehreren Ordnern genutzt
+ * (z. B. dieselbe AsAflex-Sequenz für Leipzig, Hannover, Dresden).
+ */
+export const campaignTemplates = pgTable(
+  "campaign_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** CampaignStep[] — Betreff, Text und Verzögerung je Schritt. */
+    steps: jsonb("steps").default([]).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("campaign_templates_org_idx").on(t.orgId),
+    // Ein Name je Org: „Speichern" unter bestehendem Namen aktualisiert die
+    // Vorlage, statt eine zweite gleichnamige daneben zu legen.
+    unique("campaign_templates_org_name_unique").on(t.orgId, t.name),
+  ],
+);
+
 /** Generische Sync-Cursor/Zustände (z. B. Instantly-Backfill-Cursor) je Org. */
 export const syncState = pgTable(
   "sync_state",

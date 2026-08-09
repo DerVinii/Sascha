@@ -13,19 +13,25 @@ import {
   ChevronLeft,
   Mail,
   Braces,
+  LayoutTemplate,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { menuPosition, type MenuRect } from "@/lib/dropdown-position";
 import { instantlyVarToken } from "@/lib/scraping-types";
 import type {
   CampaignStep,
+  CampaignTemplate,
   InstantlySendPreview,
   LeadColumn,
 } from "@/lib/scraping-types";
 import {
+  deleteCampaignTemplateAction,
   getCampaignSetupAction,
+  listCampaignTemplatesAction,
   previewInstantlySendAction,
   saveCampaignAction,
+  saveCampaignTemplateAction,
   sendListToInstantlyAction,
   setInstantlyCampaignLiveAction,
 } from "../actions";
@@ -54,14 +60,71 @@ type RunProgress = {
 /** Wunschmaße des Variablen-Menüs; beide Werte werden bei Platzmangel gekürzt. */
 const VAR_MENU_WIDTH = 256;
 const VAR_MENU_MAX_HEIGHT = 240;
+/** Vorlagen-Menü: breiter (Namen + Datum) und höher (Liste + Speichern-Feld). */
+const TPL_MENU_WIDTH = 300;
+const TPL_MENU_MAX_HEIGHT = 340;
 
 /** Menü am Knopf ausrichten — immer vollständig im Fenster (siehe menuPosition). */
-function berechneVarMenuPos(knopf: DOMRect): MenuRect {
+function menuPosFuer(knopf: DOMRect, groesse: Groesse): MenuRect {
   return menuPosition(knopf, {
-    width: VAR_MENU_WIDTH,
-    maxHeight: VAR_MENU_MAX_HEIGHT,
+    ...groesse,
     viewport: { width: window.innerWidth, height: window.innerHeight },
   });
+}
+
+type Groesse = { width: number; maxHeight: number };
+
+/**
+ * Offenes Menü am Knopf halten: bei Größenänderung (Handy drehen, Tastatur
+ * auf/zu) neu ausrichten, beim Scrollen außerhalb schließen — sonst klebt es an
+ * einer Stelle, an der der Knopf längst nicht mehr steht. Scrollen IM Menü ist
+ * ausgenommen, sonst ließe sich die Liste nicht bedienen.
+ */
+function useMenuAnchor(
+  open: boolean,
+  btnRef: React.RefObject<HTMLButtonElement | null>,
+  menuRef: React.RefObject<HTMLDivElement | null>,
+  groesse: Groesse,
+  setPos: (r: MenuRect) => void,
+  close: () => void,
+  /**
+   * "schliessen" für Knöpfe, die mitscrollen (sonst bliebe das Menü stehen);
+   * "folgen" für Knöpfe in der festen Fußzeile — dort darf ein Scrollen, das
+   * die Handy-Tastatur auslöst, das Menü nicht wegnehmen.
+   */
+  scrollVerhalten: "schliessen" | "folgen" = "schliessen",
+) {
+  const { width, maxHeight } = groesse;
+  useEffect(() => {
+    if (!open) return;
+    const neuAusrichten = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos(menuPosFuer(r, { width, maxHeight }));
+    };
+    const beimScrollen = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      if (scrollVerhalten === "folgen") neuAusrichten();
+      else close();
+    };
+    window.addEventListener("resize", neuAusrichten);
+    window.addEventListener("scroll", beimScrollen, true);
+    return () => {
+      window.removeEventListener("resize", neuAusrichten);
+      window.removeEventListener("scroll", beimScrollen, true);
+    };
+  }, [open, btnRef, menuRef, width, maxHeight, setPos, close, scrollVerhalten]);
+}
+
+/** Kurzes Datum fürs Vorlagen-Menü ("zuletzt gespeichert"). */
+function kurzDatum(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      });
 }
 
 export function CampaignSetupModal({
@@ -116,6 +179,23 @@ export function CampaignSetupModal({
     maxHeight: VAR_MENU_MAX_HEIGHT,
   });
 
+  // Vorlagen: gespeicherte Texte anwenden oder die aktuellen sichern.
+  const tplBtnRef = useRef<HTMLButtonElement | null>(null);
+  const tplMenuRef = useRef<HTMLDivElement | null>(null);
+  const [tplMenuOpen, setTplMenuOpen] = useState(false);
+  const [tplMenuPos, setTplMenuPos] = useState<MenuRect>({
+    left: 0,
+    top: 0,
+    width: TPL_MENU_WIDTH,
+    maxHeight: TPL_MENU_MAX_HEIGHT,
+  });
+  const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
+  const [tplName, setTplName] = useState("");
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplError, setTplError] = useState<string | null>(null);
+  /** Kurze Rückmeldung unter den Fußknöpfen („… angewendet/gespeichert"). */
+  const [tplHint, setTplHint] = useState<string | null>(null);
+
   const loadSetup = useCallback(async () => {
     setLoading(true);
     setSetupError(null);
@@ -164,27 +244,41 @@ export function CampaignSetupModal({
     };
   }, [open, listId, skipAlreadySent, skipWorkspaceDuplicates]);
 
-  // Offenes Variablen-Menü nachführen: bei Größenänderung (Handy drehen,
-  // Tastatur auf/zu) neu ausrichten, beim Scrollen außerhalb schließen — sonst
-  // klebt es an einer Stelle, an der der Knopf längst nicht mehr steht. Scrollen
-  // IN der Liste ist davon ausgenommen, sonst ließe sie sich nicht bedienen.
+  // Vorlagen der Organisation einmal je Öffnen laden (ordnerübergreifend).
   useEffect(() => {
-    if (!varMenuOpen) return;
-    const neuAusrichten = () => {
-      const r = varBtnRef.current?.getBoundingClientRect();
-      if (r) setVarMenuPos(berechneVarMenuPos(r));
-    };
-    const beimScrollen = (e: Event) => {
-      if (varMenuRef.current?.contains(e.target as Node)) return;
-      setVarMenuOpen(false);
-    };
-    window.addEventListener("resize", neuAusrichten);
-    window.addEventListener("scroll", beimScrollen, true);
+    if (!open) return;
+    let cancelled = false;
+    setTplHint(null);
+    setTplError(null);
+    setTplName("");
+    listCampaignTemplatesAction()
+      .then((t) => !cancelled && setTemplates(t))
+      .catch(() => {});
     return () => {
-      window.removeEventListener("resize", neuAusrichten);
-      window.removeEventListener("scroll", beimScrollen, true);
+      cancelled = true;
     };
-  }, [varMenuOpen]);
+  }, [open]);
+
+  const schliesseVarMenu = useCallback(() => setVarMenuOpen(false), []);
+  const schliesseTplMenu = useCallback(() => setTplMenuOpen(false), []);
+
+  useMenuAnchor(
+    varMenuOpen,
+    varBtnRef,
+    varMenuRef,
+    { width: VAR_MENU_WIDTH, maxHeight: VAR_MENU_MAX_HEIGHT },
+    setVarMenuPos,
+    schliesseVarMenu,
+  );
+  useMenuAnchor(
+    tplMenuOpen,
+    tplBtnRef,
+    tplMenuRef,
+    { width: TPL_MENU_WIDTH, maxHeight: TPL_MENU_MAX_HEIGHT },
+    setTplMenuPos,
+    schliesseTplMenu,
+    "folgen",
+  );
 
   function updateStep(i: number, patch: Partial<CampaignStep>) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -198,8 +292,85 @@ export function CampaignSetupModal({
 
   function openVarMenu() {
     const r = varBtnRef.current?.getBoundingClientRect();
-    if (r) setVarMenuPos(berechneVarMenuPos(r));
+    if (r)
+      setVarMenuPos(
+        menuPosFuer(r, {
+          width: VAR_MENU_WIDTH,
+          maxHeight: VAR_MENU_MAX_HEIGHT,
+        }),
+      );
     setVarMenuOpen((v) => !v);
+  }
+
+  function openTplMenu() {
+    const r = tplBtnRef.current?.getBoundingClientRect();
+    if (r)
+      setTplMenuPos(
+        menuPosFuer(r, {
+          width: TPL_MENU_WIDTH,
+          maxHeight: TPL_MENU_MAX_HEIGHT,
+        }),
+      );
+    setTplError(null);
+    setTplMenuOpen((v) => !v);
+  }
+
+  /** Vorlage anwenden: ersetzt die Texte vollständig (bewusst ohne Rückfrage). */
+  function applyTemplate(t: CampaignTemplate) {
+    setSteps(
+      t.steps.length ? t.steps : [{ subject: "", body: "", delayDays: 0 }],
+    );
+    // Sonst zeigt „Variable einfügen" auf ein Feld, das es nicht mehr gibt.
+    lastFocused.current = null;
+    setTplMenuOpen(false);
+    setTplHint(`Vorlage „${t.name}" angewendet.`);
+  }
+
+  async function saveTemplate() {
+    const name = tplName.trim();
+    if (!name || tplBusy) return;
+    const vorhanden = templates.find(
+      (t) => t.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (
+      vorhanden &&
+      !confirm(`Es gibt schon eine Vorlage „${vorhanden.name}". Überschreiben?`)
+    )
+      return;
+
+    setTplBusy(true);
+    setTplError(null);
+    try {
+      const res = await saveCampaignTemplateAction({ name, steps });
+      if (res.error || !res.template) {
+        setTplError(res.error ?? "Speichern fehlgeschlagen.");
+        return;
+      }
+      const gespeichert = res.template;
+      setTemplates((prev) =>
+        [...prev.filter((t) => t.id !== gespeichert.id), gespeichert].sort(
+          (a, b) => a.name.localeCompare(b.name, "de"),
+        ),
+      );
+      setTplName("");
+      setTplMenuOpen(false);
+      setTplHint(`Vorlage „${gespeichert.name}" gespeichert.`);
+    } catch (e) {
+      setTplError(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setTplBusy(false);
+    }
+  }
+
+  async function deleteTemplate(t: CampaignTemplate) {
+    if (!confirm(`Vorlage „${t.name}" löschen?`)) return;
+    setTemplates((prev) => prev.filter((x) => x.id !== t.id));
+    try {
+      await deleteCampaignTemplateAction({ id: t.id });
+    } catch {
+      // Löschen fehlgeschlagen → Liste beim nächsten Öffnen wieder korrekt.
+      setTplError("Löschen fehlgeschlagen.");
+    }
   }
 
   /** Fügt {{token}} an der Cursor-Position des zuletzt fokussierten Felds ein. */
@@ -633,7 +804,7 @@ export function CampaignSetupModal({
 
         {/* Footer-Navigation */}
         <div className="px-5 py-3 border-t border-line flex flex-wrap items-center justify-between gap-2 gap-y-2">
-          <div>
+          <div className="flex min-w-0 items-center gap-2">
             {step === 2 && !done && (
               <button
                 onClick={() => setStep(1)}
@@ -644,8 +815,24 @@ export function CampaignSetupModal({
                 Zurück
               </button>
             )}
+            {tplHint && (
+              <span className="truncate text-[11px] text-ok">{tplHint}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Vorlagen nur im Copy-Schritt: dort stehen die Texte, um die es geht. */}
+            {step === 2 && !done && (
+              <button
+                ref={tplBtnRef}
+                type="button"
+                onClick={openTplMenu}
+                disabled={busy}
+                className="h-9 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition disabled:opacity-40"
+              >
+                <LayoutTemplate className="h-3.5 w-3.5 text-info" />
+                Vorlagen
+              </button>
+            )}
             <button
               onClick={onClose}
               disabled={busy}
@@ -685,6 +872,95 @@ export function CampaignSetupModal({
           </div>
         </div>
       </div>
+
+      {tplMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={schliesseTplMenu} />
+          <div
+            ref={tplMenuRef}
+            style={{
+              left: tplMenuPos.left,
+              top: tplMenuPos.top,
+              width: tplMenuPos.width,
+              maxHeight: tplMenuPos.maxHeight,
+            }}
+            className="fixed z-[61] flex flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl"
+          >
+            <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-sub">
+              Gespeicherte Vorlagen
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1">
+              {templates.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-sub">
+                  Noch keine Vorlage gespeichert.
+                </div>
+              ) : (
+                templates.map((t) => (
+                  <div key={t.id} className="flex items-center gap-1 px-1">
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate(t)}
+                      className="min-w-0 flex-1 rounded px-2 py-2 md:py-1.5 text-left hover:bg-bg"
+                    >
+                      <span className="block truncate text-sm text-ink">
+                        {t.name}
+                      </span>
+                      <span className="block text-[10px] text-sub">
+                        {t.steps.length === 1
+                          ? "1 Mail"
+                          : `${t.steps.length} Mails`}{" "}
+                        · {kurzDatum(t.updatedAt)}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteTemplate(t)}
+                      title="Vorlage löschen"
+                      aria-label={`Vorlage ${t.name} löschen`}
+                      className="shrink-0 p-2 text-sub hover:text-err"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="shrink-0 border-t border-line p-2 space-y-1.5">
+              <div className="text-[11px] font-medium text-sub">
+                Aktuelle Texte als Vorlage speichern
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveTemplate();
+                    }
+                  }}
+                  placeholder="Name der Vorlage"
+                  className="h-9 min-w-0 flex-1 px-2 rounded-md border border-line bg-bg text-sm text-ink placeholder:text-sub/60 focus:outline-none focus:ring-2 focus:ring-info/30"
+                />
+                <button
+                  type="button"
+                  onClick={saveTemplate}
+                  disabled={!tplName.trim() || tplBusy}
+                  className="h-9 shrink-0 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand text-white text-sm font-medium hover:bg-sidebar-soft transition disabled:opacity-50"
+                >
+                  {tplBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Speichern
+                </button>
+              </div>
+              {tplError && <p className="text-[11px] text-err">{tplError}</p>}
+            </div>
+          </div>
+        </>
+      )}
 
       {varMenuOpen && (
         <>

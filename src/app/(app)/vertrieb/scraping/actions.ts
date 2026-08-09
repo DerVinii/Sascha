@@ -9,6 +9,7 @@ import {
   organizations,
   leadColumns,
   leadLists,
+  campaignTemplates,
   pipelines,
   pipelineStages,
   deals,
@@ -98,6 +99,7 @@ import type {
   CampaignStep,
   CampaignSenderAccount,
   CampaignSetupInfo,
+  CampaignTemplate,
   SaveCampaignResult,
 } from "@/lib/scraping-types";
 
@@ -1857,6 +1859,92 @@ export async function getCampaignSetupAction(input: {
   });
 
   return { campaignId: list.campaignId, status, steps, accounts, preview };
+}
+
+// ---------------------------------------------------------------------------
+// Kampagnen-Vorlagen (gespeicherte Texte, ordnerübergreifend)
+// ---------------------------------------------------------------------------
+
+/** Rohwert aus der DB auf saubere Schritte bringen (JSONB ist untypisiert). */
+function toTemplateSteps(raw: unknown): CampaignStep[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s, i) => {
+    const o = (s ?? {}) as Record<string, unknown>;
+    const delay = Number(o.delayDays);
+    return {
+      subject: typeof o.subject === "string" ? o.subject : "",
+      body: typeof o.body === "string" ? o.body : "",
+      // Erster Schritt geht immer sofort raus; Follow-ups mindestens 1 Tag.
+      delayDays: i === 0 ? 0 : Number.isFinite(delay) ? Math.max(1, delay) : 3,
+    };
+  });
+}
+
+export async function listCampaignTemplatesAction(): Promise<CampaignTemplate[]> {
+  const org = await requireActiveOrg();
+  const rows = await db
+    .select()
+    .from(campaignTemplates)
+    .where(eq(campaignTemplates.orgId, org.id))
+    .orderBy(asc(campaignTemplates.name));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    steps: toTemplateSteps(r.steps),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+}
+
+/**
+ * Vorlage anlegen oder — bei gleichem Namen — überschreiben. Gespeichert wird
+ * nur die Copy: Absender, Filter und Live/Draft gehören zur jeweiligen Liste
+ * und sollen beim Anwenden einer Vorlage nicht mitwandern.
+ */
+export async function saveCampaignTemplateAction(input: {
+  name: string;
+  steps: CampaignStep[];
+}): Promise<{ template: CampaignTemplate | null; error: string | null }> {
+  const org = await requireActiveOrg();
+  const name = input.name.trim().slice(0, 120);
+  if (!name) return { template: null, error: "Bitte einen Namen eingeben." };
+
+  const steps = toTemplateSteps(input.steps);
+  if (!steps.some((s) => s.subject.trim() || s.body.trim())) {
+    return { template: null, error: "Es ist noch kein Text geschrieben." };
+  }
+
+  const [row] = await db
+    .insert(campaignTemplates)
+    .values({ orgId: org.id, name, steps })
+    .onConflictDoUpdate({
+      target: [campaignTemplates.orgId, campaignTemplates.name],
+      set: { steps, updatedAt: new Date() },
+    })
+    .returning();
+
+  return {
+    template: {
+      id: row.id,
+      name: row.name,
+      steps: toTemplateSteps(row.steps),
+      updatedAt: row.updatedAt.toISOString(),
+    },
+    error: null,
+  };
+}
+
+export async function deleteCampaignTemplateAction(input: {
+  id: string;
+}): Promise<void> {
+  const org = await requireActiveOrg();
+  await db
+    .delete(campaignTemplates)
+    .where(
+      and(
+        eq(campaignTemplates.id, input.id),
+        eq(campaignTemplates.orgId, org.id),
+      ),
+    );
 }
 
 export async function previewInstantlySendAction(input: {

@@ -303,6 +303,15 @@ export type CampaignStep = {
   delayDays: number;
 };
 
+/** Gespeicherter Satz Kampagnen-Texte, in jedem Ordner wiederverwendbar. */
+export type CampaignTemplate = {
+  id: string;
+  name: string;
+  steps: CampaignStep[];
+  /** ISO-Zeitpunkt der letzten Speicherung — im Menü als Datum sichtbar. */
+  updatedAt: string;
+};
+
 export type CampaignSenderAccount = {
   email: string;
   active: boolean;
