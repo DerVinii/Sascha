@@ -34,9 +34,12 @@ import type { LeadCell, LeadColumn } from "@/lib/scraping-types";
 const DEFAULT_REACHER_URL = "http://23.160.161.55:8080/v0/check_email";
 
 /** Timeout pro SMTP-Check. Reacher empfiehlt 60 s, aber im Serverless-Budget
- *  (45 s pro Hop) sind 15 s der Kompromiss — langsame Server werden als
- *  `unknown` verbucht und blockieren den Lauf nicht. */
-const CHECK_TIMEOUT_MS = 15_000;
+ *  (45 s pro Hop) sind 10 s der Kompromiss — langsame Server werden als
+ *  `unknown` verbucht und blockieren den Lauf nicht. Gemessen: ein einziger
+ *  trödelnder Mailserver (~10 s pro Antwort) hat eine 10-Zeilen-Liste von 47 s
+ *  auf 203 s gestreckt, weil die Liste erst „fertig" meldet, wenn auch die
+ *  letzte Zeile durch ist. */
+const CHECK_TIMEOUT_MS = 10_000;
 /** Pause zwischen zwei Checks (~1 Anfrage/Sekunde, Reacher-Empfehlung). */
 const SPACING_MS = 1_100;
 /** So viel Restzeit muss übrig sein, um noch einen Check zu starten. */
