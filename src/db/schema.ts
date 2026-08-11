@@ -117,6 +117,12 @@ export const leadLists = pgTable(
     pipelineId: uuid("pipeline_id").references((): AnyPgColumn => pipelines.id, {
       onDelete: "set null",
     }),
+    // Klassifizierung des Ordners (n:1 — ein Tag, beliebig viele Ordner).
+    // ON DELETE SET NULL: löscht man den Tag, verliert der Ordner nur seine
+    // Markierung und bleibt sonst unangetastet.
+    tagId: uuid("tag_id").references((): AnyPgColumn => leadListTags.id, {
+      onDelete: "set null",
+    }),
     // Hintergrund-Enrichment: gesetzt = "Update cells" läuft (server-seitig, bis geleert).
     enrichmentQueuedAt: timestamp("enrichment_queued_at", { withTimezone: true }),
     // Zeitpunkt des letzten Drain-Ticks — grobe Sperre gegen doppelte Läufe.
@@ -125,7 +131,42 @@ export const leadLists = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [index("lead_lists_org_idx").on(t.orgId)],
+  (t) => [
+    index("lead_lists_org_idx").on(t.orgId),
+    index("lead_lists_tag_idx").on(t.tagId),
+  ],
+);
+
+/**
+ * Tags zur Klassifizierung der Kampagnen-Ordner ("Nach Tag filtern" im Vertrieb).
+ *
+ * Bewusst eine eigene Tabelle und nicht das vorhandene `tags`: dort liegen die
+ * Kontakt-Tags, die unter Einstellungen → Tags gepflegt werden. Beides in einem
+ * Topf würde jede der beiden Oberflächen mit den Einträgen der anderen füllen.
+ *
+ * Tags leben unabhängig von den Ordnern — man kann einen anlegen, bevor ihn eine
+ * Kampagne benutzt (das Filter-Menü erlaubt das ausdrücklich).
+ */
+export const leadListTags = pgTable(
+  "lead_list_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Schlüssel aus LEAD_TAG_COLORS (siehe scraping-types.ts). */
+    color: text("color").default("slate").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("lead_list_tags_org_idx").on(t.orgId),
+    // Ein Name je Org, Groß-/Kleinschreibung egal: "Schulen" und "schulen"
+    // sollen derselbe Tag sein. Der Unique-Index steht als lower()-Ausdruck in
+    // scripts/apply-kampagnen-tags.mjs; hier nur als Dokumentation vermerkt.
+  ],
 );
 
 export const companies = pgTable(

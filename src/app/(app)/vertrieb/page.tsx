@@ -1,10 +1,13 @@
-import { listListsAction } from "./scraping/actions";
+import { listListsAction, listLeadTagsAction } from "./scraping/actions";
 import { FolderGrid } from "./_components/folder-grid";
 
 export const dynamic = "force-dynamic";
 
 export default async function VertriebPage() {
-  const lists = await listListsAction();
+  const [lists, tags] = await Promise.all([
+    listListsAction(),
+    listLeadTagsAction(),
+  ]);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl">
@@ -17,7 +20,7 @@ export default async function VertriebPage() {
         </p>
       </div>
 
-      <FolderGrid lists={lists} />
+      <FolderGrid lists={lists} tags={tags} />
     </div>
   );
 }

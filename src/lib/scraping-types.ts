@@ -234,11 +234,41 @@ export type RunBatchResult = {
   abortReason?: string | null;
 };
 
+// --- Kampagnen-Tags (Klassifizierung der Ordner) ---------------------------
+
+/**
+ * Feste Farbpalette für Tags. Fest deshalb, weil Tailwind die Klassennamen zur
+ * Bauzeit aus dem Quelltext liest: zusammengesetzte Namen wie `bg-${farbe}-500`
+ * landen nie im CSS. Die Zuordnung Farbe→Klassen steht in tag-badge.tsx.
+ */
+export const LEAD_TAG_COLORS = [
+  "blue",
+  "emerald",
+  "amber",
+  "violet",
+  "rose",
+  "cyan",
+  "slate",
+] as const;
+
+export type LeadTagColor = (typeof LEAD_TAG_COLORS)[number];
+
+export type LeadTag = {
+  id: string;
+  name: string;
+  color: LeadTagColor;
+};
+
+/** Tag samt Anzahl der so markierten Kampagnen — für die Auswahllisten. */
+export type LeadTagWithCount = LeadTag & { count: number };
+
 export type LeadList = {
   id: string;
   name: string;
   count: number;
   createdAt?: string | null;
+  /** Klassifizierung des Ordners; null = ohne Tag. */
+  tag?: LeadTag | null;
 };
 
 // --- Instantly (Phase 2: Liste → Kampagne) ---------------------------------

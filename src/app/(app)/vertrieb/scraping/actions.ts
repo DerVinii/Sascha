@@ -9,6 +9,7 @@ import {
   organizations,
   leadColumns,
   leadLists,
+  leadListTags,
   campaignTemplates,
   pipelines,
   pipelineStages,
@@ -82,6 +83,7 @@ import {
   EMAIL_FINDER_KEY,
   PIPELINE_STAGE_KEY,
   SALUTATION_KEY,
+  LEAD_TAG_COLORS,
 } from "@/lib/scraping-types";
 import type {
   LeadColumn,
@@ -89,6 +91,9 @@ import type {
   LeadColumnKind,
   LeadDataType,
   LeadList,
+  LeadTag,
+  LeadTagColor,
+  LeadTagWithCount,
   LeadTableData,
   LeadView,
   RunBatchResult,
@@ -1081,8 +1086,13 @@ export async function listListsAction(): Promise<LeadList[]> {
       id: leadLists.id,
       name: leadLists.name,
       createdAt: leadLists.createdAt,
+      tagId: leadListTags.id,
+      tagName: leadListTags.name,
+      tagColor: leadListTags.color,
     })
     .from(leadLists)
+    // Left Join: Ordner ohne Tag müssen mitkommen.
+    .leftJoin(leadListTags, eq(leadListTags.id, leadLists.tagId))
     .where(eq(leadLists.orgId, org.id))
     .orderBy(desc(leadLists.createdAt));
 
@@ -1104,7 +1114,138 @@ export async function listListsAction(): Promise<LeadList[]> {
     name: l.name,
     count: countByList.get(l.id) ?? 0,
     createdAt: l.createdAt ? new Date(l.createdAt).toISOString() : null,
+    tag:
+      l.tagId && l.tagName
+        ? { id: l.tagId, name: l.tagName, color: tagColor(l.tagColor) }
+        : null,
   }));
+}
+
+// ============================================================================
+// KAMPAGNEN-TAGS
+// ============================================================================
+
+/** Unbekannte/alte Farbwerte aus der DB fallen auf "slate" zurück. */
+function tagColor(wert: string | null | undefined): LeadTagColor {
+  return LEAD_TAG_COLORS.includes(wert as LeadTagColor)
+    ? (wert as LeadTagColor)
+    : "slate";
+}
+
+export async function listLeadTagsAction(): Promise<LeadTagWithCount[]> {
+  const org = await requireActiveOrg();
+
+  const rows = await db
+    .select({
+      id: leadListTags.id,
+      name: leadListTags.name,
+      color: leadListTags.color,
+    })
+    .from(leadListTags)
+    .where(eq(leadListTags.orgId, org.id))
+    .orderBy(asc(leadListTags.name));
+
+  const counts = await db
+    .select({ tagId: leadLists.tagId, n: sql<number>`count(*)::int` })
+    .from(leadLists)
+    .where(and(eq(leadLists.orgId, org.id), isNotNull(leadLists.tagId)))
+    .groupBy(leadLists.tagId);
+
+  const byTag = new Map<string, number>();
+  for (const c of counts) if (c.tagId) byTag.set(c.tagId, c.n);
+
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: tagColor(t.color),
+    count: byTag.get(t.id) ?? 0,
+  }));
+}
+
+/**
+ * Legt einen Tag an — oder gibt den bestehenden zurück, wenn der Name (ohne
+ * Rücksicht auf Groß-/Kleinschreibung) schon vergeben ist. Kein Fehler: wer den
+ * Namen eines vorhandenen Tags tippt, meint diesen Tag.
+ */
+export async function createLeadTagAction(input: {
+  name: string;
+}): Promise<LeadTag> {
+  const org = await requireActiveOrg();
+  const name = input.name?.trim();
+  if (!name) throw new Error("Bitte einen Namen für den Tag eingeben.");
+  if (name.length > 40) throw new Error("Der Tag-Name ist zu lang (max. 40 Zeichen).");
+
+  const [vorhanden] = await db
+    .select({
+      id: leadListTags.id,
+      name: leadListTags.name,
+      color: leadListTags.color,
+    })
+    .from(leadListTags)
+    .where(
+      and(
+        eq(leadListTags.orgId, org.id),
+        sql`lower(${leadListTags.name}) = lower(${name})`,
+      ),
+    );
+  if (vorhanden)
+    return {
+      id: vorhanden.id,
+      name: vorhanden.name,
+      color: tagColor(vorhanden.color),
+    };
+
+  // Farbe reihum vergeben, damit sich neue Tags optisch voneinander abheben.
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(leadListTags)
+    .where(eq(leadListTags.orgId, org.id));
+  const color = LEAD_TAG_COLORS[n % LEAD_TAG_COLORS.length];
+
+  const [row] = await db
+    .insert(leadListTags)
+    .values({ orgId: org.id, name, color })
+    .returning({ id: leadListTags.id });
+
+  revalidatePath("/vertrieb");
+  return { id: row.id, name, color };
+}
+
+/** Ordner einem Tag zuordnen; tagId = null entfernt die Markierung. */
+export async function setListTagAction(input: {
+  listId: string;
+  tagId: string | null;
+}): Promise<void> {
+  const org = await requireActiveOrg();
+
+  // Fremde Tag-ID abwehren: der Tag muss zur selben Organisation gehören.
+  if (input.tagId) {
+    const [tag] = await db
+      .select({ id: leadListTags.id })
+      .from(leadListTags)
+      .where(
+        and(eq(leadListTags.id, input.tagId), eq(leadListTags.orgId, org.id)),
+      );
+    if (!tag) throw new Error("Tag nicht gefunden.");
+  }
+
+  await db
+    .update(leadLists)
+    .set({ tagId: input.tagId })
+    .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+  revalidatePath("/vertrieb");
+}
+
+/**
+ * Löscht einen Tag organisationsweit. Die Kampagnen bleiben unangetastet und
+ * verlieren nur ihre Markierung (tag_id → NULL per ON DELETE SET NULL).
+ */
+export async function deleteLeadTagAction(input: { id: string }): Promise<void> {
+  const org = await requireActiveOrg();
+  await db
+    .delete(leadListTags)
+    .where(and(eq(leadListTags.id, input.id), eq(leadListTags.orgId, org.id)));
+  revalidatePath("/vertrieb");
 }
 
 export async function renameListAction(input: {
