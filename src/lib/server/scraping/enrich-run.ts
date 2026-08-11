@@ -22,9 +22,16 @@ import {
 } from "./lead-columns";
 import { runProvider } from "./providers";
 import { runAiColumn } from "./ai-column";
-import { emailFinderMissingRows, runEmailFinderPool } from "./reacher";
 import {
+  emailFinderImpossibleRows,
+  emailFinderMissingRows,
+  markEmailFinderImpossible,
+  runEmailFinderPool,
+} from "./reacher";
+import {
+  markSalutationImpossible,
   runSalutationForRow,
+  salutationImpossibleRows,
   salutationMissingRows,
   SALUTATION_KEY,
 } from "./salutation";
@@ -274,9 +281,14 @@ export async function pendingCountForList(
     // Zeilen, die erst durch Phase 1 einen Namen bekommen, sind hier noch nicht
     // mitgezählt — der Wert ist eine Untergrenze und wächst im Lauf nach.
     pending += salutationMissingRows(anredeColumn, all).length;
+    // Nicht befüllbare Zellen zählen mit: der Lauf erledigt sie, indem er sie
+    // auf „—" setzt. Ohne sie hier zu zählen bliebe eine fertig angereicherte
+    // Liste bei "nichts zu tun" stehen und würde nie markiert.
+    pending += salutationImpossibleRows(anredeColumn, all).length;
   }
   if (emailColumn) {
     pending += emailFinderMissingRows(emailColumn, columns, all, null).length;
+    pending += emailFinderImpossibleRows(emailColumn, columns, all).length;
   }
   return pending;
 }
@@ -411,6 +423,23 @@ export async function drainQueuedLists(opts: {
     // das ganze Zeitbudget schlucken kann und die Anrede sonst nie drankäme.
     if (anredeColumn && !rateLimited && !listRemaining) {
       const all = await loadLeadRows(list.orgId, list.id);
+
+      // Zeilen ohne Namen können nie eine Anrede bekommen. Sichtbar auf „—"
+      // setzen, sonst stehen sie dauerhaft leer da und wirken wie „noch nicht
+      // dran" — und „Fehlende ausführen" würde sie immer wieder mitnehmen.
+      const unmoeglich = salutationImpossibleRows(anredeColumn, all);
+      let markiert = 0;
+      for (; markiert < unmoeglich.length; markiert++) {
+        if (Date.now() >= deadline) break;
+        await markSalutationImpossible(
+          list.orgId,
+          anredeColumn,
+          unmoeglich[markiert].src,
+          unmoeglich[markiert].grund,
+        );
+      }
+      if (markiert < unmoeglich.length) listRemaining = true;
+
       const todo = salutationMissingRows(anredeColumn, all);
 
       let i = 0;
@@ -436,6 +465,23 @@ export async function drainQueuedLists(opts: {
     // frisch geladen, weil Phase 1 gerade Namen zurückgeschrieben hat.
     if (emailColumn && !rateLimited && !listRemaining) {
       const all = await loadLeadRows(list.orgId, list.id);
+
+      // Gleiches Prinzip wie bei der Anrede: fehlt Name oder Webseite, kann
+      // diese Zeile nie geprüft werden -> sichtbar „—" statt Dauer-Leerstand.
+      // Läuft NACH Phase 1, die Namen also schon geschrieben hat.
+      const unmoeglich = emailFinderImpossibleRows(emailColumn, columns, all);
+      let markiert = 0;
+      for (; markiert < unmoeglich.length; markiert++) {
+        if (Date.now() >= deadline) break;
+        await markEmailFinderImpossible(
+          list.orgId,
+          emailColumn,
+          unmoeglich[markiert].src,
+          unmoeglich[markiert].grund,
+        );
+      }
+      if (markiert < unmoeglich.length) listRemaining = true;
+
       const todo = emailFinderMissingRows(
         emailColumn,
         columns,

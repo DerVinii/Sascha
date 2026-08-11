@@ -271,10 +271,88 @@ function finderInputs(column: LeadColumn, src: RowSources) {
   };
 }
 
+/**
+ * Warum eine Zeile den Workflow NICHT bekommen kann — `null` heißt: sie kann.
+ * Ohne Namen lassen sich keine Varianten bilden, ohne Webseite fehlt die Domain,
+ * an die sie gehängt würden. Der Text landet als Hinweis in der Zelle.
+ */
+export function emailFinderBlocker(
+  column: LeadColumn,
+  src: RowSources,
+): string | null {
+  const { vorname, nachname, webseite } = finderInputs(column, src);
+  const fehlt: string[] = [];
+  if (!vorname) fehlt.push("Vorname");
+  if (!nachname) fehlt.push("Nachname");
+  if (!webseite) fehlt.push("Webseite");
+  if (fehlt.length === 0) return null;
+  const liste =
+    fehlt.length > 1
+      ? `${fehlt.slice(0, -1).join(", ")} und ${fehlt[fehlt.length - 1]}`
+      : fehlt[0];
+  return fehlt.length > 1
+    ? `${liste} fehlen — ohne diese Angaben lassen sich keine Adress-Varianten prüfen.`
+    : `${liste} fehlt — ohne diese Angabe lassen sich keine Adress-Varianten prüfen.`;
+}
+
 /** Nur Leads mit Vorname + Nachname + Webseite bekommen den Workflow. */
 export function emailFinderReady(column: LeadColumn, src: RowSources): boolean {
-  const { vorname, nachname, webseite } = finderInputs(column, src);
-  return !!(vorname && nachname && webseite);
+  return emailFinderBlocker(column, src) === null;
+}
+
+/**
+ * Zeilen, die den Workflow nie bekommen können (Name oder Webseite fehlt) und
+ * deren Zelle noch unberührt ist. Der „Update cells"-Lauf markiert sie sichtbar
+ * mit „—", statt sie dauerhaft leer stehen zu lassen — siehe
+ * salutationImpossibleRows für dieselbe Überlegung bei der Anrede.
+ */
+export function emailFinderImpossibleRows(
+  column: LeadColumn,
+  columns: LeadColumn[],
+  all: RowSources[],
+): { src: RowSources; grund: string }[] {
+  const onlyRunIf = column.config.runSettings?.onlyRunIf;
+  const out: { src: RowSources; grund: string }[] = [];
+  for (const src of all) {
+    // Zeilen, die der Nutzer per „Only run if" bewusst ausklammert, bleiben
+    // leer: die sind nicht unmöglich, sondern nicht gewollt.
+    if (!passesOnlyRunIf(onlyRunIf, src.contact)) continue;
+    const grund = emailFinderBlocker(column, src);
+    if (!grund) continue;
+    const cell = buildCells(columns, src)[column.key];
+    // Nur unberührte Zellen — nie einen Lauf oder eine Handeingabe überschreiben.
+    if (cell && cell.status !== "empty") continue;
+    out.push({ src, grund });
+  }
+  return out;
+}
+
+/** Setzt eine nicht prüfbare Zelle auf „—" — ohne SMTP-Check, reiner Schreibvorgang. */
+export async function markEmailFinderImpossible(
+  orgId: string,
+  column: LeadColumn,
+  src: RowSources,
+  grund: string,
+): Promise<void> {
+  await db
+    .update(contacts)
+    .set({
+      customFields: cellPatch(column.key, {
+        status: "not_found",
+        provider: null,
+        runAt: new Date().toISOString(),
+        error: null,
+        value: "",
+        raw: {
+          email: null,
+          domain: null,
+          getestet: 0,
+          varianten: 0,
+          hinweis: grund,
+        },
+      }),
+    })
+    .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
 }
 
 /** Zelle braucht (noch) einen Lauf: leer, Fehler oder unterbrochener Teil-Lauf. */
@@ -418,13 +496,13 @@ export async function runEmailFinderForRow(
     return { status: "aborted", reason };
   };
 
+  // Fehlende Eingaben sind kein Fehler, sondern schlicht nicht machbar: die
+  // Zelle bekommt „—" statt Rot. Als Fehler wäre sie bei "Fehlende ausführen"
+  // wieder dabei und würde bei jedem Klick erneut scheitern.
+  const blocker = emailFinderBlocker(column, src);
+  if (blocker) return finish("not_found", { hinweis: blocker, domain: null });
+
   const { vorname, nachname, webseite } = finderInputs(column, src);
-  if (!vorname || !nachname || !webseite) {
-    return finish("error", {
-      error:
-        "Vorname, Nachname und Webseite werden benötigt, um E-Mail-Varianten zu testen.",
-    });
-  }
 
   const domain = extractEmailDomain(webseite);
   if (!domain) {

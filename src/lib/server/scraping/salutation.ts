@@ -97,6 +97,62 @@ export function salutationMissingRows(
   });
 }
 
+/** Welcher Namensteil fehlt — wird als Hinweis in der Zelle hinterlegt. */
+function fehlenderNamensteil(contact: RowSources["contact"]): string {
+  const vorname = !!contact.firstName?.trim();
+  const nachname = !!contact.lastName?.trim();
+  if (!vorname && !nachname)
+    return "Kein Name hinterlegt — ohne Vor- und Nachnamen lässt sich keine Anrede bilden.";
+  if (!vorname)
+    return "Kein Vorname hinterlegt — ohne ihn ist das Geschlecht nicht bestimmbar.";
+  return "Kein Nachname hinterlegt — die Anrede besteht aus Herr/Frau plus Nachname.";
+}
+
+/**
+ * Zeilen, für die es NIE eine Anrede geben kann: ohne Vor- UND Nachnamen lässt
+ * sich keine formulieren.
+ *
+ * Unmarkiert blieben diese Zellen dauerhaft leer und sähen aus wie „noch nicht
+ * dran". Der „Update cells"-Lauf setzt sie deshalb sichtbar auf „—" (Status
+ * not_found) — damit ist auf einen Blick klar, dass hier nichts mehr kommt, und
+ * „Fehlende ausführen" lässt sie später in Ruhe.
+ */
+export function salutationImpossibleRows(
+  column: LeadColumn,
+  all: RowSources[],
+): { src: RowSources; grund: string }[] {
+  // Eigener KI-Prompt -> die Spalte gehört dem Nutzer, nicht diesem Lauf.
+  if (column.config.ai) return [];
+  const out: { src: RowSources; grund: string }[] = [];
+  for (const src of all) {
+    if (salutationReady(src.contact)) continue;
+    const cell = storedCell(src, column.key);
+    // Nur unberührte Zellen markieren — nie einen Lauf oder eine Handeingabe
+    // überschreiben.
+    if (cell && (cell.status ?? "empty") !== "empty") continue;
+    if (cell?.value != null && String(cell.value).trim() !== "") continue;
+    out.push({ src, grund: fehlenderNamensteil(src.contact) });
+  }
+  return out;
+}
+
+/** Setzt eine nicht befüllbare Zelle auf „—" — ohne KI-Aufruf, reiner Schreibvorgang. */
+export async function markSalutationImpossible(
+  orgId: string,
+  column: LeadColumn,
+  src: RowSources,
+  grund: string,
+): Promise<void> {
+  await writeCell(orgId, column.key, src.contact.id, {
+    status: "not_found",
+    provider: null,
+    runAt: new Date().toISOString(),
+    error: null,
+    value: "",
+    raw: { hinweis: grund },
+  });
+}
+
 async function writeCell(
   orgId: string,
   columnKey: string,
