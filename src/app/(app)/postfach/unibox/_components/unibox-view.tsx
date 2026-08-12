@@ -447,24 +447,31 @@ export function UniboxView({
 
               <div className="border-t border-line p-3">
                 {selected.latestIncoming ? (
-                  <div className="flex items-end gap-2">
+                  /* Absender-Zeile und Senden-Knopf stehen ÜBER dem Feld —
+                     daneben bliebe dem Textfeld auf dem Handy nur ein
+                     schmaler Rest, in dem man ständig scrollen müsste. */
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-xs text-sub">
+                        Antworten als{" "}
+                        {selected.latestIncoming.eaccount ?? "…"}
+                      </span>
+                      <button
+                        onClick={handleSend}
+                        disabled={isSending || !replyText.trim()}
+                        className="h-9 shrink-0 px-4 inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition disabled:opacity-50"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {isSending ? "Sendet …" : "Senden"}
+                      </button>
+                    </div>
                     <textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
-                      placeholder={`Antworten als ${
-                        selected.latestIncoming.eaccount ?? "…"
-                      }`}
+                      placeholder="Deine Antwort …"
                       rows={3}
-                      className="flex-1 rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink placeholder:text-sub resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
+                      className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink placeholder:text-sub resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
                     />
-                    <button
-                      onClick={handleSend}
-                      disabled={isSending || !replyText.trim()}
-                      className="h-9 px-4 inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition disabled:opacity-50"
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      {isSending ? "Sendet …" : "Senden"}
-                    </button>
                   </div>
                 ) : (
                   <p className="text-xs text-sub">
