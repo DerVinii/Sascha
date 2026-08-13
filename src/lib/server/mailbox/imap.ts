@@ -18,6 +18,7 @@ import {
 } from "mailparser";
 import { requireMailboxConfig, type MailboxConfig } from "./config";
 import type {
+  DraftContent,
   MailAddress,
   MailAttachment,
   MailboxFolder,
@@ -674,5 +675,144 @@ export async function appendToSent(raw: Buffer): Promise<void> {
       list.find((f) => /^sent/i.test(f.name) || /gesendet/i.test(f.name));
     if (!sent) return;
     await c.append(sent.path, raw, ["\\Seen"]);
+  });
+}
+
+// --- Entwürfe ----------------------------------------------------------------
+
+function findDraftsFolder(list: ListResponse[]): ListResponse | undefined {
+  return (
+    list.find((f) => f.specialUse === "\\Drafts") ??
+    list.find((f) => /^drafts?$/i.test(f.name) || /entw[uü]rfe/i.test(f.name))
+  );
+}
+
+/**
+ * Entwurf in den „Entwürfe"-Ordner schreiben und die vorherige Fassung (`prev`)
+ * entfernen — so liegt, wie bei Gmail/Outlook, stets nur EINE aktuelle Version.
+ * Gibt Ordnerpfad + neue UID zurück (uid 0, falls der Server keine ermitteln
+ * lässt); null, wenn es keinen Entwürfe-Ordner gibt.
+ */
+export async function saveDraft(
+  raw: Buffer,
+  messageId: string | null,
+  prev?: { path: string; uid: number } | null,
+): Promise<{ path: string; uid: number } | null> {
+  return withImap(async (c) => {
+    const list = await c.list();
+    const drafts = findDraftsFolder(list);
+    if (!drafts) return null;
+
+    const res = await c.append(drafts.path, raw, ["\\Draft", "\\Seen"]);
+    let newUid = res && res.uid ? res.uid : 0;
+
+    // Server ohne UIDPLUS: neue UID über die eindeutige Message-ID nachschlagen.
+    if (!newUid && messageId) {
+      const lock = await c.getMailboxLock(drafts.path);
+      try {
+        const found = await c.search(
+          { header: { "message-id": messageId } },
+          { uid: true },
+        );
+        if (Array.isArray(found) && found.length) newUid = Math.max(...found);
+      } catch {
+        /* dann eben ohne UID — der Client legt notfalls eine neue Fassung an */
+      } finally {
+        lock.release();
+      }
+    }
+
+    // Vorherige Fassung erst NACH dem Append löschen (best effort), damit ein
+    // Fehler hier nie den frisch gespeicherten Entwurf gefährdet.
+    if (prev?.uid) {
+      try {
+        const lock = await c.getMailboxLock(prev.path);
+        try {
+          await c.messageDelete(String(prev.uid), { uid: true });
+        } finally {
+          lock.release();
+        }
+      } catch {
+        /* alte Fassung schon weg? egal */
+      }
+    }
+
+    return { path: drafts.path, uid: newUid };
+  });
+}
+
+/** Einen Entwurf endgültig entfernen (nach dem Senden oder Verwerfen). */
+export async function deleteDraft(path: string, uid: number): Promise<void> {
+  if (!uid) return;
+  await withImap(async (c) => {
+    const lock = await c.getMailboxLock(path);
+    try {
+      await c.messageDelete(String(uid), { uid: true });
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Einen Entwurf zum Weiterbearbeiten laden: Kopfzeilen, Editor-HTML und Anhänge
+ * (als base64, damit der Composer daraus wieder Dateien erzeugen kann). Anders
+ * als getMessage werden dabei KEINE Flags verändert.
+ */
+export async function getDraft(
+  folder: string,
+  uid: number,
+): Promise<DraftContent> {
+  return withImap(async (c) => {
+    const lock = await c.getMailboxLock(folder);
+    try {
+      const msg = await c.fetchOne(
+        String(uid),
+        { uid: true, source: true },
+        { uid: true },
+      );
+      if (!msg || !msg.source) throw new Error("Entwurf nicht gefunden");
+      const parsed = await simpleParser(msg.source);
+
+      const attachments = (parsed.attachments ?? [])
+        .filter((att) => {
+          const disp = (att.contentDisposition ?? "").toLowerCase();
+          // Inline-/Signaturbilder (cid:) bleiben im HTML — nicht als Datei.
+          return disp === "attachment" || !att.related;
+        })
+        .map((att, i) => ({
+          filename: att.filename || `anhang-${i + 1}`,
+          contentType: att.contentType || "application/octet-stream",
+          base64: att.content.toString("base64"),
+        }));
+
+      const html = parsed.html
+        ? embedRelatedImages(parsed.html, parsed.attachments)
+        : (parsed.textAsHtml ?? "");
+
+      const references = Array.isArray(parsed.references)
+        ? parsed.references
+        : parsed.references
+          ? [parsed.references]
+          : [];
+
+      const joinAddr = (a: Parameters<typeof addrObjToList>[0]) =>
+        addrObjToList(a)
+          .map((x) => x.address)
+          .join(", ");
+
+      return {
+        to: joinAddr(parsed.to),
+        cc: joinAddr(parsed.cc),
+        bcc: joinAddr(parsed.bcc),
+        subject: parsed.subject ?? "",
+        bodyHtml: html,
+        inReplyTo: parsed.inReplyTo ?? null,
+        references,
+        attachments,
+      };
+    } finally {
+      lock.release();
+    }
   });
 }

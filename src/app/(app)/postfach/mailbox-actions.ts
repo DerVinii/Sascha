@@ -3,17 +3,25 @@
 import {
   bulkDeleteFolder,
   bulkDeleteMessages,
+  deleteDraft,
   deleteMessage,
+  getDraft,
   getMessage,
   listFolders,
   listMessages,
   moveMessage,
+  saveDraft,
   setFlagged,
   setSeen,
 } from "@/lib/server/mailbox/imap";
-import { sendMail, type OutgoingAttachment } from "@/lib/server/mailbox/smtp";
+import {
+  buildOutgoingMime,
+  sendMail,
+  type OutgoingAttachment,
+} from "@/lib/server/mailbox/smtp";
 import { inlineDataImages } from "@/lib/server/mailbox/inline-images";
 import type {
+  DraftContent,
   MailboxFolder,
   MailboxListItem,
   MailboxMessage,
@@ -167,4 +175,69 @@ export async function sendMailAction(formData: FormData): Promise<void> {
     references,
     attachments: attachments.length ? attachments : undefined,
   });
+}
+
+/**
+ * Entwurf speichern (Auto-Save aus dem Composer). Legt das Editor-HTML
+ * unverändert im „Entwürfe"-Ordner ab — die Sende-Aufbereitung
+ * (inlineDataImages / wrapMailDocument) läuft bewusst erst beim echten Versand.
+ * Eine mitgegebene Vorfassung (prevPath/prevUid) wird ersetzt.
+ */
+export async function saveDraftAction(
+  formData: FormData,
+): Promise<{ path: string; uid: number } | null> {
+  const to = String(formData.get("to") ?? "").trim();
+  const cc = String(formData.get("cc") ?? "").trim();
+  const bcc = String(formData.get("bcc") ?? "").trim();
+  const subject = String(formData.get("subject") ?? "").trim();
+  const bodyHtml = String(formData.get("bodyHtml") ?? "");
+  const bodyText = String(formData.get("body") ?? "");
+  const inReplyTo = String(formData.get("inReplyTo") ?? "").trim() || null;
+  const referencesRaw = String(formData.get("references") ?? "").trim();
+  const references = referencesRaw ? referencesRaw.split(/\s+/) : null;
+  const prevPath = String(formData.get("prevPath") ?? "").trim();
+  const prevUid = Number(formData.get("prevUid") ?? "") || 0;
+  const prev = prevPath && prevUid ? { path: prevPath, uid: prevUid } : null;
+
+  const attachments: OutgoingAttachment[] = [];
+  for (const file of formData.getAll("files")) {
+    if (file instanceof File && file.size > 0) {
+      const buf = Buffer.from(await file.arrayBuffer());
+      attachments.push({
+        filename: file.name,
+        content: buf,
+        contentType: file.type || undefined,
+      });
+    }
+  }
+
+  const { raw, messageId } = await buildOutgoingMime({
+    to,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
+    subject,
+    text: bodyText,
+    html: bodyHtml,
+    inReplyTo,
+    references,
+    attachments: attachments.length ? attachments : undefined,
+  });
+
+  return saveDraft(raw, messageId, prev);
+}
+
+/** Entwurf verwerfen/entfernen (z. B. nach dem Senden). */
+export async function deleteDraftAction(input: {
+  path: string;
+  uid: number;
+}): Promise<void> {
+  await deleteDraft(input.path, input.uid);
+}
+
+/** Einen Entwurf zum Weiterbearbeiten in den Composer laden. */
+export async function openDraftAction(input: {
+  folder: string;
+  uid: number;
+}): Promise<DraftContent> {
+  return getDraft(input.folder, input.uid);
 }

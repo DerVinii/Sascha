@@ -34,12 +34,23 @@ export type OutgoingMail = {
   attachments?: OutgoingAttachment[];
 };
 
-export async function sendMail(mail: OutgoingMail): Promise<void> {
+/**
+ * MIME einmal bauen (Stream-Transport, gepuffert). Dasselbe Rohformat dient dem
+ * Versand, der „Gesendet"-Ablage UND den Entwürfen. `messageId` wird als
+ * Fallback zurückgegeben, um einen frisch angehängten Entwurf auf Servern ohne
+ * UIDPLUS über die Message-ID wiederzufinden.
+ */
+export async function buildOutgoingMime(mail: OutgoingMail) {
   const cfg = requireMailboxConfig();
-
-  const common = {
+  const builder = nodemailer.createTransport({
+    streamTransport: true,
+    buffer: true,
+    newline: "crlf",
+  });
+  const built = await builder.sendMail({
     from: cfg.email,
-    to: mail.to,
+    // Entwürfe dürfen (noch) ohne Empfänger sein — dann bleibt der To-Header weg.
+    to: mail.to || undefined,
     cc: mail.cc || undefined,
     bcc: mail.bcc || undefined,
     subject: mail.subject,
@@ -48,16 +59,19 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
     inReplyTo: mail.inReplyTo || undefined,
     references: mail.references?.length ? mail.references.join(" ") : undefined,
     attachments: mail.attachments,
-  };
-
-  // 1) MIME einmal bauen (Stream-Transport, gepuffert) — für Versand UND Ablage.
-  const builder = nodemailer.createTransport({
-    streamTransport: true,
-    buffer: true,
-    newline: "crlf",
   });
-  const built = await builder.sendMail(common);
-  const raw = (built as unknown as { message: Buffer }).message;
+  return {
+    raw: (built as unknown as { message: Buffer }).message,
+    envelope: built.envelope,
+    messageId: built.messageId,
+  };
+}
+
+export async function sendMail(mail: OutgoingMail): Promise<void> {
+  const cfg = requireMailboxConfig();
+
+  // 1) MIME bauen — dasselbe Rohformat für Versand UND „Gesendet"-Ablage.
+  const { raw, envelope } = await buildOutgoingMime(mail);
 
   // 2) Über SMTP versenden (vorgefertigtes MIME).
   const smtp = nodemailer.createTransport({
@@ -66,7 +80,7 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
     secure: cfg.smtpPort === 465, // 465 = implizites TLS, 587 = STARTTLS
     auth: { user: cfg.email, pass: cfg.password },
   });
-  await smtp.sendMail({ envelope: built.envelope, raw });
+  await smtp.sendMail({ envelope, raw });
 
   // 3) Kopie in „Gesendet" ablegen (Fehler hier dürfen den Versand nicht kippen).
   try {

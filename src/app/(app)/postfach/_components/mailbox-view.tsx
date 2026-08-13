@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   Inbox,
   Send,
@@ -28,6 +35,7 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  Check,
 } from "lucide-react";
 import {
   addressListText,
@@ -35,6 +43,7 @@ import {
   folderLabel,
   folderSortRank,
   formatBytes,
+  isDraftsFolder,
   type MailboxFolder,
   type MailboxListItem,
   type MailboxMessage,
@@ -51,11 +60,14 @@ import { SignatureDialog } from "./signature-dialog";
 import {
   bulkDeleteAction,
   bulkDeleteFolderAction,
+  deleteDraftAction,
   deleteMessageAction,
   listFoldersAction,
   listMessagesAction,
   moveMessageAction,
+  openDraftAction,
   openMessageAction,
+  saveDraftAction,
   sendMailAction,
   setSeenAction,
   toggleFlagAction,
@@ -119,6 +131,14 @@ type ComposerState = {
   quoteHtml: string;
   inReplyTo: string | null;
   references: string[] | null;
+  // --- Wiederaufnahme eines gespeicherten Entwurfs ---
+  /** Fertiges Editor-HTML statt quote+Signatur (nur beim Öffnen aus „Entwürfe"). */
+  bodyHtml?: string;
+  /** Ordner + UID des zugrunde liegenden Entwurfs (falls schon gespeichert). */
+  draftPath?: string | null;
+  draftUid?: number | null;
+  /** Aus dem Entwurf wiederhergestellte Anhänge. */
+  initialFiles?: File[];
 };
 
 export function MailboxView({
@@ -384,6 +404,12 @@ export function MailboxView({
   }
 
   function openItem(item: MailboxListItem) {
+    // Im Entwürfe-Ordner öffnet ein Klick den Entwurf zum Weiterschreiben im
+    // Composer (statt der schreibgeschützten Leseansicht).
+    if (isDraftsFolder(activeFolderObj)) {
+      openDraft(item);
+      return;
+    }
     setSelectedUid(item.uid);
     setError(null);
     const wasUnread = !item.seen;
@@ -402,6 +428,41 @@ export function MailboxView({
         setOpened(msg);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Öffnen fehlgeschlagen");
+      }
+    });
+  }
+
+  /** Einen Entwurf aus „Entwürfe" laden und im Composer weiterschreiben. */
+  function openDraft(item: MailboxListItem) {
+    setSelectedUid(item.uid);
+    setError(null);
+    startOpen(async () => {
+      try {
+        const d = await openDraftAction({ folder: activeFolder, uid: item.uid });
+        const initialFiles = d.attachments.map((a) =>
+          base64ToFile(a.base64, a.filename, a.contentType),
+        );
+        setComposer({
+          title: "Entwurf",
+          to: d.to,
+          cc: d.cc,
+          bcc: d.bcc,
+          subject: d.subject,
+          quoteHtml: "",
+          inReplyTo: d.inReplyTo,
+          references: d.references.length ? d.references : null,
+          bodyHtml: d.bodyHtml,
+          draftPath: activeFolder,
+          draftUid: item.uid,
+          initialFiles,
+        });
+        setSelectedUid(null);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Entwurf konnte nicht geöffnet werden",
+        );
       }
     });
   }
@@ -872,7 +933,13 @@ export function MailboxView({
           senderEmail={senderEmail}
           signatures={signatures}
           onEditSignatures={() => setSignatureDialog(true)}
-          onClose={() => setComposer(null)}
+          onClose={() => {
+            // Beim Schließen aus dem Entwürfe-Ordner die Liste auffrischen, damit
+            // ein neuer/aktualisierter Entwurf sofort erscheint.
+            const wasDrafts = isDraftsFolder(activeFolderObj);
+            setComposer(null);
+            if (wasDrafts) refresh();
+          }}
           onSent={() => {
             setComposer(null);
             refresh();
@@ -1433,6 +1500,51 @@ function filesFromDrop(dt: DataTransfer): { files: File[]; folders: number } {
   return { files, folders };
 }
 
+/**
+ * Stabiler Fingerabdruck des Entwurfsstands. Zwei gleiche Abdrücke ⇒ nichts hat
+ * sich geändert ⇒ kein erneutes Speichern. Dateien fließen über Name/Größe/Datum
+ * ein (Inhalt wird nicht gehasht — für die Änderungserkennung genügt das).
+ */
+function draftSnapshot(v: {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  body: string;
+  files: File[];
+}): string {
+  return JSON.stringify([
+    v.to,
+    v.cc,
+    v.bcc,
+    v.subject,
+    v.body,
+    v.files.map((f) => `${f.name}:${f.size}:${f.lastModified}`),
+  ]);
+}
+
+/** Base64 (aus einem geladenen Entwurf) zurück in ein File-Objekt wandeln. */
+function base64ToFile(b64: string, name: string, type: string): File {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], name, { type: type || "application/octet-stream" });
+}
+
+/** Im gespeicherten Entwurf steckende Signatur-Kennung auslesen (für die Vorauswahl). */
+function detectSignatureId(html: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return (
+      doc.querySelector(`[${SIGNATURE_ATTR}]`)?.getAttribute(SIGNATURE_ATTR) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function Composer({
   state,
   senderEmail,
@@ -1454,17 +1566,25 @@ function Composer({
   const [showCc, setShowCc] = useState(Boolean(state.cc || state.bcc));
   const [subject, setSubject] = useState(state.subject);
 
-  // Ohne eigene Standardauswahl: die erste Signatur ist vorbelegt und lässt
-  // sich unten im Entwurf jederzeit wechseln oder abwählen.
-  const initialSignature = signatures[0] ?? null;
+  // Wiederaufgenommener Entwurf: das HTML steht schon fest (inkl. Signatur), es
+  // wird kein frisches Grundgerüst gebaut. Bei neuer Mail ist die erste Signatur
+  // vorbelegt und lässt sich unten jederzeit wechseln oder abwählen.
+  const reopened = typeof state.bodyHtml === "string";
+  const initialSignature = reopened
+    ? (signatures.find(
+        (s) => s.id === detectSignatureId(state.bodyHtml as string),
+      ) ?? null)
+    : (signatures[0] ?? null);
 
   const [signatureId, setSignatureId] = useState<string | null>(
     initialSignature?.id ?? null,
   );
   const [body, setBody] = useState(() =>
-    initialBody(state.quoteHtml, initialSignature),
+    reopened
+      ? (state.bodyHtml as string)
+      : initialBody(state.quoteHtml, initialSignature),
   );
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(state.initialFiles ?? []);
   const [dropActive, setDropActive] = useState(false);
   // Eigene Meldung im Dialog: der Fehlerbalken der Seite liegt hinter diesem
   // Overlay und wäre beim Verfassen nicht zu sehen.
@@ -1474,6 +1594,114 @@ function Composer({
   // dragenter/dragleave feuern auch beim Wechsel zwischen Kindelementen — ohne
   // Zähler würde die Ablage-Fläche beim Überfahren des Editors flackern.
   const dropDepth = useRef(0);
+
+  // --- Auto-Speichern als Entwurf (wie Gmail/Outlook) ----------------------
+  // Zeiger auf die aktuell im „Entwürfe"-Ordner liegende Fassung. Bewusst ein
+  // Ref (kein State): er wird direkt nach dem Speichern synchron aktualisiert,
+  // damit ein sofort nachgezogenes Speichern nie mit veralteter UID eine zweite
+  // Kopie anlegt.
+  const draftRefBox = useRef<{ path: string; uid: number } | null>(
+    state.draftPath && state.draftUid
+      ? { path: state.draftPath, uid: state.draftUid }
+      : null,
+  );
+  // Zeitpunkt des letzten erfolgreichen Speicherns (für die „gespeichert"-Notiz).
+  const [savedAt, setSavedAt] = useState<number | null>(reopened ? Date.now() : null);
+
+  // Neueste Werte in einem Ref spiegeln, damit Timer und Event-Handler immer den
+  // aktuellen Stand sehen — unabhängig davon, wann sie erzeugt wurden.
+  const valuesRef = useRef({ to, cc, bcc, subject, body, files });
+  useEffect(() => {
+    valuesRef.current = { to, cc, bcc, subject, body, files };
+  });
+
+  // Ausgangsstand gilt als „bereits gespeichert" → kein Autosave, bevor der
+  // Nutzer wirklich etwas ändert (verhindert leere Entwürfe beim bloßen Öffnen).
+  const lastSavedSnap = useRef<string | null>(null);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  useEffect(() => {
+    lastSavedSnap.current = draftSnapshot(valuesRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const doSave = useCallback(async () => {
+    const v = valuesRef.current;
+    const snap = draftSnapshot(v);
+    if (snap === lastSavedSnap.current) return; // nichts Neues
+    const hasContent =
+      v.to.trim() ||
+      v.cc.trim() ||
+      v.bcc.trim() ||
+      v.subject.trim() ||
+      htmlToPlainText(v.body).trim().length > 0;
+    if (!hasContent) return; // nie einen komplett leeren Entwurf anlegen
+    if (savingRef.current) {
+      // Läuft schon ein Speichern, den neuesten Stand danach nachziehen.
+      pendingRef.current = true;
+      return;
+    }
+    savingRef.current = true;
+    try {
+      const fd = new FormData();
+      fd.set("to", v.to);
+      fd.set("cc", v.cc);
+      fd.set("bcc", v.bcc);
+      fd.set("subject", v.subject);
+      fd.set("bodyHtml", v.body);
+      fd.set("body", htmlToPlainText(v.body));
+      if (state.inReplyTo) fd.set("inReplyTo", state.inReplyTo);
+      if (state.references) fd.set("references", state.references.join(" "));
+      const prev = draftRefBox.current;
+      if (prev) {
+        fd.set("prevPath", prev.path);
+        fd.set("prevUid", String(prev.uid));
+      }
+      for (const f of v.files) fd.append("files", f);
+      const res = await saveDraftAction(fd);
+      // Nur bei echtem Erfolg als „gespeichert" merken. res === null heißt: kein
+      // Entwürfe-Ordner am Server — dann nichts vortäuschen.
+      if (res) {
+        lastSavedSnap.current = snap;
+        // Synchron setzen: eine sofort nachgezogene Fassung ersetzt genau diese.
+        draftRefBox.current = res;
+        setSavedAt(Date.now());
+      }
+    } catch {
+      /* leise scheitern — der nächste Trigger versucht es erneut */
+    } finally {
+      savingRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        void doSave();
+      }
+    }
+  }, [state.inReplyTo, state.references]);
+
+  // 1) Entprellt nach jeder Änderung (1,8 s Ruhe).
+  useEffect(() => {
+    if (draftSnapshot({ to, cc, bcc, subject, body, files }) === lastSavedSnap.current)
+      return;
+    const t = setTimeout(() => void doSave(), 1800);
+    return () => clearTimeout(t);
+  }, [to, cc, bcc, subject, body, files, doSave]);
+
+  // 2) Beim Tab-Wechsel / App-Schließen sofort sichern (Best-Effort).
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "hidden") void doSave();
+    };
+    const onHide = () => void doSave();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [doSave]);
+
+  const dirty =
+    draftSnapshot({ to, cc, bcc, subject, body, files }) !== lastSavedSnap.current;
 
   // Wurde die eingesetzte Signatur zwischenzeitlich im Dialog bearbeitet, den
   // Block im offenen Entwurf nachziehen. Beim ersten Lauf nichts tun, sonst
@@ -1585,11 +1813,29 @@ function Composer({
         if (state.references) fd.set("references", state.references.join(" "));
         for (const f of files) fd.append("files", f);
         await sendMailAction(fd);
+        // Autosave stilllegen und den zugehörigen Entwurf entfernen (wie bei
+        // Gmail: gesendet ⇒ verschwindet aus „Entwürfe").
+        lastSavedSnap.current = draftSnapshot(valuesRef.current);
+        const ref = draftRefBox.current;
+        if (ref?.uid) {
+          try {
+            await deleteDraftAction(ref);
+          } catch {
+            /* Entwurf bleibt notfalls im Ordner — kein Sende-Blocker */
+          }
+        }
         onSent();
       } catch (err) {
         setNote(err instanceof Error ? err.message : "Senden fehlgeschlagen");
       }
     });
+  }
+
+  // Schließen sichert den aktuellen Stand noch als Entwurf (falls geändert),
+  // bevor der Dialog verschwindet — dann bleibt nichts Angefangenes verloren.
+  async function handleClose() {
+    await doSave();
+    onClose();
   }
 
   return (
@@ -1616,9 +1862,19 @@ function Composer({
           </div>
         )}
         <div className="flex items-center justify-between px-4 py-3 border-b border-line">
-          <h2 className="text-sm font-semibold text-ink">{state.title}</h2>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-semibold text-ink truncate">
+              {state.title}
+            </h2>
+            {savedAt && !dirty && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-sub shrink-0">
+                <Check className="h-3 w-3" />
+                Entwurf gespeichert
+              </span>
+            )}
+          </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="h-10 w-10 -mr-1 md:h-8 md:w-8 md:mr-0 inline-flex items-center justify-center rounded-md text-sub hover:text-ink hover:bg-bg transition"
             aria-label="Schließen"
           >

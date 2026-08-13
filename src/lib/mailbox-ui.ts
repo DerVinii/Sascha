@@ -56,7 +56,30 @@ export type MailboxMessage = {
   flagged: boolean;
 };
 
+/** Inhalt eines Entwurfs, zum Weiterbearbeiten in den Composer geladen. */
+export type DraftContent = {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  /** Editor-HTML (Fragment, Bilder als data:-URI inline). */
+  bodyHtml: string;
+  inReplyTo: string | null;
+  references: string[];
+  attachments: { filename: string; contentType: string; base64: string }[];
+};
+
 // --- Anzeige-Helfer ----------------------------------------------------------
+
+/** Ist dieser Ordner der Entwürfe-Ordner? (Sonderrolle oder Name.) */
+export function isDraftsFolder(
+  folder: { specialUse: string | null; name: string } | null | undefined,
+): boolean {
+  if (!folder) return false;
+  if (folder.specialUse === "\\Drafts") return true;
+  const key = folder.name.trim().toLowerCase();
+  return key === "drafts" || key === "entwürfe" || key === "entwurfe";
+}
 
 const SPECIAL_LABELS: Record<string, string> = {
   "\\Inbox": "Posteingang",
