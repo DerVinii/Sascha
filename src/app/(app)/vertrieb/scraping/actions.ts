@@ -30,6 +30,8 @@ import {
   dealStageByContact,
 } from "@/lib/server/pipeline-sync";
 import { autoAdvanceListLeads } from "@/lib/server/pipeline-auto";
+import { listSignaturesSafe } from "@/lib/server/signatures";
+import { htmlToPlainText } from "@/lib/signature";
 import {
   bulkAddLeads,
   findLeadIdByEmail,
@@ -2135,6 +2137,25 @@ export async function previewInstantlySendAction(input: {
   );
 }
 
+/**
+ * Signatur-Platzhalter in der Copy auflösen: `{<Signaturname>}` wird durch den
+ * Klartext der jeweiligen Signatur ersetzt (die Kampagnen laufen text-only).
+ * Läuft NUR beim Push an Instantly — Vorlagen/Entwürfe behalten den Token.
+ */
+function applySignatures(
+  steps: CampaignStep[],
+  sigs: { name: string; text: string }[],
+): CampaignStep[] {
+  if (sigs.length === 0) return steps;
+  const replace = (s: string) =>
+    sigs.reduce((acc, sig) => acc.split(`{${sig.name}}`).join(sig.text), s);
+  return steps.map((st) => ({
+    ...st,
+    subject: replace(st.subject),
+    body: replace(st.body),
+  }));
+}
+
 /** Copy als Sequenz speichern (create/update), Absender setzen, optional aktivieren. */
 export async function saveCampaignAction(input: {
   listId: string;
@@ -2151,7 +2172,12 @@ export async function saveCampaignAction(input: {
       error: "Kampagne nicht gefunden.",
     };
 
-  const sequences = buildSequences(input.steps);
+  // Signatur-Platzhalter erst hier auflösen (kurz vor dem Push an Instantly).
+  const sigs = (await listSignaturesSafe(org.id)).map((s) => ({
+    name: s.name,
+    text: htmlToPlainText(s.html).trim(),
+  }));
+  const sequences = buildSequences(applySignatures(input.steps, sigs));
   if (!sequences[0].steps.length) {
     return {
       campaignId: list.campaignId,

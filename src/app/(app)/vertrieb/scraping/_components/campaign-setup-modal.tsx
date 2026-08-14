@@ -35,6 +35,8 @@ import {
   sendListToInstantlyAction,
   setInstantlyCampaignLiveAction,
 } from "../actions";
+import { listSignaturesAction } from "@/app/(app)/postfach/signature-actions";
+import type { EmailSignature } from "@/lib/signature";
 
 type Props = {
   open: boolean;
@@ -151,6 +153,8 @@ export function CampaignSetupModal({
   const [steps, setSteps] = useState<CampaignStep[]>([
     { subject: "", body: "", delayDays: 0 },
   ]);
+  // Signaturen der Organisation — für „Signatur einfügen" in der Copy.
+  const [signatures, setSignatures] = useState<EmailSignature[]>([]);
   // Absender werden ohne UI automatisch gesetzt: alle aktiven Postfächer.
   const [senders, setSenders] = useState<string[]>([]);
   // Live/Draft-Umschalter. Standard: Live. Bei bestehender Kampagne aus dem Status.
@@ -253,6 +257,18 @@ export function CampaignSetupModal({
     setTplName("");
     listCampaignTemplatesAction()
       .then((t) => !cancelled && setTemplates(t))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Signaturen je Öffnen laden (für „Signatur einfügen").
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    listSignaturesAction()
+      .then((s) => !cancelled && setSignatures(s))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -373,21 +389,20 @@ export function CampaignSetupModal({
     }
   }
 
-  /** Fügt {{token}} an der Cursor-Position des zuletzt fokussierten Felds ein. */
-  function insertVariable(token: string) {
+  /** Fügt einen fertigen Text an der Cursor-Position des zuletzt fokussierten Felds ein. */
+  function insertAtCursor(literal: string) {
     const lf = lastFocused.current;
     let i = lf ? lf.i : 0;
     const field: "subject" | "body" = lf ? lf.field : "body";
     if (!steps[i]) i = 0;
     const key = `${i}:${field}`;
     const el = fieldRefs.current[key];
-    const variable = `{{${token}}}`;
     const cur = steps[i]?.[field] ?? "";
     const start = el?.selectionStart ?? cur.length;
     const end = el?.selectionEnd ?? start;
-    const next = cur.slice(0, start) + variable + cur.slice(end);
+    const next = cur.slice(0, start) + literal + cur.slice(end);
     updateStep(i, field === "subject" ? { subject: next } : { body: next });
-    const pos = start + variable.length;
+    const pos = start + literal.length;
     requestAnimationFrame(() => {
       const e2 = fieldRefs.current[key];
       if (e2) {
@@ -400,6 +415,16 @@ export function CampaignSetupModal({
       }
     });
     setVarMenuOpen(false);
+  }
+
+  /** Lead-Variable {{token}} — wird bei Instantly pro Lead ersetzt. */
+  function insertVariable(token: string) {
+    insertAtCursor(`{{${token}}}`);
+  }
+
+  /** Signatur {Name} — wird beim Versand serverseitig durch die Signatur ersetzt. */
+  function insertSignature(name: string) {
+    insertAtCursor(`{${name}}`);
   }
 
   async function handleSubmit() {
@@ -689,10 +714,10 @@ export function CampaignSetupModal({
                     className="h-9 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-line bg-surface text-ink text-sm font-medium hover:bg-bg transition"
                   >
                     <Braces className="h-3.5 w-3.5 text-info" />
-                    Variable einfügen
+                    Variable / Signatur einfügen
                   </button>
                   <span className="text-[11px] text-sub">
-                    Wird pro Lead automatisch ersetzt.
+                    Variablen werden pro Lead ersetzt, Signaturen beim Versand.
                   </span>
                 </div>
               </div>
@@ -958,6 +983,29 @@ export function CampaignSetupModal({
             }}
             className="fixed z-[61] overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface shadow-xl py-1"
           >
+            {signatures.length > 0 && (
+              <>
+                <div className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-sub">
+                  Signaturen
+                </div>
+                {signatures.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertSignature(s.name)}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2.5 md:py-1.5 text-left text-sm text-ink hover:bg-bg"
+                  >
+                    <span className="truncate">{s.name}</span>
+                    <code className="text-[10px] text-sub shrink-0">{`{${s.name}}`}</code>
+                  </button>
+                ))}
+                <div className="my-1 border-t border-line" />
+                <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-sub">
+                  Lead-Variablen
+                </div>
+              </>
+            )}
             {variables.length === 0 ? (
               <div className="px-3 py-2 text-xs text-sub">
                 Keine Spalten vorhanden.
