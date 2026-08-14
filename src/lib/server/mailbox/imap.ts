@@ -387,6 +387,121 @@ export async function getMailboxOverview(): Promise<{
   });
 }
 
+// --- Suche nach Kontaktadressen (E-Mail-Verlauf im CRM) ----------------------
+
+/**
+ * Ordner, die für den Kontakt-Verlauf übersprungen werden: Papierkorb, Spam und
+ * Entwürfe zeigen keine echte Kommunikation — und jeder zusätzliche Ordner
+ * kostet einen weiteren SEARCH-Roundtrip.
+ */
+const HISTORY_SKIP_SPECIAL = new Set(["\\Trash", "\\Junk", "\\Drafts"]);
+const HISTORY_SKIP_NAMES =
+  /^(papierkorb|trash|deleted items|gel[oö]schte elemente|spam|junk|werbung|entw[uü]rfe|drafts?)$/i;
+
+/** Treffer der Adress-Suche — Listeneintrag plus Herkunftsordner. */
+export type AddressMatch = MailboxListItem & {
+  folder: string;
+  folderName: string;
+  folderSpecialUse: string | null;
+};
+
+/**
+ * Sucht alle Nachrichten, an denen eine der übergebenen Adressen beteiligt ist
+ * (From / To / Cc) — ordnerübergreifend in EINER IMAP-Verbindung.
+ *
+ * Das ist die Grundlage für „Was wurde mit diesem Kontakt schon geschrieben?"
+ * im CRM: Posteingang liefert die Antworten des Kontakts, „Gesendet" die
+ * eigenen Mails an ihn.
+ */
+export async function searchMessagesByAddresses(
+  addresses: string[],
+  opts: { perFolder?: number; total?: number } = {},
+): Promise<AddressMatch[]> {
+  const addrs = addresses
+    .map((a) => a.trim().toLowerCase())
+    .filter((a) => a.includes("@"));
+  if (addrs.length === 0) return [];
+
+  const perFolder = opts.perFolder ?? 25;
+  const total = opts.total ?? 60;
+
+  return withImap(async (c) => {
+    const folders = (await c.list()).filter((f) => {
+      if (f.flags?.has("\\Noselect")) return false;
+      if (f.specialUse && HISTORY_SKIP_SPECIAL.has(f.specialUse)) return false;
+      return !HISTORY_SKIP_NAMES.test(f.name.trim());
+    });
+
+    const criteria = {
+      or: addrs.flatMap((a) => [{ from: a }, { to: a }, { cc: a }]),
+    };
+
+    const out: AddressMatch[] = [];
+    for (const folder of folders) {
+      let lock: Awaited<ReturnType<typeof c.getMailboxLock>>;
+      try {
+        lock = await c.getMailboxLock(folder.path);
+      } catch {
+        continue; // Ordner gerade nicht öffenbar → überspringen
+      }
+      try {
+        const found = await c.search(criteria, { uid: true });
+        const uids = (Array.isArray(found) ? found : [])
+          .slice()
+          .sort((a, b) => b - a)
+          .slice(0, perFolder);
+        if (uids.length === 0) continue;
+        for await (const msg of c.fetch(uids.join(","), QUERY, { uid: true })) {
+          out.push({
+            ...mapListItem(msg),
+            folder: folder.path,
+            folderName: folder.name,
+            folderSpecialUse: specialUseOf(folder),
+          });
+        }
+      } catch {
+        // Ordner ohne SEARCH-Unterstützung o. Ä. — Rest trotzdem liefern
+      } finally {
+        lock.release();
+      }
+    }
+
+    out.sort((a, b) => b.date.localeCompare(a.date));
+    return out.slice(0, total);
+  });
+}
+
+/**
+ * Nur den Text einer Nachricht laden — anders als `getMessage` OHNE das
+ * Gelesen-Flag zu setzen. Ein Blick in den Kontakt-Verlauf darf im Postfach
+ * nichts als gelesen markieren.
+ */
+export async function peekMessageBody(
+  folder: string,
+  uid: number,
+): Promise<{ html: string | null; text: string | null }> {
+  return withImap(async (c) => {
+    const lock = await c.getMailboxLock(folder);
+    try {
+      const msg = await c.fetchOne(
+        String(uid),
+        { uid: true, source: true },
+        { uid: true },
+      );
+      if (!msg || !msg.source) throw new Error("E-Mail nicht gefunden");
+      const parsed = await simpleParser(msg.source);
+      return {
+        html: parsed.html
+          ? embedRelatedImages(parsed.html, parsed.attachments)
+          : null,
+        text: parsed.text || null,
+      };
+    } finally {
+      lock.release();
+    }
+  });
+}
+
 // --- Einzelne Nachricht ------------------------------------------------------
 
 function addrObjToList(a: AddressObject | AddressObject[] | undefined): MailAddress[] {

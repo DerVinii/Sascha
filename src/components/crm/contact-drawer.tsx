@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { X, Mail, Trash2, ExternalLink, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS } from "@/components/crm/status-pill";
+import { ContactMailHistory } from "@/components/crm/contact-mail-history";
 import type {
   ContactFieldDef,
   ContactFieldValue,
@@ -294,6 +295,7 @@ function DrawerBody({
         />
       )}
       <DealsSection deals={detail.deals} />
+      <ContactMailHistory contactId={detail.id} variant="drawer" />
     </div>
   );
 }

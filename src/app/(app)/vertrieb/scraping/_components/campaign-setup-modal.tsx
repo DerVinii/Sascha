@@ -143,8 +143,10 @@ export function CampaignSetupModal({
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
   const [skipAlreadySent, setSkipAlreadySent] = useState(true);
-  // Duplikate aus ANDEREN Kampagnen überspringen (gleiche Kampagne: immer dedupliziert).
-  const [skipWorkspaceDuplicates, setSkipWorkspaceDuplicates] = useState(false);
+  // Duplikate aus ANDEREN Kampagnen überspringen (gleiche Kampagne: immer
+  // dedupliziert). Standardmäßig AN, damit niemand versehentlich aus zwei
+  // Kampagnen doppelt angeschrieben wird — bewusst abwählbar.
+  const [skipWorkspaceDuplicates, setSkipWorkspaceDuplicates] = useState(true);
   const [preview, setPreview] = useState<InstantlySendPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -580,7 +582,7 @@ export function CampaignSetupModal({
                     }
                     className="h-3.5 w-3.5 rounded border-line"
                   />
-                  Auf Duplikate achten (aus anderen Kampagnen)
+                  Auf Duplikate achten (aus anderen Kampagnen) — empfohlen
                 </label>
                 <p className="text-[11px] text-sub">
                   Gesendet wird immer an die verifizierte Entscheider-E-Mail
@@ -588,10 +590,11 @@ export function CampaignSetupModal({
                   normale E-Mail. Leads ganz ohne E-Mail werden übersprungen.
                   Schon eingespielte Leads bekommen keine neue Erst-Mail — ihre
                   Spalten/Variablen in Instantly werden aber immer aktualisiert, damit
-                  nichts veraltet. Angehakt werden zusätzlich Leads übersprungen, die
-                  bereits in einer anderen Instantly-Kampagne stecken; ohne Haken
-                  werden sie trotzdem eingespielt (Duplikate innerhalb derselben
-                  Kampagne entstehen nie).
+                  nichts veraltet. Standardmäßig aktiv: Leads, die bereits in einer
+                  anderen Instantly-Kampagne stecken, werden übersprungen — so wird
+                  niemand aus zwei Kampagnen doppelt angeschrieben. Nur abwählen, wenn
+                  ein Lead bewusst in eine zweite Kampagne soll (Duplikate innerhalb
+                  derselben Kampagne entstehen nie).
                 </p>
               </div>
 

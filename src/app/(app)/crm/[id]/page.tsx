@@ -5,8 +5,6 @@ import { db } from "@/db";
 import {
   contacts,
   companies,
-  emailThreads,
-  emailMessages,
   notes,
   activities,
   pipelines,
@@ -33,6 +31,7 @@ import { DeleteContactButton } from "./_components/delete-contact-button";
 import { CustomFieldsEditor } from "./_components/custom-fields-editor";
 import { TagsEditor } from "./_components/tags-editor";
 import { NewDealModal } from "../_components/new-deal-modal";
+import { ContactMailHistory } from "@/components/crm/contact-mail-history";
 
 function formatDateTime(d: Date | null) {
   if (!d) return "—";
@@ -91,39 +90,6 @@ export default async function ContactDetailPage({
   const fullName =
     [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
     "(ohne Namen)";
-
-  // Mail-Threads + Messages
-  const threads = await db
-    .select({
-      id: emailThreads.id,
-      subject: emailThreads.subject,
-      lastMessageAt: emailThreads.lastMessageAt,
-    })
-    .from(emailThreads)
-    .where(eq(emailThreads.contactId, id))
-    .orderBy(desc(emailThreads.lastMessageAt));
-
-  const messages = threads.length
-    ? await db
-        .select({
-          id: emailMessages.id,
-          threadId: emailMessages.threadId,
-          direction: emailMessages.direction,
-          subject: emailMessages.subject,
-          bodyText: emailMessages.bodyText,
-          sentAt: emailMessages.sentAt,
-          autoTag: emailMessages.autoTag,
-        })
-        .from(emailMessages)
-        .where(
-          eq(
-            emailMessages.threadId,
-            threads[0]?.id ?? "00000000-0000-0000-0000-000000000000",
-          ),
-        )
-        .orderBy(desc(emailMessages.sentAt))
-        .limit(20)
-    : [];
 
   // Notizen
   const contactNotes = await db
@@ -366,48 +332,9 @@ export default async function ContactDetailPage({
         )}
       </div>
 
-      {/* Mail-Historie */}
+      {/* E-Mail-Verlauf (Postfach + Kampagnenmails) */}
       <div className="rounded-xl border border-line bg-surface p-5">
-        <h2 className="text-sm font-semibold mb-3">Mail-Historie</h2>
-        {messages.length === 0 ? (
-          <p className="text-sm text-sub py-4">
-            Noch keine Nachrichten. E-Mail-Versand & Tracking kommt in Phase 2.
-          </p>
-        ) : (
-          <ul className="divide-y divide-line -mx-5">
-            {messages.map((m) => (
-              <li key={m.id} className="px-5 py-3">
-                <div className="flex items-start gap-3">
-                  <span
-                    className={`text-[10px] uppercase font-semibold rounded px-1.5 py-0.5 ${
-                      m.direction === "in"
-                        ? "bg-info/10 text-info"
-                        : "bg-ok/10 text-ok"
-                    }`}
-                  >
-                    {m.direction === "in" ? "Eingang" : "Ausgang"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-ink truncate">
-                      {m.subject ?? "(kein Betreff)"}
-                    </div>
-                    <div className="text-xs text-sub mt-0.5 line-clamp-2">
-                      {m.bodyText ?? "—"}
-                    </div>
-                    <div className="text-[11px] text-sub mt-1 flex items-center gap-2">
-                      <span>{formatDateTime(m.sentAt)}</span>
-                      {m.autoTag && (
-                        <span className="pill bg-bg text-sub">
-                          {m.autoTag}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ContactMailHistory contactId={id} />
       </div>
 
       {/* Notizen */}
