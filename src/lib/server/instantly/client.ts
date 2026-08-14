@@ -111,7 +111,12 @@ export async function listAccounts(): Promise<InstantlyAccount[]> {
 export type InstantlyStepVariant = { subject: string; body: string };
 export type InstantlyStep = {
   type: "email";
-  delay: number; // Tage vor diesem Schritt (0 = sofort, Follow-up = N Tage)
+  /**
+   * Tage NACH diesem Schritt bis zur nächsten Mail — im Instantly-UI die Zeile
+   * „Nächste Nachricht senden in N Tage" unter dem Schritt. Nicht die Wartezeit
+   * VOR dem Schritt; die Verschiebung passiert in buildSequences/parseSteps.
+   */
+  delay: number;
   variants: InstantlyStepVariant[];
 };
 export type InstantlySequence = { steps: InstantlyStep[] };

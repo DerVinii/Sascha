@@ -329,7 +329,11 @@ export type InstantlySendResult = {
 export type CampaignStep = {
   subject: string;
   body: string;
-  /** Tage Verzögerung vor diesem Schritt (erste Mail = 0; Follow-up = N Tage). */
+  /**
+   * Tage Verzögerung VOR diesem Schritt (erste Mail = 0; Follow-up = N Tage) —
+   * so, wie es im Assistenten steht. Instantly zählt andersherum, siehe
+   * buildSequences.
+   */
   delayDays: number;
 };
 

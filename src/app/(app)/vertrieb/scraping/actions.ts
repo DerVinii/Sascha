@@ -1900,27 +1900,58 @@ function htmlToText(html: string): string {
   return unescape(normalized.replace(/<br\s*\/?>/gi, "\n")).trim();
 }
 
+/**
+ * Wartezeit am LETZTEN Schritt. Danach folgt keine Mail mehr, der Wert ist also
+ * wirkungslos — er greift nur, falls jemand in Instantly direkt einen weiteren
+ * Schritt anhängt. Bewusst nicht 0, damit der dann nicht sofort rausgeht.
+ */
+const TRAILING_DELAY_DAYS = 3;
+
+function dayCount(v: unknown): number {
+  return Math.max(0, Math.floor(Number(v) || 0));
+}
+
+/**
+ * Schritte aus dem Assistenten in eine Instantly-Sequenz übersetzen.
+ *
+ * Fallstrick: Instantly hängt `delay` an den Schritt, NACH dem gewartet wird
+ * ("Nächste Nachricht senden in N Tage") — nicht an den, VOR dem gewartet wird.
+ * Die Verzögerung, die im Assistenten an Follow-up 1 steht, gehört in der API
+ * also an die erste Mail. Ohne diese Verschiebung landete die 0 der ersten Mail
+ * vor Follow-up 1: das ging sofort raus, und jede weitere Wartezeit saß einen
+ * Schritt zu früh.
+ */
 function buildSequences(steps: CampaignStep[]): InstantlySequence[] {
   const valid = steps.filter((s) => s.subject.trim() || s.body.trim());
   return [
     {
-      steps: valid.map((s) => ({
-        type: "email" as const,
-        delay: Math.max(0, Math.floor(Number(s.delayDays) || 0)),
-        variants: [{ subject: s.subject, body: textToHtml(s.body) }],
-      })),
+      steps: valid.map((s, i) => {
+        const next = valid[i + 1];
+        return {
+          type: "email" as const,
+          // Mindestens 1 Tag: ein leeres Verzögerungsfeld liest sich als 0 und
+          // würde das Follow-up wieder direkt hinterherschicken.
+          delay: next
+            ? Math.max(1, dayCount(next.delayDays))
+            : TRAILING_DELAY_DAYS,
+          variants: [{ subject: s.subject, body: textToHtml(s.body) }],
+        };
+      }),
     },
   ];
 }
 
+/** Gegenstück zu buildSequences: Sequenz zurück in Assistenten-Schritte. */
 function parseSteps(sequences: InstantlySequence[]): CampaignStep[] {
   const steps = sequences?.[0]?.steps ?? [];
-  const out = steps.map((st) => {
+  const out = steps.map((st, i) => {
     const v = st.variants?.[0] ?? { subject: "", body: "" };
     return {
       subject: v.subject ?? "",
       body: htmlToText(v.body ?? ""),
-      delayDays: typeof st.delay === "number" ? st.delay : 0,
+      // Die Wartezeit vor Schritt i steht in Instantly am Schritt davor; die
+      // erste Mail geht immer sofort raus.
+      delayDays: i > 0 ? dayCount(steps[i - 1].delay) : 0,
     };
   });
   return out.length ? out : [{ subject: "", body: "", delayDays: 0 }];
