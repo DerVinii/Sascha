@@ -2025,9 +2025,11 @@ export async function getCampaignSetupAction(input: {
     }
   }
 
+  // Beide Filter sind fest aktiv (keine Auswahl mehr im Dialog): bereits
+  // Angeschriebene und Kampagnen-übergreifende Duplikate werden immer übersprungen.
   const preview = await computePreview(org.id, input.listId, list.campaignId, {
     skipAlreadySent: true,
-    skipWorkspaceDuplicates: false,
+    skipWorkspaceDuplicates: true,
   });
 
   return { campaignId: list.campaignId, status, steps, accounts, preview };

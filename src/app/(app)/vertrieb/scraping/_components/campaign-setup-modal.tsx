@@ -142,11 +142,9 @@ export function CampaignSetupModal({
   const [setupError, setSetupError] = useState<string | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
-  const [skipAlreadySent, setSkipAlreadySent] = useState(true);
-  // Duplikate aus ANDEREN Kampagnen überspringen (gleiche Kampagne: immer
-  // dedupliziert). Standardmäßig AN, damit niemand versehentlich aus zwei
-  // Kampagnen doppelt angeschrieben wird — bewusst abwählbar.
-  const [skipWorkspaceDuplicates, setSkipWorkspaceDuplicates] = useState(true);
+  // „Bereits Angeschriebene überspringen" und „Duplikate aus anderen Kampagnen
+  // überspringen" laufen ab jetzt IMMER mit (keine Auswahl mehr) — die filter-
+  // Objekte weiter unten setzen beide fest auf true.
   const [preview, setPreview] = useState<InstantlySendPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -236,7 +234,7 @@ export function CampaignSetupModal({
     setPreviewLoading(true);
     previewInstantlySendAction({
       listId,
-      filter: { skipAlreadySent, skipWorkspaceDuplicates },
+      filter: { skipAlreadySent: true, skipWorkspaceDuplicates: true },
     })
       .then((p) => !cancelled && setPreview(p))
       .catch(() => {})
@@ -244,7 +242,7 @@ export function CampaignSetupModal({
     return () => {
       cancelled = true;
     };
-  }, [open, listId, skipAlreadySent, skipWorkspaceDuplicates]);
+  }, [open, listId]);
 
   // Vorlagen der Organisation einmal je Öffnen laden (ordnerübergreifend).
   useEffect(() => {
@@ -440,7 +438,7 @@ export function CampaignSetupModal({
       for (let i = 0; i < 10000; i++) {
         const r = await sendListToInstantlyAction({
           listId,
-          filter: { skipAlreadySent, skipWorkspaceDuplicates },
+          filter: { skipAlreadySent: true, skipWorkspaceDuplicates: true },
           offset,
         });
         if (r.error) {
@@ -564,37 +562,16 @@ export function CampaignSetupModal({
                 <span className="text-xs font-medium text-sub">
                   Welche Leads sollen in die Kampagne?
                 </span>
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    checked={skipAlreadySent}
-                    onChange={(e) => setSkipAlreadySent(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-line"
-                  />
-                  Bereits Angeschriebene nicht erneut anschreiben
-                </label>
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    checked={skipWorkspaceDuplicates}
-                    onChange={(e) =>
-                      setSkipWorkspaceDuplicates(e.target.checked)
-                    }
-                    className="h-3.5 w-3.5 rounded border-line"
-                  />
-                  Auf Duplikate achten (aus anderen Kampagnen) — empfohlen
-                </label>
                 <p className="text-[11px] text-sub">
                   Gesendet wird immer an die verifizierte Entscheider-E-Mail
                   (Spalte Email_Entscheider), falls gefunden — sonst an die
                   normale E-Mail. Leads ganz ohne E-Mail werden übersprungen.
-                  Schon eingespielte Leads bekommen keine neue Erst-Mail — ihre
-                  Spalten/Variablen in Instantly werden aber immer aktualisiert, damit
-                  nichts veraltet. Standardmäßig aktiv: Leads, die bereits in einer
-                  anderen Instantly-Kampagne stecken, werden übersprungen — so wird
-                  niemand aus zwei Kampagnen doppelt angeschrieben. Nur abwählen, wenn
-                  ein Lead bewusst in eine zweite Kampagne soll (Duplikate innerhalb
-                  derselben Kampagne entstehen nie).
+                  Zwei Filter laufen automatisch mit: Bereits angeschriebene Leads
+                  bekommen keine neue Erst-Mail (ihre Spalten/Variablen in Instantly
+                  werden aber immer aktualisiert, damit nichts veraltet), und Leads,
+                  die schon in einer anderen Instantly-Kampagne stecken, werden
+                  übersprungen — so wird niemand aus zwei Kampagnen doppelt
+                  angeschrieben. (Duplikate innerhalb derselben Kampagne entstehen nie.)
                 </p>
               </div>
 
