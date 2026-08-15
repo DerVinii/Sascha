@@ -40,6 +40,7 @@ import { AiColumnModal } from "./ai-column-modal";
 import { ManualLeadModal } from "./manual-lead-modal";
 import { CampaignSetupModal } from "./campaign-setup-modal";
 import { LinkPipelineModal } from "./link-pipeline-modal";
+import { UpdateCellsModal } from "./update-cells-modal";
 import { BulkRunBar } from "./bulk-run-bar";
 import { CsvImportModal } from "../../_components/csv-import-modal";
 
@@ -77,6 +78,10 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [views, setViews] = useState<LeadView[]>(initial.views);
   const [linkedPipeline, setLinkedPipeline] = useState(initial.linkedPipeline);
   const [hasCampaign, setHasCampaign] = useState(initial.hasCampaign);
+  // Gemerkte Zielrolle für die Lead-Recherche — null = Geschäftsführung/Standard.
+  const [enrichmentRole, setEnrichmentRole] = useState<string | null>(
+    initial.enrichmentRole,
+  );
 
   const [activeViewId, setActiveViewId] = useState("all");
   const [adHocFilters, setAdHocFilters] = useState<LeadViewFilter[]>([]);
@@ -102,6 +107,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
   const [manualOpen, setManualOpen] = useState(false);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [linkPipelineOpen, setLinkPipelineOpen] = useState(false);
+  const [updateCellsOpen, setUpdateCellsOpen] = useState(false);
 
   const refreshing = useRef(false);
 
@@ -127,6 +133,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
       setViews(data.views);
       setLinkedPipeline(data.linkedPipeline);
       setHasCampaign(data.hasCampaign);
+      setEnrichmentRole(data.enrichmentRole);
       // Ad-hoc-Filter auf verschwundene Spalten (z. B. "Pipeline-Phase" nach dem
       // Trennen) entfernen — sonst filtert ein toter Key die ganze Liste weg.
       const presentKeys = new Set(data.columns.map((c) => c.key));
@@ -339,31 +346,38 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
     }
   };
 
-  const updateCells = async () => {
+  // Eigentlicher Start der Anreicherung — kommt aus dem Update-cells-Dialog und
+  // bekommt die dort gewählte Zielrolle (null = Geschäftsführung/Standard).
+  const startEnrichment = async (zielrolle: string | null) => {
     if (!primaryEnrichment) return;
     setError(null);
+    setEnrichmentRole(zielrolle);
     try {
-      const res = await queueEnrichmentAction({ listId });
+      const res = await queueEnrichmentAction({ listId, zielrolle });
       if (res.error) {
         setError(res.error);
+        setUpdateCellsOpen(false);
         return;
       }
       if (!res.queued) {
         // Nichts offen — alle Zeilen haben schon einen Namen.
         setBgEnrich({ active: false, pending: 0 });
         setError("Alle Zeilen sind bereits angereichert — nichts zu tun.");
+        setUpdateCellsOpen(false);
         return;
       }
       setBgEnrich({ active: true, pending: res.pending });
       startBgPoll();
       // Erste Ergebnisse schnell einblenden.
       setTimeout(pollEnrichment, 3000);
+      setUpdateCellsOpen(false);
     } catch (e) {
       setError(
         e instanceof Error
           ? e.message
           : "Anreicherung konnte nicht gestartet werden.",
       );
+      setUpdateCellsOpen(false);
     }
   };
 
@@ -508,7 +522,7 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         onOpenCsv={() => setCsvOpen(true)}
         onAddManual={() => setManualOpen(true)}
         onAddColumn={() => setAddColumnOpen(true)}
-        onUpdateCells={updateCells}
+        onUpdateCells={() => setUpdateCellsOpen(true)}
         onSetupCampaign={() => setCampaignOpen(true)}
         hasCampaign={hasCampaign}
         onLinkPipeline={() => setLinkPipelineOpen(true)}
@@ -692,6 +706,12 @@ export function LeadTable({ initial }: { initial: LeadTableData }) {
         listId={listId}
         onAdded={() => refresh()}
       />
+      <UpdateCellsModal
+        open={updateCellsOpen}
+        enrichmentRole={enrichmentRole}
+        onClose={() => setUpdateCellsOpen(false)}
+        onStart={startEnrichment}
+      />
       <CampaignSetupModal
         open={campaignOpen}
         onClose={() => setCampaignOpen(false)}
@@ -765,7 +785,7 @@ function EmptyState({ onOpenSource }: { onOpenSource: () => void }) {
       </h3>
       <p className="mx-auto mt-1 max-w-sm text-xs text-sub">
         Füll diese Kampagne: per Google-Maps-Scrape, CSV-Import oder manuell
-        (Buttons oben). Danach reicherst du die Leads mit „Geschäftsführer finden"
+        (Buttons oben). Danach reicherst du die Leads mit „Entscheider finden"
         an.
       </p>
       <div className="mt-4 flex items-center justify-center gap-2">

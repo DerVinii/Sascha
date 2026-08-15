@@ -111,7 +111,7 @@ export const DEFAULT_COLUMNS: ColumnSeed[] = [
   },
   {
     key: ENRICHMENT_KEY,
-    label: "Geschäftsführer finden",
+    label: "Entscheider finden",
     kind: "enrichment",
     dataType: "text",
     position: 6,

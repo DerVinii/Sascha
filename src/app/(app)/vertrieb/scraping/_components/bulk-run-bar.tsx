@@ -40,8 +40,8 @@ export function BulkRunBar({
           className="inline-flex items-center gap-1.5 h-9 sm:h-8 px-3 rounded-full bg-info text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
         >
           <Sparkles className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden sm:inline">Geschäftsführer finden</span>
-          <span className="sm:hidden">GF finden</span>
+          <span className="hidden sm:inline">Entscheider finden</span>
+          <span className="sm:hidden">Entscheider</span>
         </button>
         <button
           onClick={onDelete}

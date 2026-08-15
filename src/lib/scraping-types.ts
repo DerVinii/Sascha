@@ -405,4 +405,7 @@ export type LeadTableData = {
   /** true, sobald für diesen Ordner eine Instantly-Kampagne angelegt wurde
    *  ("Kampagne einrichten" → "Kampagne bearbeiten"). */
   hasCampaign: boolean;
+  /** Zielrolle der Entscheider-Suche für diesen Ordner
+   *  (null = Geschäftsführung/Standard) — vorbelegt den "Update cells"-Dialog. */
+  enrichmentRole: string | null;
 };

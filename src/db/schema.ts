@@ -123,6 +123,9 @@ export const leadLists = pgTable(
     tagId: uuid("tag_id").references((): AnyPgColumn => leadListTags.id, {
       onDelete: "set null",
     }),
+    // Zielrolle der Entscheider-Suche ("Update cells") für diesen Ordner, z. B.
+    // "Akademieleitung". NULL = Geschäftsführung (Standard-Verhalten).
+    enrichmentRole: text("enrichment_role"),
     // Hintergrund-Enrichment: gesetzt = "Update cells" läuft (server-seitig, bis geleert).
     enrichmentQueuedAt: timestamp("enrichment_queued_at", { withTimezone: true }),
     // Zeitpunkt des letzten Drain-Ticks — grobe Sperre gegen doppelte Läufe.

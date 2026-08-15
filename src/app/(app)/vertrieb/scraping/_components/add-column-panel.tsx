@@ -110,9 +110,9 @@ const OPTIONS: Option[] = [
     id: "gemini",
     group: "Enrichment / AI",
     icon: <Sparkles className="h-4 w-4 text-info" />,
-    label: "Geschäftsführer + E-Mail finden",
+    label: "Entscheider + E-Mail finden",
     description: "Gemini recherchiert pro Zeile Name + E-Mail (Google-Suche)",
-    defaultName: "Geschäftsführer finden",
+    defaultName: "Entscheider finden",
     build: (label) => ({
       label,
       kind: "enrichment",

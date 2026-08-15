@@ -149,7 +149,7 @@ export function ManualLeadModal({ open, onClose, listId, onAdded }: Props) {
           {error && <p className="text-sm text-err">{error}</p>}
           <p className="text-[11px] text-sub">
             Alle Felder sind optional — fülle einfach aus, was du hast. Leere
-            Felder (z. B. Name/E-Mail) kannst du später auch per „Geschäftsführer
+            Felder (z. B. Name/E-Mail) kannst du später auch per „Entscheider
             finden" automatisch ergänzen.
           </p>
         </div>

@@ -110,8 +110,10 @@ export async function runEnrichmentForRow(
   /** keepExisting: bereits gefüllte Kontaktfelder nicht anfassen. Gesetzt, wenn
    *  der Lauf über eine andere Spalte angestoßen wurde ("Fehlende ausführen" auf
    *  E-Mail) — dann soll die Suche die Lücke schließen und nicht den Namen
-   *  ersetzen, der schon dasteht. Bei "Alle erzwingen" bewusst aus. */
-  opts?: { keepExisting?: boolean },
+   *  ersetzen, der schon dasteht. Bei "Alle erzwingen" bewusst aus.
+   *  zielrolle: Zielrolle des Ordners (lead_lists.enrichment_role). Leer/null =
+   *  Geschäftsführung, also exakt das bisherige Verhalten. */
+  opts?: { keepExisting?: boolean; zielrolle?: string | null },
 ): Promise<RowOutcome> {
   // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
   if (column.config.ai?.prompt) {
@@ -169,6 +171,11 @@ export async function runEnrichmentForRow(
     inputs["Google Maps Link"] ?? "company.customFields.googleMapsUri",
     src,
   ) as string | null;
+  // Jede Zeile ist ein Google-Maps-Standort: Die Adresse grenzt im Rollen-Modus
+  // ein, welcher Standort gemeint ist (ohne Zielrolle bleibt sie ungenutzt).
+  const adresse = resolveRowPath("company.address.formatted", src) as
+    | string
+    | null;
 
   const chain = column.config.provider ?? ["gemini"];
 
@@ -177,6 +184,8 @@ export async function runEnrichmentForRow(
       firmenname,
       webseite,
       gmapsUrl,
+      adresse,
+      zielrolle: opts?.zielrolle ?? null,
     });
     const runAt = new Date().toISOString();
 
@@ -349,6 +358,8 @@ export async function drainQueuedLists(opts: {
       name: leadLists.name,
       tickAt: leadLists.enrichmentTickAt,
       queuedAt: leadLists.enrichmentQueuedAt,
+      // Zielrolle des Ordners — steuert nur Phase 1 (Entscheider-Suche).
+      zielrolle: leadLists.enrichmentRole,
     })
     .from(leadLists)
     .where(isNotNull(leadLists.enrichmentQueuedAt))
@@ -407,6 +418,7 @@ export async function drainQueuedLists(opts: {
           dmColumn,
           missing[i],
           columns,
+          { zielrolle: list.zielrolle },
         );
         processedRows++;
         if (outcome.rateLimited) {

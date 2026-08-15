@@ -13,6 +13,10 @@ export type ProviderInputs = {
   firmenname: string;
   webseite?: string | null;
   gmapsUrl?: string | null;
+  /** Adresse des Standorts (Google-Maps-Zeile) — nur im Rollen-Modus genutzt. */
+  adresse?: string | null;
+  /** Zielrolle des Ordners; leer/null = Geschäftsführung (Standard). */
+  zielrolle?: string | null;
 };
 
 export type ProviderRun = {

@@ -4,15 +4,17 @@
  * Bildet den unteren n8n-Workflow ab ("Message a model" + Code-Node): zu einem
  * Unternehmen den Geschäftsführer (Vor-/Nachname) und die geschäftliche
  * E-Mail-Adresse recherchieren. Antwort als striktes JSON, das geparst wird.
+ *
+ * Gibt der Ordner eine Zielrolle vor (z. B. "Akademieleitung"), wird stattdessen
+ * der standortbezogene Prompt genutzt: Große Träger haben viele Standorte, und
+ * gesucht ist dann die Leitung genau dieses Standorts statt der Zentrale.
  */
 
-const SYSTEM_PROMPT = `Du bist ein hilfreicher Experten-Researcher. Deine Aufgabe ist es, uns dabei zu helfen, den Geschäftsführer eines vom Nutzer angegebenen Unternehmens zu finden.
-
-Du hast Zugriff auf die Google-Suche, um im Internet nach diesen Informationen zu suchen. Du erhältst weitere Details, die dir bei der Recherche helfen, wie zum Beispiel die Website und den Link zum Google Maps, sofern verfügbar.
-
-Recherchiere für die gefundene Person auch deren geschäftliche E-Mail-Adresse. Suche dazu gezielt auf der Firmenwebseite (z.B. Impressum, Kontaktseite, Über-uns-Seite) und über weitere Quellen. Wenn du die Emailadresse der Person nicht finden kannst, nimm die öffentliche Emailadresse des Unternehmens. Wenn du keine E-Mail-Adresse finden kannst, setze den Wert auf "NF".
-
-Gib das Ergebnis im JSON-Format mit folgenden Schlüsselpaaren aus:
+/**
+ * JSON-Format- und "nur JSON"-Anweisungen. Bewusst geteilt: parseResult setzt
+ * genau auf dieses Format auf, beide Prompts müssen es wortgleich verlangen.
+ */
+const JSON_ANWEISUNG = `Gib das Ergebnis im JSON-Format mit folgenden Schlüsselpaaren aus:
 {
  "Vorname":"Max",
  "Nachname":"Mustermann",
@@ -23,10 +25,41 @@ Wenn du keine Person finden kannst, gib im Output bei "Vorname", "Nachname" und 
 
 WICHTIG: Sage absolut nichts anderes außer der gewünschten Ausgabe. Erstelle nur den Output als angefordertes JSON. Schreibe KEINEN Text, sondern antworte NUR im beschriebenen JSON-Format!`;
 
+const SYSTEM_PROMPT = `Du bist ein hilfreicher Experten-Researcher. Deine Aufgabe ist es, uns dabei zu helfen, den Geschäftsführer eines vom Nutzer angegebenen Unternehmens zu finden.
+
+Du hast Zugriff auf die Google-Suche, um im Internet nach diesen Informationen zu suchen. Du erhältst weitere Details, die dir bei der Recherche helfen, wie zum Beispiel die Website und den Link zum Google Maps, sofern verfügbar.
+
+Recherchiere für die gefundene Person auch deren geschäftliche E-Mail-Adresse. Suche dazu gezielt auf der Firmenwebseite (z.B. Impressum, Kontaktseite, Über-uns-Seite) und über weitere Quellen. Wenn du die Emailadresse der Person nicht finden kannst, nimm die öffentliche Emailadresse des Unternehmens. Wenn du keine E-Mail-Adresse finden kannst, setze den Wert auf "NF".
+
+${JSON_ANWEISUNG}`;
+
+/**
+ * Standortbezogener Prompt: sucht die angegebene Funktion (z. B. "Akademie-
+ * leitung") für genau den Standort der Zeile — nicht die Zentrale.
+ */
+function rollenSystemPrompt(zielrolle: string): string {
+  return `Du bist ein hilfreicher Experten-Researcher. Deine Aufgabe ist es, für den unten angegebenen Standort eines Unternehmens die zuständige Person in folgender Funktion zu finden: ${zielrolle} (oder eine gleichwertige Funktionsbezeichnung).
+
+WICHTIG: Große Träger und Unternehmen haben viele Standorte. Gesucht ist NICHT die Geschäftsführung oder Leitung des Gesamtunternehmens, sondern die verantwortliche Person genau dieses Standorts (siehe Adresse). Findest du nur die Geschäftsführung der Zentrale, gib "NF" aus.
+
+Du hast Zugriff auf die Google-Suche. Vorgehen:
+1. Suche auf der Firmenwebseite die Unterseite genau dieses Standorts (oft unter „Standorte" verlinkt, häufig mit dem Stadtnamen in der URL). Dort stehen die Ansprechpartner mit Funktion und oft auch E-Mail-Adresse — häufig ganz unten auf der Standortseite.
+2. Suche zusätzlich bei Google nach „<Firmenname> <Stadt> ${zielrolle}".
+3. Gibt es mehrere passende Personen (z. B. Leitung und stellvertretende Leitung), nimm die Leitung.
+
+Recherchiere für die gefundene Person auch deren geschäftliche E-Mail-Adresse (Standortseite, Impressum, Kontaktseite). Die E-Mail-Adresse muss zur gefundenen Person gehören — gib NIEMALS die E-Mail-Adresse einer anderen Person aus. Wenn du die persönliche E-Mail-Adresse der Person nicht finden kannst, nimm die öffentliche E-Mail-Adresse dieses Standorts (nicht die der Zentrale). Wenn du keine E-Mail-Adresse finden kannst, setze den Wert auf "NF".
+
+${JSON_ANWEISUNG}`;
+}
+
 export type EnrichmentInput = {
   firmenname: string;
   webseite?: string | null;
   gmapsUrl?: string | null;
+  /** Adresse des Standorts — nur im Rollen-Modus Teil des Prompts. */
+  adresse?: string | null;
+  /** Gesuchte Funktion am Standort. Leer/null = Geschäftsführung (Standard). */
+  zielrolle?: string | null;
 };
 
 export type EnrichmentResult = {
@@ -109,12 +142,28 @@ export async function enrichLead(
       "GEMINI_API_KEY fehlt in .env.local — Lead-Enrichment nicht möglich.",
     );
   }
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+  // Ohne Zielrolle bleibt alles exakt wie bisher (gleicher Prompt, gleicher
+  // userText ohne Adresszeile) — bestehende Ordner verhalten sich unverändert.
+  const zielrolle = input.zielrolle?.trim() || "";
 
-  const userText =
-    `Firmenname: ${input.firmenname}\n` +
-    `Webseite: ${input.webseite ?? ""}\n` +
-    `Google Maps Link: ${input.gmapsUrl ?? ""}\n`;
+  // Modellwahl: Der Rollen-Modus muss die Standortseite wirklich lesen und
+  // Name↔E-Mail korrekt zuordnen — flash-lite vermischt dort im Test Personen
+  // und Adressen aus den Suchsnippets. Deshalb dort ein stärkeres Modell.
+  const model = zielrolle
+    ? process.env.GEMINI_MODEL_ZIELROLLE || "gemini-3.5-flash"
+    : process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+
+  const userText = zielrolle
+    ? `Firmenname: ${input.firmenname}\n` +
+      `Webseite: ${input.webseite ?? ""}\n` +
+      `Google Maps Link: ${input.gmapsUrl ?? ""}\n` +
+      `Adresse des Standorts: ${input.adresse ?? ""}\n` +
+      `Gesuchte Funktion: ${zielrolle}\n`
+    : `Firmenname: ${input.firmenname}\n` +
+      `Webseite: ${input.webseite ?? ""}\n` +
+      `Google Maps Link: ${input.gmapsUrl ?? ""}\n`;
+
+  const systemPrompt = zielrolle ? rollenSystemPrompt(zielrolle) : SYSTEM_PROMPT;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -122,7 +171,7 @@ export async function enrichLead(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: userText }] }],
         tools: [{ google_search: {} }],
         generationConfig: { temperature: 0.3 },

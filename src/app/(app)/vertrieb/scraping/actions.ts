@@ -323,6 +323,7 @@ export async function listLeadTableAction(input: {
       name: leadLists.name,
       pipelineId: leadLists.pipelineId,
       instantlyCampaignId: leadLists.instantlyCampaignId,
+      enrichmentRole: leadLists.enrichmentRole,
     })
     .from(leadLists)
     .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, org.id)))
@@ -416,6 +417,8 @@ export async function listLeadTableAction(input: {
     listName: listRow.name,
     linkedPipeline,
     hasCampaign: !!listRow.instantlyCampaignId,
+    // Zielrolle der Entscheider-Suche für diesen Ordner (null = Geschäftsführung).
+    enrichmentRole: listRow.enrichmentRole ?? null,
   };
 }
 
@@ -426,6 +429,20 @@ export async function listLeadTableAction(input: {
 // Die eigentliche Enrichment-Engine (runEnrichmentForRow, Drain, Rate-Limit-
 // Erkennung) liegt in enrich-run.ts, damit sie sowohl von diesen Server-Actions
 // als auch von der Hintergrund-Route /api/enrichment/run genutzt werden kann.
+
+/** Zielrolle des Ordners (null = Geschäftsführung/Standard). */
+async function leadListRole(
+  orgId: string,
+  listId: string,
+): Promise<string | null> {
+  if (!listId) return null;
+  const [row] = await db
+    .select({ enrichmentRole: leadLists.enrichmentRole })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, listId), eq(leadLists.orgId, orgId)))
+    .limit(1);
+  return row?.enrichmentRole ?? null;
+}
 
 export async function runEnrichmentBatchAction(input: {
   columnKey: string;
@@ -519,9 +536,16 @@ export async function runEnrichmentBatchAction(input: {
     engine.key !== column.key &&
     ("rowIds" in input.scope || input.scope.mode !== "force");
 
+  // Zielrolle des Ordners einmal für den ganzen Batch laden — der Vordergrund-
+  // Lauf muss dieselbe Rolle suchen wie das Hintergrund-"Update cells".
+  const zielrolle = await leadListRole(org.id, input.listId);
+
   const results = await Promise.all(
     toProcess.map((src) =>
-      runEnrichmentForRow(org.id, engine, src, columns, { keepExisting }),
+      runEnrichmentForRow(org.id, engine, src, columns, {
+        keepExisting,
+        zielrolle,
+      }),
     ),
   );
 
@@ -752,13 +776,28 @@ export type EnrichmentQueueResult = {
  * Server-Drain an. Kehrt sofort zurück — die Anreicherung (Vorname/Nachname/
  * E-Mail) läuft server-seitig weiter, auch wenn die App geschlossen oder der
  * Reiter gewechselt wird.
+ *
+ * `zielrolle` fehlt (undefined) = gespeicherte Rolle bleibt unangetastet; so
+ * rufen Stall-Recovery und "Wiederaufnehmen" die Action auf. Ein übergebener
+ * Wert wird vor dem Einreihen gespeichert — null setzt zurück auf den Standard
+ * (Geschäftsführung).
  */
 export async function queueEnrichmentAction(input: {
   listId: string;
+  zielrolle?: string | null;
 }): Promise<EnrichmentQueueResult> {
   const org = await requireActiveOrg();
   if (!input.listId)
     return { queued: false, pending: 0, error: "Keine Kampagne ausgewählt." };
+
+  // Rolle VOR dem Einreihen schreiben, damit der Drain schon mit ihr startet.
+  if (input.zielrolle !== undefined) {
+    const rolle = input.zielrolle?.trim() || null;
+    await db
+      .update(leadLists)
+      .set({ enrichmentRole: rolle })
+      .where(and(eq(leadLists.id, input.listId), eq(leadLists.orgId, org.id)));
+  }
 
   const pending = await pendingCountForList(org.id, input.listId);
   if (pending === 0) return { queued: false, pending: 0 };
