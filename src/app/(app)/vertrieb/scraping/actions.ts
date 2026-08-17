@@ -2331,6 +2331,7 @@ export async function sendListToInstantlyAction(input: {
     skippedAlreadySent: 0,
     skippedDuplicate: 0,
     skippedBlocked: 0,
+    skippedRejected: 0,
     failed: 0,
     remaining: 0,
     error: null,
@@ -2405,6 +2406,8 @@ export async function sendListToInstantlyAction(input: {
     let sent = 0;
     let updated = 0;
     let failed = 0;
+    // Von Instantly still verworfen (Dublette, Sperrliste, ungültige Adresse).
+    let skippedRejected = 0;
     let error: string | null = null;
     // Erfolgreich eingespielte/aufgefrischte Leads — für die Pipeline-Automatik.
     const pushedIds: string[] = [];
@@ -2431,7 +2434,7 @@ export async function sendListToInstantlyAction(input: {
     // sonst jeden Lead verschlucken, der bereits woanders läuft.
     if (addRows.length > 0) {
       try {
-        await bulkAddLeads(
+        const res = await bulkAddLeads(
           campaignId,
           addRows.map((s) => buildInstantlyLead(s, columns)),
           {
@@ -2439,9 +2442,23 @@ export async function sendListToInstantlyAction(input: {
             skipIfInWorkspace: input.filter.skipWorkspaceDuplicates,
           },
         );
-        sent = addRows.length;
-        await markSent(addRows);
-        pushedIds.push(...addRows.map((s) => s.contact.id));
+        // Nur die Leads als eingespielt vermerken, die Instantly WIRKLICH
+        // angelegt hat. Vorher galt der ganze Stapel als gesendet, sobald der
+        // Aufruf nicht warf — still verworfene Adressen landeten dadurch in der
+        // Pipeline-Phase "in Kampagne", ohne je in Instantly zu existieren.
+        //
+        // Abgeglichen wird über die Adresse, nicht über die Position: teilen
+        // sich zwei Zeilen (z. B. zwei Standorte einer Firma) dieselbe E-Mail,
+        // legt Instantly einen Lead an — beide Zeilen sind damit versorgt und
+        // dürfen nicht bei jedem Lauf erneut anlaufen.
+        const ok = new Set(res.createdEmails);
+        const accepted = addRows.filter((s) =>
+          ok.has(sendableEmail(s) ?? ""),
+        );
+        sent = accepted.length;
+        skippedRejected = addRows.length - accepted.length;
+        await markSent(accepted);
+        pushedIds.push(...accepted.map((s) => s.contact.id));
       } catch (e) {
         failed += addRows.length;
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
@@ -2461,11 +2478,18 @@ export async function sendListToInstantlyAction(input: {
             updated++;
             pushedIds.push(src.contact.id);
           } else {
-            // Laut DB gesendet, in Instantly aber nicht (mehr) vorhanden → neu anlegen.
-            await bulkAddLeads(campaignId, [lead], { skipIfInCampaign: false });
-            sent++;
-            await markSent([src]);
-            pushedIds.push(src.contact.id);
+            // Laut DB gesendet, in Instantly aber nicht (mehr) vorhanden → neu
+            // anlegen. Auch hier zählt nur, was Instantly bestätigt.
+            const res = await bulkAddLeads(campaignId, [lead], {
+              skipIfInCampaign: false,
+            });
+            if (res.uploaded > 0) {
+              sent++;
+              await markSent([src]);
+              pushedIds.push(src.contact.id);
+            } else {
+              skippedRejected++;
+            }
           }
         } catch (e) {
           failed++;
@@ -2499,6 +2523,7 @@ export async function sendListToInstantlyAction(input: {
       skippedAlreadySent: 0,
       skippedDuplicate,
       skippedBlocked,
+      skippedRejected,
       failed,
       remaining,
       error,

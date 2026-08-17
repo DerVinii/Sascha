@@ -828,6 +828,24 @@ export async function deleteLeadsByEmails(
 }
 
 /**
+ * Ergebnis eines /leads/add-Aufrufs. Instantly verschluckt Adressen still —
+ * Dublette im Workspace, Sperrliste, ungültige Adresse — und antwortet trotzdem
+ * mit 200. Wer nur auf „kein Fehler" prüft, hält Leads für eingespielt, die es
+ * nie in die Kampagne geschafft haben.
+ */
+export type BulkAddResult = {
+  /** Tatsächlich angelegte Leads. */
+  uploaded: number;
+  /** Adressen der angelegten Leads (klein geschrieben) — für die Zuordnung. */
+  createdEmails: string[];
+  skipped: number;
+  inBlocklist: number;
+  invalidEmail: number;
+  incomplete: number;
+  duplicates: number;
+};
+
+/**
  * Leads in eine Kampagne einspielen (bis zu 1000/Call).
  *
  * Achtung bei `skipIfInCampaign`: Instantly liest das als „steckt schon in
@@ -843,9 +861,10 @@ export async function bulkAddLeads(
   campaignId: string,
   leads: InstantlyLead[],
   opts?: { skipIfInCampaign?: boolean; skipIfInWorkspace?: boolean },
-): Promise<unknown> {
+): Promise<BulkAddResult> {
   // Endpoint der v2-CLI für "leads bulk-add" ist POST /leads/add (nicht /leads/bulk-add).
-  return call("/leads/add", {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = await call<any>("/leads/add", {
     method: "POST",
     body: JSON.stringify({
       campaign_id: campaignId,
@@ -854,4 +873,17 @@ export async function bulkAddLeads(
       skip_if_in_workspace: opts?.skipIfInWorkspace ?? false,
     }),
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const created: any[] = Array.isArray(d?.created_leads) ? d.created_leads : [];
+  return {
+    uploaded: num(d?.leads_uploaded),
+    createdEmails: created
+      .map((c) => String(c?.email ?? "").trim().toLowerCase())
+      .filter(Boolean),
+    skipped: num(d?.skipped_count),
+    inBlocklist: num(d?.in_blocklist),
+    invalidEmail: num(d?.invalid_email_count),
+    incomplete: num(d?.incomplete_count),
+    duplicates: num(d?.duplicated_leads) + num(d?.duplicate_email_count),
+  };
 }

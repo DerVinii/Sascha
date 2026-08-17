@@ -324,6 +324,12 @@ export type InstantlySendResult = {
   skippedDuplicate: number;
   /** übersprungen, weil der Lead auf der Sperrliste steht. */
   skippedBlocked: number;
+  /**
+   * Von Instantly beim Einspielen still verworfen (Dublette im Workspace,
+   * Sperrliste dort, ungültige Adresse). Diese Leads sind NICHT in der Kampagne
+   * und werden deshalb auch nicht als gesendet vermerkt.
+   */
+  skippedRejected: number;
   failed: number;
   remaining: number;
   error?: string | null;

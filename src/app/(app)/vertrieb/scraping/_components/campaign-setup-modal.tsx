@@ -58,6 +58,8 @@ type RunProgress = {
   skippedAlreadySent: number;
   skippedNoEmail: number;
   skippedDuplicate: number;
+  skippedBlocked: number;
+  skippedRejected: number;
 };
 
 /** Wunschmaße des Variablen-Menüs; beide Werte werden bei Platzmangel gekürzt. */
@@ -457,6 +459,8 @@ export function CampaignSetupModal({
         skippedAlreadySent: 0,
         skippedNoEmail: 0,
         skippedDuplicate: 0,
+        skippedBlocked: 0,
+        skippedRejected: 0,
       };
       setProgress({ ...acc });
       let offset = 0;
@@ -477,8 +481,14 @@ export function CampaignSetupModal({
         acc.skippedAlreadySent += r.skippedAlreadySent;
         acc.skippedNoEmail += r.skippedNoEmail;
         acc.skippedDuplicate += r.skippedDuplicate;
+        acc.skippedBlocked += r.skippedBlocked;
+        acc.skippedRejected += r.skippedRejected;
         acc.skipped +=
-          r.skippedNoEmail + r.skippedAlreadySent + r.skippedDuplicate;
+          r.skippedNoEmail +
+          r.skippedAlreadySent +
+          r.skippedDuplicate +
+          r.skippedBlocked +
+          r.skippedRejected;
         acc.failed += r.failed;
         offset += r.processed;
         setProgress({ ...acc });
@@ -520,6 +530,12 @@ export function CampaignSetupModal({
           : null,
         progress.skippedDuplicate > 0
           ? `${progress.skippedDuplicate} Duplikat(e) aus anderer Kampagne`
+          : null,
+        progress.skippedBlocked > 0
+          ? `${progress.skippedBlocked} auf der Sperrliste`
+          : null,
+        progress.skippedRejected > 0
+          ? `${progress.skippedRejected} von Instantly abgelehnt`
           : null,
       ]
         .filter(Boolean)
