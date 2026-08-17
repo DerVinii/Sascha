@@ -50,11 +50,15 @@ export const MAX_ROWS = 1000; // Phase-1-Cap (ein Kunde)
  * gemessen an echten DAA-Daten. Nacheinander passte damit gerade noch EINE
  * Zeile in eine Etappe, und ein Ordner mit 80 Zeilen wurde nie fertig.
  *
- * Die Größe ist bewusst dieselbe wie im Vordergrund ("Fehlende ausführen",
- * dort fest auf höchstens 8) — mehr würde das Gemini-Kontingent zusätzlich
- * belasten, ohne dass es nötig wäre.
+ * Warum ZWEI Werte: Das Gemini-Konto hat ein ausgabenbasiertes Rate-Limit
+ * ("spend-based rate limit"). Die Standard-Suche läuft mit dem günstigen
+ * flash-lite und verträgt 8 gleichzeitige Anfragen problemlos. Die Rollen-Suche
+ * nutzt das teurere Modell MIT Google-Recherche — dort lief das Konto bei 8
+ * parallelen Anfragen in genau dieses Limit (gegen die echte API gemessen).
+ * Deshalb dort deutlich sparsamer.
  */
 export const ENRICH_CONCURRENCY = 8;
+export const ENRICH_CONCURRENCY_ZIELROLLE = 3;
 
 /**
  * Hartes Zeitlimit je Zeile. Zusammen mit ROW_MIN_START_MS stellt es sicher,
@@ -349,7 +353,12 @@ export async function runEnrichmentPool(
     concurrency?: number;
   },
 ): Promise<EnrichPoolResult> {
-  const concurrency = Math.max(1, opts.concurrency ?? ENRICH_CONCURRENCY);
+  // Rollen-Modus = teures Modell mit Recherche → sparsamer, sonst reißt das
+  // ausgabenbasierte Rate-Limit des Gemini-Kontos.
+  const standard = opts.zielrolle?.trim()
+    ? ENRICH_CONCURRENCY_ZIELROLLE
+    : ENRICH_CONCURRENCY;
+  const concurrency = Math.max(1, opts.concurrency ?? standard);
   let next = 0;
   let processed = 0;
   let rateLimited = false;
@@ -632,16 +641,20 @@ export async function drainQueuedLists(opts: {
     const verarbeitet = processedRows - bereitsVerarbeitet;
 
     if (rateLimited) {
-      // Kontingent erschöpft: Lauf abbrechen (Client-Neustart nötig).
-      await db
-        .update(leadLists)
-        .set({ enrichmentQueuedAt: null })
-        .where(eq(leadLists.id, list.id));
+      // Kontingent-Grenze erreicht. Die Liste bleibt EINGEREIHT und macht später
+      // von selbst weiter — das Limit von Google ist ausgabenbasiert, es löst
+      // sich also durch Warten wieder auf. Früher wurde die Liste hier aus der
+      // Warteschlange genommen; dann blieb ein halb fertiger Ordner liegen, bis
+      // jemand von Hand neu startete.
+      //
+      // Kein Dauerfeuer: Die Kette wird nicht fortgesetzt (siehe Route), und ein
+      // erneuter Anstoß überspringt die Liste, solange ihr Tick frisch ist
+      // (ENRICH_STALE_MS) — das ergibt von selbst eine Abkühlpause.
       await meldeRecherche(list, {
-        title: "Lead-Recherche gestoppt",
-        body: `${list.name}: KI-Kontingent aufgebraucht${
+        title: "Lead-Recherche pausiert",
+        body: `${list.name}: KI-Kontingent kurz erschöpft${
           verarbeitet > 0 ? ` (${verarbeitet} Zeilen geschafft)` : ""
-        }`,
+        } — läuft automatisch weiter.`,
       });
       break;
     }
