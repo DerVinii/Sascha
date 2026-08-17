@@ -533,6 +533,34 @@ export const campaignTemplates = pgTable(
   ],
 );
 
+/**
+ * Sperrliste: Leads, die nie wieder angeschrieben werden dürfen (Widerspruch,
+ * „bitte nicht mehr melden", verbrannter Kontakt). Ein Eintrag sperrt über die
+ * E-Mail-Adresse ODER den Namen — meist beides, damit derselbe Mensch auch unter
+ * einer zweiten Adresse (oder nach einem erneuten Scrape) erkannt wird.
+ * Gegriffen wird beim Versand an Instantly (blocklist.ts), nicht beim Scrapen:
+ * der Lead darf in der Tabelle stehen, er darf nur keine Mail bekommen.
+ */
+export const blockedLeads = pgTable(
+  "blocked_leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Normalisiert (klein, getrimmt). NULL = Eintrag sperrt nur über den Namen. */
+    email: text("email"),
+    /** Normalisiert (klein, ohne Titel wie "Dr."). NULL = sperrt nur über die E-Mail. */
+    name: text("name"),
+    /** Freitext: warum gesperrt (z. B. "hat um Löschung gebeten"). */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("blocked_leads_org_idx").on(t.orgId)],
+);
+
 /** Generische Sync-Cursor/Zustände (z. B. Instantly-Backfill-Cursor) je Org. */
 export const syncState = pgTable(
   "sync_state",

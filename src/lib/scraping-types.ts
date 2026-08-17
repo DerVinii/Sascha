@@ -306,6 +306,8 @@ export type InstantlySendPreview = {
   /** Leads mit verifizierter Entscheider-E-Mail (Email_Entscheider). */
   withFinderEmail: number;
   alreadySent: number;
+  /** Leads auf der Sperrliste — werden nie gesendet (Einstellungen → Sperrliste). */
+  blocked: number;
   /** Anzahl, die mit dem aktuellen Filter gesendet würde. */
   eligible: number;
 };
@@ -320,6 +322,8 @@ export type InstantlySendResult = {
   skippedAlreadySent: number;
   /** übersprungen, weil bereits in einer anderen Kampagne vorhanden (Duplikat). */
   skippedDuplicate: number;
+  /** übersprungen, weil der Lead auf der Sperrliste steht. */
+  skippedBlocked: number;
   failed: number;
   remaining: number;
   error?: string | null;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Database, SunMoon, Bell, CalendarClock } from "lucide-react";
+import { Database, SunMoon, Bell, CalendarClock, Ban } from "lucide-react";
 
 const ITEMS = [
   {
@@ -11,6 +11,7 @@ const ITEMS = [
     icon: Bell,
   },
   { href: "/einstellungen/kalender", label: "Kalender", icon: CalendarClock },
+  { href: "/einstellungen/sperrliste", label: "Sperrliste", icon: Ban },
   { href: "/einstellungen/daten", label: "Daten", icon: Database },
   { href: "/einstellungen/darstellung", label: "Darstellung", icon: SunMoon },
 ];

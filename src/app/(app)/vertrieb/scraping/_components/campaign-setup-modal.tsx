@@ -15,6 +15,7 @@ import {
   Braces,
   LayoutTemplate,
   Save,
+  Ban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { menuPosition, type MenuRect } from "@/lib/dropdown-position";
@@ -620,6 +621,13 @@ export function CampaignSetupModal({
                       {preview.alreadySent > 0 &&
                         ` · ${preview.alreadySent} bereits gesendet`}
                     </div>
+                    {preview.blocked > 0 && (
+                      <div className="text-[11px] text-err inline-flex items-center gap-1">
+                        <Ban className="h-3 w-3 shrink-0" />
+                        {preview.blocked} auf der Sperrliste — werden nicht
+                        angeschrieben
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-sub">Keine Vorschau.</div>

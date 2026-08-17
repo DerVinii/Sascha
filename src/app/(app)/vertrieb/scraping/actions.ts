@@ -31,6 +31,7 @@ import {
 } from "@/lib/server/pipeline-sync";
 import { autoAdvanceListLeads } from "@/lib/server/pipeline-auto";
 import { listSignaturesSafe } from "@/lib/server/signatures";
+import { loadBlocklist, type Blocklist } from "@/lib/server/blocklist";
 import { htmlToPlainText } from "@/lib/signature";
 import {
   bulkAddLeads,
@@ -1804,6 +1805,20 @@ function rowSentTo(src: RowSources, campaignId: string): boolean {
   return !!camps[campaignId];
 }
 
+/**
+ * Steht dieser Lead auf der Sperrliste? Geprüft werden BEIDE Adressen (normale
+ * und Entscheider-E-Mail) sowie der Name — wer einmal „nicht mehr anschreiben"
+ * gesagt hat, ist auch unter seiner zweiten Adresse tabu.
+ */
+function isRowBlocked(sperrliste: Blocklist, src: RowSources): boolean {
+  if (sperrliste.size === 0) return false;
+  return sperrliste.isBlocked({
+    emails: [src.contact.email, finderEmail(src)],
+    firstName: src.contact.firstName,
+    lastName: src.contact.lastName,
+  });
+}
+
 function buildInstantlyLead(
   src: RowSources,
   columns: LeadColumn[],
@@ -2005,10 +2020,12 @@ async function computePreview(
   filter: InstantlySendFilter,
 ): Promise<InstantlySendPreview> {
   const all = await loadLeadRows(orgId, listId);
+  const sperrliste = await loadBlocklist(orgId);
   let withEmail = 0;
   let noEmail = 0;
   let withFinderEmail = 0;
   let alreadySent = 0;
+  let blocked = 0;
   let eligible = 0;
   for (const src of all) {
     // Feste Regel: Entscheider-E-Mail gewinnt, sonst normale E-Mail; ohne
@@ -2019,6 +2036,11 @@ async function computePreview(
     }
     withEmail++;
     if (finderEmail(src)) withFinderEmail++;
+    // Sperrliste zählt vor allen anderen Filtern: Diese Leads gehen nie raus.
+    if (isRowBlocked(sperrliste, src)) {
+      blocked++;
+      continue;
+    }
     const sent = campaignId ? rowSentTo(src, campaignId) : false;
     if (sent) alreadySent++;
     if (filter.skipAlreadySent && sent) continue;
@@ -2030,6 +2052,7 @@ async function computePreview(
     noEmail,
     withFinderEmail,
     alreadySent,
+    blocked,
     eligible,
   };
 }
@@ -2307,6 +2330,7 @@ export async function sendListToInstantlyAction(input: {
     skippedNoEmail: 0,
     skippedAlreadySent: 0,
     skippedDuplicate: 0,
+    skippedBlocked: 0,
     failed: 0,
     remaining: 0,
     error: null,
@@ -2333,11 +2357,20 @@ export async function sendListToInstantlyAction(input: {
     const toAdd: RowSources[] = [];
     const toUpdate: RowSources[] = [];
     let skippedNoEmail = 0;
+    let skippedBlocked = 0;
+    const sperrliste = await loadBlocklist(org.id);
     for (const src of slice) {
       // Feste Regel: Entscheider-E-Mail gewinnt, sonst normale E-Mail; ohne
       // beides wird der Lead übersprungen.
       if (!sendableEmail(src)) {
         skippedNoEmail++;
+        continue;
+      }
+      // Sperrliste: harte Grenze vor allem anderen. Auch das Auffrischen eines
+      // bereits eingespielten Leads unterbleibt — sonst würde ein gesperrter
+      // Mensch weiter in einer laufenden Kampagne mitgeschleift.
+      if (isRowBlocked(sperrliste, src)) {
+        skippedBlocked++;
         continue;
       }
       if (rowSentTo(src, campaignId)) toUpdate.push(src);
@@ -2465,6 +2498,7 @@ export async function sendListToInstantlyAction(input: {
       skippedNoEmail,
       skippedAlreadySent: 0,
       skippedDuplicate,
+      skippedBlocked,
       failed,
       remaining,
       error,
