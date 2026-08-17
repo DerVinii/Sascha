@@ -2,10 +2,16 @@
  * Hintergrund-Enrichment-Drain.
  *
  * Angestoßen von "Update cells" (queueEnrichmentAction) und vom Vercel-Cron-
- * Heartbeat. Antwortet sofort mit 202 und erledigt die eigentliche Arbeit in
- * `after()` — so läuft die Anreicherung server-seitig weiter, unabhängig davon,
- * ob der Client noch offen ist. Bei noch offener Arbeit stößt sie den nächsten
- * Hop selbst an (Self-Chaining); der Cron fängt abgebrochene Ketten wieder auf.
+ * Heartbeat, der alle 5 Minuten läuft (vercel.json). Antwortet sofort mit 202
+ * und erledigt die eigentliche Arbeit in `after()` — so läuft die Anreicherung
+ * server-seitig weiter, unabhängig davon, ob der Client noch offen ist. Bei
+ * noch offener Arbeit stößt sie den nächsten Hop selbst an (Self-Chaining).
+ *
+ * Der 5-Minuten-Takt ist das Sicherheitsnetz: Reißt die Kette doch einmal ab
+ * oder pausiert ein Lauf wegen der Gemini-Kontingent-Grenze, holt ihn der
+ * nächste Cron-Lauf binnen fünf Minuten wieder ab — auch bei geschlossener App.
+ * Eine laufende Kette wird dabei nicht gedoppelt: Der Cron-Anstoß überspringt
+ * Listen, deren Tick noch frisch ist (ENRICH_STALE_MS).
  */
 
 import { NextRequest, NextResponse, after } from "next/server";
@@ -20,7 +26,7 @@ export const maxDuration = 60;
  * Ablauf muss die Funktion noch die nächste Etappe anstoßen — genau daran ist
  * der Lauf früher hängen geblieben: Eine überlange Zeile ließ die Funktion ins
  * 60-Sekunden-Limit laufen, der Anstoß ging verloren und der Ordner stand still,
- * bis jemand die App öffnete oder der Tages-Cron lief.
+ * bis jemand die App öffnete oder der Cron lief.
  *
  * Die Zeilen selbst enden garantiert vor diesem Budget (siehe ROW_TIMEOUT_MS /
  * ROW_MIN_START_MS in enrich-run.ts), es bleiben also ~15 s Luft für den Anstoß.
