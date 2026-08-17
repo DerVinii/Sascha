@@ -554,6 +554,11 @@ export const blockedLeads = pgTable(
     name: text("name"),
     /** Freitext: warum gesperrt (z. B. "hat um Löschung gebeten"). */
     note: text("note"),
+    /** Gesetzt, sobald die Adresse auch in Instantlys eigener Sperrliste steht
+     *  (workspace-weit, gilt dort für alle Kampagnen). NULL = nicht übertragen
+     *  — entweder weil der Eintrag keine E-Mail hat oder weil Instantly gerade
+     *  nicht erreichbar war; der lokale Schutz greift trotzdem. */
+    instantlySyncedAt: timestamp("instantly_synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

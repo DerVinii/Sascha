@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Ban, Loader2, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Ban, Loader2, Plus, Send, Trash2 } from "lucide-react";
 import type { BlockedLead } from "@/lib/server/blocklist";
 import {
   addBlockedLeadAction,
@@ -55,6 +55,12 @@ export function BlocklistManager({ initial }: { initial: BlockedLead[] }) {
           weil dieselbe Person sonst unter einer zweiten Adresse wieder
           auftaucht. Der Lead darf in der Tabelle stehen bleiben, er wird beim
           Versand still übersprungen.
+        </p>
+        <p className="text-xs text-sub mb-4">
+          Die E-Mail-Adresse wird zusätzlich in die Sperrliste von{" "}
+          <strong className="font-medium text-ink">Instantly</strong> eingetragen.
+          Die gilt dort für den ganzen Workspace und damit auch für bereits
+          laufende Kampagnen — zwei unabhängige Schlösser für dieselbe Sache.
         </p>
 
         <div className="space-y-2">
@@ -144,6 +150,25 @@ export function BlocklistManager({ initial }: { initial: BlockedLead[] }) {
                   )}
                   {e.note && (
                     <div className="text-[11px] text-sub mt-0.5">{e.note}</div>
+                  )}
+                  {/* Zustand der Instantly-Sperrliste: Nur-Name-Einträge kann
+                      Instantly nicht kennen (dort zählen Adressen/Domains). */}
+                  {e.email ? (
+                    e.instantlySynced ? (
+                      <div className="text-[11px] text-ok mt-1 inline-flex items-center gap-1">
+                        <Send className="h-3 w-3 shrink-0" />
+                        auch in Instantly gesperrt
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-warn mt-1 inline-flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        noch nicht in Instantly — erneut „Sperren" klicken
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-[11px] text-sub mt-1">
+                      nur Name — für Instantly wäre eine E-Mail nötig
+                    </div>
                   )}
                 </div>
                 <button

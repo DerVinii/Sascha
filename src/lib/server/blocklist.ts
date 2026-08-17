@@ -14,12 +14,18 @@
 import { db } from "@/db";
 import { blockedLeads } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
+import {
+  addBlocklistEntry,
+  removeBlocklistEntry,
+} from "@/lib/server/instantly/client";
 
 export type BlockedLead = {
   id: string;
   email: string | null;
   name: string | null;
   note: string | null;
+  /** true = die Adresse steht auch in Instantlys eigener Sperrliste. */
+  instantlySynced: boolean;
   createdAt: string;
 };
 
@@ -111,13 +117,41 @@ export async function listBlockedLeads(orgId: string): Promise<BlockedLead[]> {
     .from(blockedLeads)
     .where(eq(blockedLeads.orgId, orgId))
     .orderBy(asc(blockedLeads.name), asc(blockedLeads.email));
-  return rows.map((r) => ({
+  return rows.map(zuBlockedLead);
+}
+
+function zuBlockedLead(r: typeof blockedLeads.$inferSelect): BlockedLead {
+  return {
     id: r.id,
     email: r.email,
     name: r.name,
     note: r.note,
+    instantlySynced: r.instantlySyncedAt !== null,
     createdAt: r.createdAt.toISOString(),
-  }));
+  };
+}
+
+/**
+ * Adresse zusätzlich in Instantlys eigene Sperrliste eintragen.
+ *
+ * Warum überhaupt doppelt: Der App-Filter greift beim Einspielen neuer Leads.
+ * Instantlys Sperrliste wirkt workspace-weit und zusätzlich auf alles, was dort
+ * schon liegt oder von Hand angelegt wird — also auch auf laufende Kampagnen.
+ * Zwei unabhängige Schlösser für denselben Wunsch: nie wieder anschreiben.
+ *
+ * Best-Effort und bewusst ohne Weiterwerfen: Ist Instantly gerade nicht
+ * erreichbar, darf die Sperre trotzdem NICHT verloren gehen — lokal ist sie
+ * gespeichert, und der fehlende Haken bleibt in der Oberfläche sichtbar.
+ */
+async function inInstantlySperren(email: string | null): Promise<Date | null> {
+  if (!email) return null; // Nur-Name-Eintrag: Instantly kennt nur Adressen/Domains
+  try {
+    await addBlocklistEntry(email);
+    return new Date();
+  } catch (err) {
+    console.error("Instantly-Sperrliste: Eintragen fehlgeschlagen", err);
+    return null;
+  }
 }
 
 /**
@@ -164,20 +198,47 @@ export async function addBlockedLead(
         .values({ orgId, email, name, note })
         .returning();
 
+  // Zusätzlich in Instantly sperren. Schon übertragene Einträge werden nicht
+  // erneut geschickt, ein bisher fehlgeschlagener Versuch aber wiederholt.
+  let gesendet = row.instantlySyncedAt;
+  if (!gesendet) {
+    gesendet = await inInstantlySperren(row.email);
+    if (gesendet) {
+      await db
+        .update(blockedLeads)
+        .set({ instantlySyncedAt: gesendet })
+        .where(and(eq(blockedLeads.id, row.id), eq(blockedLeads.orgId, orgId)));
+    }
+  }
+
   return {
-    entry: {
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      note: row.note,
-      createdAt: row.createdAt.toISOString(),
-    },
+    entry: zuBlockedLead({ ...row, instantlySyncedAt: gesendet }),
     error: null,
   };
 }
 
+/**
+ * Sperre aufheben — auch in Instantly, sonst bliebe die Person dort weiter
+ * blockiert, obwohl sie in der App wieder freigegeben ist.
+ */
 export async function removeBlockedLead(orgId: string, id: string): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(blockedLeads)
+    .where(and(eq(blockedLeads.id, id), eq(blockedLeads.orgId, orgId)))
+    .limit(1);
+
   await db
     .delete(blockedLeads)
     .where(and(eq(blockedLeads.id, id), eq(blockedLeads.orgId, orgId)));
+
+  if (row?.email) {
+    try {
+      await removeBlocklistEntry(row.email);
+    } catch (err) {
+      // Wie beim Eintragen: Der lokale Zustand hat Vorrang, ein Instantly-
+      // Ausfall darf das Freigeben nicht scheitern lassen.
+      console.error("Instantly-Sperrliste: Entfernen fehlgeschlagen", err);
+    }
+  }
 }

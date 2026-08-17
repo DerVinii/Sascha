@@ -887,3 +887,79 @@ export async function bulkAddLeads(
     duplicates: num(d?.duplicated_leads) + num(d?.duplicate_email_count),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Sperrliste (Block List) — workspace-weit, gilt für ALLE Kampagnen
+// ---------------------------------------------------------------------------
+
+/**
+ * Ein Eintrag der Instantly-Sperrliste. `bl_value` ist entweder eine
+ * E-Mail-Adresse oder eine Domain ("@firma.de") — beides akzeptiert die API.
+ */
+export type InstantlyBlocklistEntry = { id: string; value: string };
+
+/** Alle Sperrlisten-Einträge des Workspaces (paginiert). */
+export async function listBlocklistEntries(): Promise<InstantlyBlocklistEntry[]> {
+  const out: InstantlyBlocklistEntry[] = [];
+  let startingAfter: string | null = null;
+
+  for (let seite = 0; seite < 20; seite++) {
+    const query = new URLSearchParams({ limit: "100" });
+    if (startingAfter) query.set("starting_after", startingAfter);
+    const d = await call<{
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items?: any[];
+      next_starting_after?: string | null;
+    }>(`/block-lists-entries?${query.toString()}`);
+
+    const items = Array.isArray(d?.items) ? d.items : [];
+    for (const it of items) {
+      const id = String(it?.id ?? "").trim();
+      const value = String(it?.bl_value ?? "").trim().toLowerCase();
+      if (id && value) out.push({ id, value });
+    }
+    startingAfter = d?.next_starting_after ?? null;
+    if (!startingAfter || items.length === 0) break;
+  }
+  return out;
+}
+
+/**
+ * Adresse (oder Domain) in die Instantly-Sperrliste eintragen.
+ *
+ * Idempotent: Steht der Wert schon drin, wird der vorhandene Eintrag
+ * zurückgegeben, statt einen zweiten anzulegen — Instantly selbst würde einen
+ * doppelten Eintrag mit einem Fehler quittieren.
+ */
+export async function addBlocklistEntry(
+  value: string,
+): Promise<InstantlyBlocklistEntry> {
+  const wert = value.trim().toLowerCase();
+  if (!wert) throw new Error("Leerer Wert für die Instantly-Sperrliste.");
+
+  const vorhanden = (await listBlocklistEntries()).find((e) => e.value === wert);
+  if (vorhanden) return vorhanden;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = await call<any>("/block-lists-entries", {
+    method: "POST",
+    body: JSON.stringify({ bl_value: wert }),
+  });
+  return { id: String(d?.id ?? ""), value: String(d?.bl_value ?? wert) };
+}
+
+/**
+ * Adresse aus der Instantly-Sperrliste entfernen (Best-Effort). Gibt zurück, ob
+ * tatsächlich etwas gelöscht wurde — steht der Wert nicht drin, ist das kein
+ * Fehler, sondern schlicht nichts zu tun.
+ */
+export async function removeBlocklistEntry(value: string): Promise<boolean> {
+  const wert = value.trim().toLowerCase();
+  if (!wert) return false;
+  const treffer = (await listBlocklistEntries()).find((e) => e.value === wert);
+  if (!treffer) return false;
+  await call(`/block-lists-entries/${encodeURIComponent(treffer.id)}`, {
+    method: "DELETE",
+  });
+  return true;
+}
