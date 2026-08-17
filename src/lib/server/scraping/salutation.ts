@@ -180,7 +180,10 @@ export async function runSalutationForRow(
       { Vorname: vorname, Nachname: nachname },
       // Ohne Google-Suche: Das Geschlecht steckt im Vornamen — eine Suche würde
       // pro Zeile nur Zeit kosten und das Modell vom Format ablenken.
-      { search: false },
+      // Knappes Zeitlimit: Ohne Suche ist die Anrede in ein bis zwei Sekunden
+      // da. Hängt die Anfrage doch, darf sie den Hintergrund-Lauf nicht ins
+      // Funktions-Zeitlimit ziehen — dann risse die Etappen-Kette ab.
+      { search: false, timeoutMs: 15_000 },
     );
     const wert = cleanSalutation(antwort);
     await writeCell(orgId, column.key, src.contact.id, {

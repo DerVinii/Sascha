@@ -42,6 +42,45 @@ export { cellPatch };
 
 export const MAX_ROWS = 1000; // Phase-1-Cap (ein Kunde)
 
+/**
+ * Wie viele Zeilen der Hintergrund-Lauf gleichzeitig recherchiert.
+ *
+ * Warum überhaupt parallel: Im Rollen-Modus (z. B. Akademieleitung) liest das
+ * Modell echte Standortseiten und braucht dafür 5–50 Sekunden pro Zeile —
+ * gemessen an echten DAA-Daten. Nacheinander passte damit gerade noch EINE
+ * Zeile in eine Etappe, und ein Ordner mit 80 Zeilen wurde nie fertig.
+ *
+ * Die Größe ist bewusst dieselbe wie im Vordergrund ("Fehlende ausführen",
+ * dort fest auf höchstens 8) — mehr würde das Gemini-Kontingent zusätzlich
+ * belasten, ohne dass es nötig wäre.
+ */
+export const ENRICH_CONCURRENCY = 8;
+
+/**
+ * Hartes Zeitlimit je Zeile. Zusammen mit ROW_MIN_START_MS stellt es sicher,
+ * dass eine Etappe pünktlich endet: Die Route darf insgesamt nur 60 Sekunden
+ * leben (maxDuration) und muss danach noch die nächste Etappe anstoßen. Genau
+ * hier lag der Fehler — eine überlange Zeile ließ die Funktion ins Limit
+ * laufen, der Anstoß ging verloren und der Lauf blieb stehen.
+ */
+const ROW_TIMEOUT_MS = 40_000;
+
+/**
+ * So viel Restzeit muss die Etappe mindestens haben, um noch eine neue Zeile
+ * anzufangen. Darunter wird nichts Neues mehr begonnen — die offenen Zeilen
+ * erledigt die nächste Etappe.
+ */
+const ROW_MIN_START_MS = 20_000;
+
+/**
+ * Nach so vielen Fehlversuchen in Folge gilt eine Zeile als erledigt
+ * ("nicht gefunden") statt als Fehler. Ohne diese Grenze würde eine dauerhaft
+ * scheiternde Zeile in JEDER Etappe erneut gezogen (Fehler zählen als „braucht
+ * einen Lauf") und der Ordner käme nie ans Ende. Über "Alle erzwingen" lässt
+ * sich eine solche Zeile jederzeit erneut versuchen.
+ */
+const MAX_VERSUCHE = 3;
+
 export type RowOutcome = {
   /** "partial" = Zeitbudget innerhalb der Zeile erschöpft (nur Reacher-Spalte) —
    *  Fortschritt ist gespeichert, der nächste Aufruf setzt fort. */
@@ -112,8 +151,13 @@ export async function runEnrichmentForRow(
    *  E-Mail) — dann soll die Suche die Lücke schließen und nicht den Namen
    *  ersetzen, der schon dasteht. Bei "Alle erzwingen" bewusst aus.
    *  zielrolle: Zielrolle des Ordners (lead_lists.enrichment_role). Leer/null =
-   *  Geschäftsführung, also exakt das bisherige Verhalten. */
-  opts?: { keepExisting?: boolean; zielrolle?: string | null },
+   *  Geschäftsführung, also exakt das bisherige Verhalten.
+   *  timeoutMs: hartes Zeitlimit dieser einen Zeile (siehe ROW_TIMEOUT_MS). */
+  opts?: {
+    keepExisting?: boolean;
+    zielrolle?: string | null;
+    timeoutMs?: number;
+  },
 ): Promise<RowOutcome> {
   // "Mit KI ausfüllen" (Claygent): freier Prompt pro Zeile, Modell fest.
   if (column.config.ai?.prompt) {
@@ -186,6 +230,7 @@ export async function runEnrichmentForRow(
       gmapsUrl,
       adresse,
       zielrolle: opts?.zielrolle ?? null,
+      timeoutMs: opts?.timeoutMs,
     });
     const runAt = new Date().toISOString();
 
@@ -244,20 +289,94 @@ export async function runEnrichmentForRow(
     return { status: "not_found" };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Fehler";
+    const rateLimited = isRateLimitError(message);
+
+    // Fehlversuche mitzählen. Ein Kontingent-Fehler (429) zählt bewusst NICHT
+    // mit: Daran ist die Zeile unschuldig, der ganze Lauf stoppt ohnehin.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bisherigeZelle = (src.contact.customFields?.cells as any)?.[column.key];
+    const bisher = Number(bisherigeZelle?.versuche ?? 0);
+    const versuche = rateLimited ? bisher : bisher + 1;
+    // Erschöpft = nicht weiter versuchen. Sonst zöge der Hintergrund-Lauf diese
+    // Zeile in jeder Etappe erneut (Fehler gelten als „braucht einen Lauf")
+    // und der Ordner bliebe für immer „läuft".
+    const erschoepft = !rateLimited && versuche >= MAX_VERSUCHE;
+
     const cell = {
-      status: "error",
+      status: erschoepft ? "not_found" : "error",
       provider: null,
       runAt: new Date().toISOString(),
       error: message.slice(0, 300),
       value: "",
       raw: null,
+      versuche,
     };
     await db
       .update(contacts)
       .set({ customFields: cellPatch(column.key, cell) })
       .where(and(eq(contacts.id, src.contact.id), eq(contacts.orgId, orgId)));
-    return { status: "error", rateLimited: isRateLimitError(message) };
+    return { status: erschoepft ? "not_found" : "error", rateLimited };
   }
+}
+
+export type EnrichPoolResult = {
+  /** Tatsächlich bearbeitete Zeilen (unabhängig vom Ergebnis). */
+  processed: number;
+  /** true = es sind Zeilen offen geblieben (Zeitbudget der Etappe erschöpft). */
+  remaining: boolean;
+  rateLimited: boolean;
+};
+
+/**
+ * Recherchiert mehrere Zeilen gleichzeitig, bis das Zeitbudget der Etappe
+ * aufgebraucht ist (gleitendes Fenster: wird eine Zeile fertig, rückt die
+ * nächste nach).
+ *
+ * Der Kern gegen den Steckenbleib-Fehler: Es wird nur dann eine neue Zeile
+ * begonnen, wenn sie im schlimmsten Fall noch VOR dem Etappenende fertig ist —
+ * und jede Zeile bekommt zusätzlich ein Zeitlimit, das nie über das Etappenende
+ * hinausreicht. Dadurch endet die Etappe verlässlich rechtzeitig und kann die
+ * nächste anstoßen.
+ */
+export async function runEnrichmentPool(
+  orgId: string,
+  column: LeadColumn,
+  rows: RowSources[],
+  columns: LeadColumn[],
+  opts: {
+    deadline: number;
+    zielrolle?: string | null;
+    concurrency?: number;
+  },
+): Promise<EnrichPoolResult> {
+  const concurrency = Math.max(1, opts.concurrency ?? ENRICH_CONCURRENCY);
+  let next = 0;
+  let processed = 0;
+  let rateLimited = false;
+
+  async function arbeiter(): Promise<void> {
+    while (!rateLimited) {
+      const rest = opts.deadline - Date.now();
+      if (rest < ROW_MIN_START_MS) return; // nichts Neues mehr anfangen
+      const i = next++;
+      if (i >= rows.length) return;
+
+      const outcome = await runEnrichmentForRow(orgId, column, rows[i], columns, {
+        zielrolle: opts.zielrolle,
+        // Nie über das Etappenende hinaus — auch nicht, wenn ROW_TIMEOUT_MS
+        // theoretisch mehr erlauben würde.
+        timeoutMs: Math.min(ROW_TIMEOUT_MS, rest),
+      });
+      processed++;
+      if (outcome.rateLimited) rateLimited = true;
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, rows.length) }, arbeiter),
+  );
+
+  return { processed, remaining: next < rows.length, rateLimited };
 }
 
 /** Zeilen einer Liste, die noch angereichert werden müssen (Name leer + Run nötig). */
@@ -405,28 +524,20 @@ export async function drainQueuedLists(opts: {
     // getan? Sonst käme ein „fertig" auch für Listen, bei denen nichts anlag.
     const bereitsVerarbeitet = processedRows;
 
-    // --- Phase 1: Geschäftsführer finden (Gemini) --------------------------
+    // --- Phase 1: Entscheider finden (Gemini) ------------------------------
+    // Mehrere Zeilen gleichzeitig (runEnrichmentPool): Im Rollen-Modus dauert
+    // eine Zeile 5–50 s, nacheinander würde ein großer Ordner nie fertig.
     if (dmColumn) {
       const all = await loadLeadRows(list.orgId, list.id);
       const missing = missingRows(dmColumn, columns, all);
 
-      let i = 0;
-      for (; i < missing.length; i++) {
-        if (Date.now() >= deadline) break;
-        const outcome = await runEnrichmentForRow(
-          list.orgId,
-          dmColumn,
-          missing[i],
-          columns,
-          { zielrolle: list.zielrolle },
-        );
-        processedRows++;
-        if (outcome.rateLimited) {
-          rateLimited = true;
-          break;
-        }
-      }
-      if (i < missing.length && !rateLimited) listRemaining = true;
+      const pool = await runEnrichmentPool(list.orgId, dmColumn, missing, columns, {
+        deadline,
+        zielrolle: list.zielrolle,
+      });
+      processedRows += pool.processed;
+      if (pool.rateLimited) rateLimited = true;
+      else if (pool.remaining) listRemaining = true;
     }
 
     // --- Phase 1.5: Anrede formulieren (Gemini, fester Prompt) -------------

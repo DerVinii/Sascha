@@ -60,7 +60,18 @@ export type EnrichmentInput = {
   adresse?: string | null;
   /** Gesuchte Funktion am Standort. Leer/null = Geschäftsführung (Standard). */
   zielrolle?: string | null;
+  /** Hartes Zeitlimit für diesen Aufruf (siehe STANDARD_TIMEOUT_MS). */
+  timeoutMs?: number;
 };
+
+/**
+ * Zeitlimit einer einzelnen Suche. Nötig, weil die Recherche im Rollen-Modus
+ * stark schwankt (gemessen 5–50 s, je nachdem wie tief das Modell die
+ * Standortseiten durchsucht). Ohne Limit reißt eine einzelne zähe Zeile das
+ * Zeitbudget der ganzen Etappe — und die Hintergrund-Kette stirbt, weil die
+ * Serverfunktion abgeschossen wird, bevor sie die nächste Etappe anstoßen kann.
+ */
+export const STANDARD_TIMEOUT_MS = 40_000;
 
 export type EnrichmentResult = {
   vorname: string; // "NF" wenn nicht gefunden
@@ -165,20 +176,37 @@ export async function enrichLead(
 
   const systemPrompt = zielrolle ? rollenSystemPrompt(zielrolle) : SYSTEM_PROMPT;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userText }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { temperature: 0.3 },
-      }),
-      cache: "no-store",
-    },
-  );
+  const timeoutMs = Math.max(5_000, input.timeoutMs ?? STANDARD_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: userText }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.3 },
+        }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
+  } catch (e) {
+    // Abbruch durch das Zeitlimit als klare Meldung durchreichen — der Aufrufer
+    // zählt sie als Fehlversuch und probiert die Zeile in einer späteren Etappe
+    // erneut (dann meist mit vollem Zeitfenster).
+    const name = e instanceof Error ? e.name : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw new Error(
+        `Zeitüberschreitung nach ${Math.round(timeoutMs / 1000)}s — Suche abgebrochen.`,
+      );
+    }
+    throw e;
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

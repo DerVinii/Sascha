@@ -17,6 +17,8 @@ export type ProviderInputs = {
   adresse?: string | null;
   /** Zielrolle des Ordners; leer/null = Geschäftsführung (Standard). */
   zielrolle?: string | null;
+  /** Hartes Zeitlimit je Anbieter-Aufruf (siehe STANDARD_TIMEOUT_MS). */
+  timeoutMs?: number;
 };
 
 export type ProviderRun = {
