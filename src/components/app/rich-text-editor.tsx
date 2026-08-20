@@ -77,9 +77,16 @@ export function RichTextEditor({
   const edRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Letzter von uns gemeldeter HTML-Stand — verhindert, dass das Zurückspielen
-  // des Props den Cursor bei jedem Tastendruck an den Anfang springen lässt.
-  const lastHtml = useRef(value);
+  // Letzter in die Schreibfläche geschriebener bzw. von uns gemeldeter HTML-Stand
+  // — verhindert, dass das Zurückspielen des Props den Cursor bei jedem
+  // Tastendruck an den Anfang springen lässt.
+  //
+  // Startwert bewusst `null` und NICHT `value`: Beim Einhängen wären Ref und
+  // Prop sonst von Anfang an gleich, der Abgleich unten würde übersprungen und
+  // der vorhandene Inhalt landete nie in der Schreibfläche. Eine gespeicherte
+  // Signatur erschien dadurch leer — und ein simples Hinein- und Wegklicken
+  // meldete den leeren Stand zurück, der dann die Signatur überschrieb.
+  const lastHtml = useRef<string | null>(null);
   const savedRange = useRef<Range | null>(null);
   const onChangeRef = useRef(onChange);
   const onErrorRef = useRef(onError);
