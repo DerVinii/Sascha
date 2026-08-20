@@ -52,6 +52,40 @@ Recherchiere für die gefundene Person auch deren geschäftliche E-Mail-Adresse 
 ${JSON_ANWEISUNG}`;
 }
 
+/**
+ * Denk-Budget eines Modells steuern.
+ *
+ * Die beiden Modellfamilien nehmen dafür unterschiedliche Felder — deshalb hier
+ * an EINER Stelle, damit Messskript und App garantiert dasselbe schicken:
+ *   - Gemini 3.x: generationConfig.thinkingLevel = "minimal" | "low" | "medium" | "high"
+ *   - Gemini 2.5: generationConfig.thinkingConfig.thinkingBudget = <Anzahl Tokens>
+ *                 (0 schaltet das Nachdenken ab, -1 = Modell entscheidet)
+ *
+ * Denk-Tokens werden als Output abgerechnet. Bei gemini-3.5-flash sind das
+ * 9 $/Mio. — dort ist das Budget der größte Kostenhebel überhaupt.
+ */
+export function thinkingConfig(
+  model: string,
+  einstellung: string | undefined | null,
+): Record<string, unknown> {
+  const wert = (einstellung ?? "").trim();
+  if (!wert) return {}; // nichts setzen = Vorgabe des Modells
+  // Zahl → 2.5-Schreibweise, Wort → 3.x-Schreibweise. Absichtlich am Wert
+  // festgemacht und nicht am Modellnamen: neue Modelle sollen nichts brechen.
+  const zahl = Number(wert);
+  return Number.isFinite(zahl) && /^-?\d+$/.test(wert)
+    ? { thinkingConfig: { thinkingBudget: zahl } }
+    : { thinkingLevel: wert };
+}
+
+/** Tokenverbrauch eines Aufrufs — Grundlage der Kostenrechnung im Messskript. */
+export type EnrichmentUsage = {
+  input: number;
+  output: number;
+  /** Denk-Tokens; zählen preislich zum Output. */
+  denken: number;
+};
+
 export type EnrichmentInput = {
   firmenname: string;
   webseite?: string | null;
@@ -62,6 +96,13 @@ export type EnrichmentInput = {
   zielrolle?: string | null;
   /** Hartes Zeitlimit für diesen Aufruf (siehe STANDARD_TIMEOUT_MS). */
   timeoutMs?: number;
+  /**
+   * Modell und Denk-Budget für DIESEN einen Aufruf übersteuern. Nutzt nur das
+   * Messskript (scratchpad/model-bench.mts), um Kandidaten zu vergleichen; im
+   * normalen Betrieb bleiben beide leer und es gelten die Env-Vorgaben.
+   */
+  modelOverride?: string | null;
+  thinkingOverride?: string | null;
 };
 
 /**
@@ -78,6 +119,8 @@ export type EnrichmentResult = {
   nachname: string;
   email: string;
   found: boolean;
+  /** Nur gefüllt, wenn Gemini geantwortet hat — für Kosten-Messungen. */
+  usage?: EnrichmentUsage;
 };
 
 const NOT_FOUND: EnrichmentResult = {
@@ -160,9 +203,17 @@ export async function enrichLead(
   // Modellwahl: Der Rollen-Modus muss die Standortseite wirklich lesen und
   // Name↔E-Mail korrekt zuordnen — flash-lite vermischt dort im Test Personen
   // und Adressen aus den Suchsnippets. Deshalb dort ein stärkeres Modell.
-  const model = zielrolle
-    ? process.env.GEMINI_MODEL_ZIELROLLE || "gemini-3.5-flash"
-    : process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+  const model =
+    input.modelOverride?.trim() ||
+    (zielrolle
+      ? process.env.GEMINI_MODEL_ZIELROLLE || "gemini-3.5-flash"
+      : process.env.GEMINI_MODEL || "gemini-2.5-flash-lite");
+
+  // Denk-Budget: nur der Rollen-Modus hat eins zu verlieren — der Standard läuft
+  // auf flash-lite, das ohnehin ohne Nachdenken arbeitet.
+  const denken =
+    input.thinkingOverride?.trim() ||
+    (zielrolle ? process.env.GEMINI_THINKING_ZIELROLLE : "");
 
   const userText = zielrolle
     ? `Firmenname: ${input.firmenname}\n` +
@@ -189,7 +240,10 @@ export async function enrichLead(
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: [{ text: userText }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { temperature: 0.3 },
+          generationConfig: {
+            temperature: 0.3,
+            ...thinkingConfig(model, denken),
+          },
         }),
         cache: "no-store",
         signal: AbortSignal.timeout(timeoutMs),
@@ -224,6 +278,18 @@ export async function enrichLead(
     .join("")
     .trim();
 
-  if (!text) return NOT_FOUND;
-  return parseResult(text);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const u: any = data?.usageMetadata ?? {};
+  const denkTokens = Number(
+    u.thoughtsTokenCount ?? u.totalThoughtTokens ?? u.total_thought_tokens ?? 0,
+  );
+  const usage: EnrichmentUsage = {
+    input: Number(u.promptTokenCount ?? 0),
+    // Denk-Tokens werden separat ausgewiesen, aber als Output abgerechnet.
+    output: Number(u.candidatesTokenCount ?? 0) + denkTokens,
+    denken: denkTokens,
+  };
+
+  if (!text) return { ...NOT_FOUND, usage };
+  return { ...parseResult(text), usage };
 }
